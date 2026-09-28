@@ -65,9 +65,9 @@ export async function fetchAiSummary(bvid: string, cid: number): Promise<string 
       `https://api.bilibili.com/x/web-interface/view/conclusion/get?bvid=${bvid}&cid=${cid}`
     );
     if (res.code === 0 && res.data?.model_result?.summary) {
-      let md = `### 🤖 视频 AI 提炼总结\n\n${res.data.model_result.summary}\n\n`;
+      let md = `### 视频 AI 提炼总结\n\n${res.data.model_result.summary}\n\n`;
       if (res.data.model_result.outline?.length) {
-        md += `#### 📌 章节大纲\n`;
+        md += `#### 章节大纲\n`;
         res.data.model_result.outline.forEach((item: any) => {
           md += `- **${item.title}** (${item.timestamp}): ${item.part_outline?.map((p: any) => p.content).join('; ') || ''}\n`;
         });
@@ -92,7 +92,7 @@ export async function fetchCurrentMediaData(targetCid?: number): Promise<MediaRe
   const title = getVideoTitle();
   const cover = getVideoCover();
 
-  // 1. 请求 DASH 格式播放流 (fnval=4048 包含 4K/HDR/AV1/8K/无损音频)
+  // 1. 请求 DASH 格式播放流
   let dashData: any = null;
   try {
     const api = `https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=120&fnval=4048&fourk=1&otype=json`;

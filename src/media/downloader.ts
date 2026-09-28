@@ -49,7 +49,7 @@ export async function downloadAndMuxMp4(
     onProgress({
       status: 'downloading_video',
       progress: 0,
-      message: `正在下载视频轨 (${video.qualityName} ${video.codecName})...`,
+      message: `正在下载视频轨 (${video.qualityName} ${video.codecName})`,
     });
 
     // 1. 下载视频轨
@@ -59,7 +59,7 @@ export async function downloadAndMuxMp4(
         status: 'downloading_video',
         progress: pct,
         speed,
-        message: `正在下载视频轨: ${pct * 2}% (${speed || ''})`,
+        message: `正在下载视频轨: ${pct * 2}% ${speed ? `(${speed})` : ''}`,
       });
     });
 
@@ -70,7 +70,7 @@ export async function downloadAndMuxMp4(
       onProgress({
         status: 'downloading_audio',
         progress: 50,
-        message: `正在下载音频轨 (${audio.name})...`,
+        message: `正在下载音频轨 (${audio.name})`,
       });
 
       audioBuffer = await requestBuffer(audio.baseUrl, (loaded, total, speed) => {
@@ -79,7 +79,7 @@ export async function downloadAndMuxMp4(
           status: 'downloading_audio',
           progress: pct,
           speed,
-          message: `正在下载音频轨: ${(pct - 50) * 2.5}% (${speed || ''})`,
+          message: `正在下载音频轨: ${(pct - 50) * 2.5}% ${speed ? `(${speed})` : ''}`,
         });
       });
     }
@@ -88,7 +88,7 @@ export async function downloadAndMuxMp4(
     onProgress({
       status: 'muxing',
       progress: 92,
-      message: '正在纯前端合成无损 MP4 (Remuxing)...',
+      message: '正在封装无损 MP4 容器 (Remuxing)',
     });
 
     let finalBlob: Blob;
@@ -97,7 +97,7 @@ export async function downloadAndMuxMp4(
         onProgress({
           status: 'muxing',
           progress: 90 + Math.floor(muxPct * 0.08),
-          message: '正在封装 MP4 容器...',
+          message: '正在封装 MP4 容器',
         });
       });
     } else {
@@ -111,13 +111,13 @@ export async function downloadAndMuxMp4(
     onProgress({
       status: 'completed',
       progress: 100,
-      message: '🎉 下载与合成完成！已保存到本地',
+      message: '下载与合成完成，已保存到本地',
     });
   } catch (err: any) {
     onProgress({
       status: 'error',
       progress: 0,
-      message: `❌ 下载失败: ${err.message}`,
+      message: `下载失败: ${err.message}`,
     });
     throw err;
   }
