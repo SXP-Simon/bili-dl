@@ -99,20 +99,16 @@
   }
   100% {
     opacity: 1;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
 }
 
-/* 弹窗弹性阻尼缩放入场 */
+/* 弹窗柔和优雅弹性入场 (VisionOS / iOS 质感) */
 @keyframes modalIn {
   0% {
     opacity: 0;
-    transform: scale(0.93) translateY(24px);
-  }
-  60% {
-    opacity: 1;
-    transform: scale(1.008) translateY(-2px);
+    transform: scale(0.95) translateY(18px);
   }
   100% {
     opacity: 1;
@@ -120,15 +116,15 @@
   }
 }
 
-/* Tab 内容切换流式入场 */
-@keyframes tabContentIn {
+/* 列表条目级联层叠渐入 */
+@keyframes staggerIn {
   0% {
     opacity: 0;
-    transform: translateY(10px) scale(0.992);
+    transform: translateY(10px);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }
 
@@ -153,15 +149,15 @@
 }
 
 .animate-backdrop-in {
-  animation: backdropFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: backdropFadeIn 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-modal-in {
-  animation: modalIn 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: modalIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.animate-tab-content-in {
-  animation: tabContentIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.animate-stagger-in {
+  animation: staggerIn 0.38s cubic-bezier(0.2, 0.9, 0.3, 1) both;
 }
 
 .animate-toast-in {
