@@ -35,7 +35,7 @@ export const SpotlightCard: React.FC<SpotlightCardProps> = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={onClick}
-      className={`relative overflow-hidden rounded-2xl border border-border/80 bg-card text-card-foreground p-3.5 shadow-2xs transition-[transform,box-shadow,border-color] duration-350 ease-out hover:border-primary/50 hover:shadow-[0_8px_24px_-4px_rgba(140,230,80,0.18),0_2px_8px_-2px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 active:scale-[0.985] active:translate-y-0 cursor-pointer group select-none ${className}`}
+      className="relative overflow-hidden rounded-2xl border border-border/80 bg-card text-card-foreground p-3.5 shadow-2xs transition-[transform,box-shadow,border-color] duration-350 ease-out hover:border-primary/50 hover:shadow-[0_8px_24px_-4px_rgba(140,230,80,0.18),0_2px_8px_-2px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 active:scale-[0.985] active:translate-y-0 cursor-pointer group select-none"
     >
       {/* 独立光斑渲染层：进入时柔和显现，离开后缓慢消除（500ms 缓退），极具呼吸层次感 */}
       <div
@@ -47,7 +47,7 @@ export const SpotlightCard: React.FC<SpotlightCardProps> = ({
         }}
       />
 
-      <div className="relative z-10">{children}</div>
+      <div className={`relative z-10 w-full ${className}`}>{children}</div>
     </div>
   );
 };

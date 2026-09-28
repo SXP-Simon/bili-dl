@@ -182,7 +182,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
         </div>
 
         {/* 资源列表区：Tab 切换平滑容器与流式渐变入场 */}
-        <div className="flex-1 overflow-y-auto px-6 py-2.5 max-h-[44vh] scrollbar-clean">
+        <div className="flex-1 overflow-y-auto pl-6 pr-4 py-2.5 max-h-[44vh] scrollbar-clean">
           <div key={activeTab} className="space-y-2 animate-tab-content-in">
           {/* 1. 视频列表 */}
           {(activeTab === 'all' || activeTab === 'video') &&
@@ -224,23 +224,24 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 flex-shrink-0">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       exportAria2Command(data.title, v, bestAudio);
                       onShowToast('Aria2 / curl 下载命令已复制到剪贴板', 'success');
                     }}
-                    title="复制 Aria2 / curl 多线程下载命令行"
-                    className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted border border-border/80 hover:border-border hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer shadow-2xs"
+                    title="复制 Aria2 / curl / FFmpeg 多线程下载命令行"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border border-secondary/40 text-xs font-semibold shadow-2xs active:scale-95 transition-all duration-150 cursor-pointer"
                   >
                     <Terminal className="w-3.5 h-3.5" strokeWidth={2.2} />
+                    <span className="text-[11px] font-medium">命令</span>
                   </button>
 
                   <button
                     onClick={() => onDownloadVideo(v, bestAudio)}
                     title="下载视频与音频并在浏览器中无损封装为 MP4 文件"
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-primary/20 hover:bg-primary text-emerald-950 dark:text-emerald-100 hover:text-primary-foreground font-semibold text-xs border border-primary/40 hover:border-primary shadow-2xs hover:shadow-xs active:scale-95 transition-all duration-200 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/20 hover:bg-primary text-emerald-950 dark:text-emerald-100 hover:text-primary-foreground font-semibold text-xs border border-primary/40 hover:border-primary shadow-2xs hover:shadow-xs active:scale-95 transition-all duration-200 cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
                     <span>合成 MP4</span>
