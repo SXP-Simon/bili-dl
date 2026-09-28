@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FloatButton } from './components/FloatButton';
 import { DownloadModal } from './components/DownloadModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
@@ -11,10 +11,48 @@ export const App: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [mediaData, setMediaData] = useState<MediaResourceData | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('bili_dl_theme');
+      if (saved) return saved === 'dark';
+      return (
+        document.documentElement.classList.contains('dark') ||
+        document.body.classList.contains('dark') ||
+        window.matchMedia('(prefers-color-scheme: dark)').matches
+      );
+    } catch {
+      return false;
+    }
+  });
+
   const [progress, setProgress] = useState<DownloadProgress>({
     status: 'idle',
     progress: 0,
   });
+
+  // 监听 B 站或系统的深色模式变化
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const saved = localStorage.getItem('bili_dl_theme');
+      if (!saved) {
+        const isBiliDark =
+          document.documentElement.classList.contains('dark') ||
+          document.body.classList.contains('dark');
+        setIsDark(isBiliDark);
+      }
+    });
+
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
+    return () => observer.disconnect();
+  }, []);
+
+  const handleToggleDark = () => {
+    const next = !isDark;
+    setIsDark(next);
+    localStorage.setItem('bili_dl_theme', next ? 'dark' : 'light');
+  };
 
   const showToast = (content: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now().toString() + Math.random().toString(36).substring(2, 6);
@@ -59,12 +97,14 @@ export const App: React.FC = () => {
   };
 
   return (
-    <>
+    <div className={isDark ? 'dark' : ''}>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       <FloatButton loading={loading} onClick={() => handleOpenModal()} />
       {isModalOpen && mediaData && (
         <DownloadModal
           data={mediaData}
+          isDark={isDark}
+          onToggleDark={handleToggleDark}
           onClose={() => {
             setIsModalOpen(false);
             setProgress({ status: 'idle', progress: 0 });
@@ -75,6 +115,6 @@ export const App: React.FC = () => {
           progress={progress}
         />
       )}
-    </>
+    </div>
   );
 };

@@ -31,48 +31,50 @@
 }
 
 :host, :root {
-  --background: oklch(0.9892 0.0054 117.9205);
-  --foreground: oklch(0.2077 0.0398 265.7549);
+  /* 浅色模式：温润米灰底色 + 纯白卡片 + 高对比黑字 */
+  --background: oklch(0.975 0.008 85);
+  --foreground: oklch(0.18 0.03 260);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2077 0.0398 265.7549);
+  --card-foreground: oklch(0.18 0.03 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2077 0.0398 265.7549);
-  --primary: oklch(0.8871 0.2122 128.5041);
-  --primary-foreground: oklch(0 0 0);
-  --secondary: oklch(0.3717 0.0392 257.2870);
-  --secondary-foreground: oklch(0.9842 0.0034 247.8575);
-  --muted: oklch(0.9683 0.0069 247.8956);
-  --muted-foreground: oklch(0.5544 0.0407 257.4166);
-  --accent: oklch(0.9819 0.0181 155.8263);
-  --accent-foreground: oklch(0.2077 0.0398 265.7549);
-  --destructive: oklch(0.6368 0.2078 25.3313);
-  --destructive-foreground: oklch(0.9842 0.0034 247.8575);
-  --border: oklch(0.9288 0.0126 255.5078);
-  --input: oklch(0.9288 0.0126 255.5078);
-  --ring: oklch(0.8871 0.2122 128.5041);
+  --popover-foreground: oklch(0.18 0.03 260);
+  --primary: oklch(0.86 0.20 130);
+  --primary-foreground: oklch(0.12 0.04 140);
+  --secondary: oklch(0.35 0.04 260);
+  --secondary-foreground: oklch(0.98 0.003 247);
+  --muted: oklch(0.945 0.008 85);
+  --muted-foreground: oklch(0.48 0.03 260);
+  --accent: oklch(0.96 0.02 135);
+  --accent-foreground: oklch(0.18 0.03 260);
+  --destructive: oklch(0.63 0.20 25);
+  --destructive-foreground: oklch(0.98 0.003 247);
+  --border: oklch(0.90 0.008 85);
+  --input: oklch(0.90 0.008 85);
+  --ring: oklch(0.86 0.20 130);
   --radius: 1rem;
 }
 
 .dark {
-  --background: oklch(0.1288 0.0406 264.6952);
-  --foreground: oklch(0.9842 0.0034 247.8575);
-  --card: oklch(0.2077 0.0398 265.7549);
-  --card-foreground: oklch(0.9842 0.0034 247.8575);
-  --popover: oklch(0.2077 0.0398 265.7549);
-  --popover-foreground: oklch(0.9842 0.0034 247.8575);
-  --primary: oklch(0.8871 0.2122 128.5041);
-  --primary-foreground: oklch(0 0 0);
-  --secondary: oklch(0.3717 0.0392 257.2870);
-  --secondary-foreground: oklch(0.9842 0.0034 247.8575);
-  --muted: oklch(0.25 0.02 260);
-  --muted-foreground: oklch(0.65 0.03 260);
-  --accent: oklch(0.25 0.03 155);
-  --accent-foreground: oklch(0.9842 0.0034 247.8575);
-  --destructive: oklch(0.6368 0.2078 25.3313);
-  --destructive-foreground: oklch(0.9842 0.0034 247.8575);
-  --border: oklch(0.2795 0.0368 260.0310);
-  --input: oklch(0.2795 0.0368 260.0310);
-  --ring: oklch(0.8871 0.2122 128.5041);
+  /* 深色模式：深邃石板灰 + 雅致卡片 + 强对比纯白字 */
+  --background: oklch(0.13 0.03 260);
+  --foreground: oklch(0.96 0.01 260);
+  --card: oklch(0.18 0.03 260);
+  --card-foreground: oklch(0.96 0.01 260);
+  --popover: oklch(0.18 0.03 260);
+  --popover-foreground: oklch(0.96 0.01 260);
+  --primary: oklch(0.86 0.20 130);
+  --primary-foreground: oklch(0.12 0.04 140);
+  --secondary: oklch(0.80 0.02 260);
+  --secondary-foreground: oklch(0.15 0.03 260);
+  --muted: oklch(0.23 0.025 260);
+  --muted-foreground: oklch(0.68 0.025 260);
+  --accent: oklch(0.25 0.04 135);
+  --accent-foreground: oklch(0.96 0.01 260);
+  --destructive: oklch(0.63 0.20 25);
+  --destructive-foreground: oklch(0.98 0.003 247);
+  --border: oklch(0.28 0.025 260);
+  --input: oklch(0.28 0.025 260);
+  --ring: oklch(0.86 0.20 130);
 }
 
 @layer base {
@@ -80,7 +82,7 @@
     border-color: var(--border);
   }
   #bili-dl-app {
-    font-family: 'LXGW WenKai Screen', 'LXGW WenKai', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "HarmonyOS Sans SC", "MiSans", Roboto, Inter, system-ui, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
@@ -132,7 +134,7 @@
   background: linear-gradient(
     90deg,
     color-mix(in oklch, var(--muted) 80%, transparent) 0%,
-    color-mix(in oklch, var(--primary) 25%, var(--muted)) 50%,
+    color-mix(in oklch, var(--primary) 35%, var(--muted)) 50%,
     color-mix(in oklch, var(--muted) 80%, transparent) 100%
   );
   background-size: 200% 100%;
@@ -148,9 +150,9 @@
   background: transparent;
 }
 .scrollbar-clean::-webkit-scrollbar-thumb {
-  background: color-mix(in oklch, var(--muted-foreground) 25%, transparent);
+  background: color-mix(in oklch, var(--muted-foreground) 30%, transparent);
   border-radius: 9999px;
 }
 .scrollbar-clean::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in oklch, var(--muted-foreground) 45%, transparent);
+  background: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
 }
