@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import type { CategoryType } from '../types';
 
 interface TabItem {
@@ -16,39 +16,63 @@ interface TabPillProps {
 export const TabPill: React.FC<TabPillProps> = ({ tabs, activeTab, onChange }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<Map<CategoryType, HTMLButtonElement>>(new Map());
-  const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number; opacity: number }>({
-    left: 0,
+  const [indicatorStyle, setIndicatorStyle] = useState<{ x: number; width: number; opacity: number }>({
+    x: 0,
     width: 0,
     opacity: 0,
   });
 
-  useEffect(() => {
+  const updateIndicator = useCallback(() => {
     const activeEl = tabRefs.current.get(activeTab);
-    const container = containerRef.current;
-    if (activeEl && container) {
-      const containerRect = container.getBoundingClientRect();
-      const tabRect = activeEl.getBoundingClientRect();
+    if (activeEl) {
       setIndicatorStyle({
-        left: tabRect.left - containerRect.left,
-        width: tabRect.width,
+        x: activeEl.offsetLeft,
+        width: activeEl.offsetWidth,
         opacity: 1,
       });
     }
-  }, [activeTab, tabs]);
+  }, [activeTab]);
+
+  useEffect(() => {
+    updateIndicator();
+    // 延迟一帧确保 DOM 布局已完全就绪（兼容弹窗入场动画）
+    const rafId = requestAnimationFrame(updateIndicator);
+    const timer = setTimeout(updateIndicator, 80);
+
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') {
+      return () => {
+        cancelAnimationFrame(rafId);
+        clearTimeout(timer);
+      };
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateIndicator();
+    });
+    observer.observe(container);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [updateIndicator, tabs]);
 
   return (
     <div
       ref={containerRef}
       className="relative flex p-1 gap-1 rounded-xl bg-muted/80 border border-border/70 select-none overflow-hidden"
     >
-      {/* 真实物理平滑滑块（Sliding Pill） */}
+      {/* 真实物理平滑滑块（Sliding Pill） - GPU 硬件加速 TranslateX + 弹性阻尼过渡 */}
       <div
-        className="absolute top-1 bottom-1 rounded-lg bg-card border border-border/80 shadow-xs pointer-events-none transition-all duration-300"
+        className="absolute top-1 bottom-1 left-0 rounded-lg bg-card border border-border/80 shadow-xs pointer-events-none"
         style={{
-          left: `${indicatorStyle.left}px`,
           width: `${indicatorStyle.width}px`,
+          transform: `translateX(${indicatorStyle.x}px)`,
           opacity: indicatorStyle.opacity,
-          transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
+          transition: 'transform 0.32s cubic-bezier(0.34, 1.4, 0.64, 1), width 0.32s cubic-bezier(0.34, 1.4, 0.64, 1), opacity 0.15s ease',
+          willChange: 'transform, width',
         }}
       />
 
