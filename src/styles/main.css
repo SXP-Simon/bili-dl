@@ -90,11 +90,29 @@
   }
 }
 
-/* 弹窗弹性缩放入场 */
+/* 弹窗遮罩背景平滑淡入 */
+@keyframes backdropFadeIn {
+  0% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+}
+
+/* 弹窗弹性阻尼缩放入场 */
 @keyframes modalIn {
   0% {
     opacity: 0;
-    transform: scale(0.96) translateY(12px);
+    transform: scale(0.93) translateY(24px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.008) translateY(-2px);
   }
   100% {
     opacity: 1;
@@ -102,10 +120,22 @@
   }
 }
 
+/* Tab 内容切换流式入场 */
+@keyframes tabContentIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.992);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @keyframes toastIn {
   0% {
     opacity: 0;
-    transform: translateY(-8px) scale(0.96);
+    transform: translateY(-12px) scale(0.94);
   }
   100% {
     opacity: 1;
@@ -122,12 +152,20 @@
   }
 }
 
+.animate-backdrop-in {
+  animation: backdropFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 .animate-modal-in {
-  animation: modalIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: modalIn 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-tab-content-in {
+  animation: tabContentIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-toast-in {
-  animation: toastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: toastIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-streaming {

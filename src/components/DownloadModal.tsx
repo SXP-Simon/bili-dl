@@ -98,7 +98,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[1000000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity"
+      className="fixed inset-0 z-[1000000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-backdrop-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -181,8 +181,9 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
           <TabPill tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
         </div>
 
-        {/* 资源列表区 */}
-        <div className="flex-1 overflow-y-auto px-6 py-2.5 space-y-2 max-h-[44vh] scrollbar-clean">
+        {/* 资源列表区：Tab 切换平滑容器与流式渐变入场 */}
+        <div className="flex-1 overflow-y-auto px-6 py-2.5 max-h-[44vh] scrollbar-clean">
+          <div key={activeTab} className="space-y-2 animate-tab-content-in">
           {/* 1. 视频列表 */}
           {(activeTab === 'all' || activeTab === 'video') &&
             data.videos.map((v) => (
@@ -411,6 +412,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
               )}
             </>
           )}
+          </div>
         </div>
 
         {/* 底部进度条 */}
