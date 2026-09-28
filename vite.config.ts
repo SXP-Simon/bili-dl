@@ -11,8 +11,8 @@ export default defineConfig({
       entry: 'src/main.tsx',
       userscript: {
         name: 'Bilibili Modern Downloader',
-        namespace: 'https://github.com/bilibili-downloader',
-        version: '1.0.0',
+        namespace: 'https://github.com/SXP-Simon/bili-dl',
+        version: '1.0.1',
         description: '现代化 B 站资源下载器：支持 4K/1080P 音画无损合成 MP4、纯音频/封面提取、弹幕转 ASS、多 P 批量导出',
         author: 'Simon',
         match: [
@@ -29,10 +29,14 @@ export default defineConfig({
           'GM_setClipboard'
         ],
         connect: [
+          '*',
           'api.bilibili.com',
+          '*.bilibili.com',
           '*.bilivideo.com',
+          '*.bilivideo.cn',
           '*.hdslb.com',
-          '*.akamaized.net'
+          '*.akamaized.net',
+          '*.szbdyd.com'
         ]
       },
       build: {
