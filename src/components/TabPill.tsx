@@ -22,18 +22,18 @@ export const TabPill: React.FC<TabPillProps> = ({ tabs, activeTab, onChange }) =
           <button
             key={tab.key}
             onClick={() => onChange(tab.key)}
-            className={`relative flex-1 py-1.5 px-3 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98] ${
+            className={`relative flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98] ${
               isActive
-                ? 'bg-card text-foreground font-semibold shadow-xs border border-border/70'
+                ? 'bg-card text-foreground font-bold shadow-xs border border-border/70'
                 : 'text-muted-foreground hover:text-foreground hover:bg-background/50 border border-transparent'
             }`}
           >
             <span className="tracking-tight">{tab.label}</span>
             {typeof tab.badge === 'number' && (
               <span
-                className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-medium transition-colors ${
+                className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold transition-colors ${
                   isActive
-                    ? 'bg-primary/20 text-primary-foreground font-semibold'
+                    ? 'bg-primary/20 text-emerald-950 dark:text-emerald-200'
                     : 'bg-muted text-muted-foreground'
                 }`}
               >

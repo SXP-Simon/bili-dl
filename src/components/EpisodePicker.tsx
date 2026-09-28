@@ -17,8 +17,8 @@ export const EpisodePicker: React.FC<EpisodePickerProps> = ({
 
   return (
     <div className="mb-3 p-3 rounded-2xl bg-muted/40 border border-border/70">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
-        <Layers className="w-3.5 h-3.5 text-primary" />
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground mb-2">
+        <Layers className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
         <span>分 P 剧集 ({pages.length} 集)</span>
       </div>
 
@@ -29,10 +29,10 @@ export const EpisodePicker: React.FC<EpisodePickerProps> = ({
             <button
               key={p.cid}
               onClick={() => onSelectEpisode(p.cid)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer active:scale-[0.98] ${
                 isSelected
-                  ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
-                  : 'bg-card text-card-foreground hover:bg-muted border border-border/70 shadow-2xs'
+                  ? 'bg-primary/25 text-emerald-950 dark:text-emerald-100 border border-primary/50 shadow-2xs'
+                  : 'bg-card text-muted-foreground hover:text-foreground hover:bg-muted border border-border/70 shadow-2xs'
               }`}
             >
               P{p.page}: {p.part || `第${p.page}集`}

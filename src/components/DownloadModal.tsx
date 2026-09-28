@@ -98,17 +98,17 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[1000000] flex items-center justify-center bg-black/45 backdrop-blur-sm p-4 transition-opacity"
+      className="fixed inset-0 z-[1000000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div className="relative w-full max-w-xl max-h-[85vh] flex flex-col rounded-3xl bg-background text-foreground border border-border/80 shadow-2xl overflow-hidden animate-modal-in">
-        {/* 顶部 Header：米色/浅灰温润渐变底色 */}
+        {/* 顶部 Header：温润米灰过渡 */}
         <div className="flex items-center justify-between px-6 pt-5 pb-3.5 border-b border-border/70 bg-muted/40">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-2xs font-bold">
-              <Sparkles className="w-4 h-4" strokeWidth={2.4} />
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/20 text-emerald-900 dark:text-emerald-200 border border-primary/40 shadow-2xs font-bold">
+              <Sparkles className="w-4 h-4 text-emerald-700 dark:text-emerald-300" strokeWidth={2.4} />
             </div>
             <div>
               <h2 className="text-sm font-semibold tracking-tight text-foreground">
@@ -154,11 +154,11 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                 {data.title}
               </h3>
               <div className="flex items-center gap-2 mt-1.5">
-                <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-md bg-muted text-foreground border border-border/80">
+                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/70">
                   {data.bvid}
                 </span>
                 {data.pages.length > 1 && (
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-primary/20 text-primary-foreground font-semibold border border-primary/30">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-secondary/30 text-secondary-foreground border border-secondary/40">
                     共 {data.pages.length} P
                   </span>
                 )}
@@ -188,10 +188,10 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
             data.videos.map((v) => (
               <SpotlightCard
                 key={`${v.id}_${v.codecName}`}
-                className="flex items-center justify-between group"
+                className="flex items-center justify-between"
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted/80 text-foreground border border-border/80 shadow-2xs group-hover:bg-muted transition-colors">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/30 text-emerald-800 dark:text-emerald-300 border border-secondary/40 shadow-2xs group-hover:bg-primary/25 group-hover:text-emerald-950 dark:group-hover:text-emerald-100 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-200">
                     <Video className="w-4 h-4" strokeWidth={2.2} />
                   </div>
                   <div>
@@ -207,7 +207,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                             ? 'HEVC (H.265)：高压缩比，画质更细腻'
                             : 'AV1：最新极致压缩格式'
                         }
-                        className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-muted text-foreground border border-border/80 cursor-help font-semibold"
+                        className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-secondary/35 text-secondary-foreground border border-secondary/50 font-bold cursor-help"
                       >
                         {v.codecName}
                       </span>
@@ -231,7 +231,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                       onShowToast('Aria2 / curl 下载命令已复制到剪贴板', 'success');
                     }}
                     title="复制 Aria2 / curl 多线程下载命令行"
-                    className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted border border-border/80 transition-all duration-150 active:scale-95 cursor-pointer shadow-2xs"
+                    className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted border border-border/80 hover:border-border hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer shadow-2xs"
                   >
                     <Terminal className="w-3.5 h-3.5" strokeWidth={2.2} />
                   </button>
@@ -239,7 +239,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                   <button
                     onClick={() => onDownloadVideo(v, bestAudio)}
                     title="下载视频与音频并在浏览器中无损封装为 MP4 文件"
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-primary text-primary-foreground font-semibold text-xs shadow-xs hover:bg-primary/90 active:scale-[0.98] transition-all duration-150 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-primary/20 hover:bg-primary text-emerald-950 dark:text-emerald-100 hover:text-primary-foreground font-semibold text-xs border border-primary/40 hover:border-primary shadow-2xs hover:shadow-xs active:scale-95 transition-all duration-200 cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
                     <span>合成 MP4</span>
@@ -253,14 +253,14 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
             data.audios.map((a) => (
               <SpotlightCard
                 key={a.id}
-                className="flex items-center justify-between group"
+                className="flex items-center justify-between"
                 onClick={() => {
                   directDownload(a.baseUrl, `${data.title}-${a.name}.m4a`);
                   onShowToast(`正在下载音频: ${a.name}`, 'info');
                 }}
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted/80 text-foreground border border-border/80 shadow-2xs group-hover:bg-muted transition-colors">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/30 text-emerald-800 dark:text-emerald-300 border border-secondary/40 shadow-2xs group-hover:bg-primary/25 group-hover:text-emerald-950 dark:group-hover:text-emerald-100 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-200">
                     <Music className="w-4 h-4" strokeWidth={2.2} />
                   </div>
                   <div>
@@ -268,7 +268,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                       <span className="text-xs font-bold text-foreground tracking-tight">
                         {a.name}
                       </span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-muted text-foreground border border-border/80 font-semibold">
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-secondary/35 text-secondary-foreground border border-secondary/50 font-bold">
                         {a.qualityDesc}
                       </span>
                     </div>
@@ -280,7 +280,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
 
                 <button
                   title="单独提取并下载该独立音轨 (.m4a / .flac)"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/80 bg-card text-foreground hover:bg-muted text-xs font-semibold transition-all duration-150 active:scale-[0.98] shadow-2xs"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border border-secondary/40 font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs"
                 >
                   <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
                   <span>下载音频</span>
@@ -291,14 +291,14 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
           {/* 3. 封面 */}
           {(activeTab === 'all' || activeTab === 'cover') && data.cover && (
             <SpotlightCard
-              className="flex items-center justify-between group"
+              className="flex items-center justify-between"
               onClick={() => {
                 directDownload(data.cover, `${data.title}-高清原图封面.jpg`);
                 onShowToast('正在下载超高清封面原图', 'info');
               }}
             >
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted/80 text-foreground border border-border/80 shadow-2xs group-hover:bg-muted transition-colors">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/30 text-emerald-800 dark:text-emerald-300 border border-secondary/40 shadow-2xs group-hover:bg-primary/25 group-hover:text-emerald-950 dark:group-hover:text-emerald-100 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-200">
                   <ImageIcon className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div>
@@ -313,7 +313,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
 
               <button
                 title="保存 B 站官方未压缩封面原图"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/80 bg-card text-foreground hover:bg-muted text-xs font-semibold transition-all duration-150 active:scale-[0.98] shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border border-secondary/40 font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs"
               >
                 <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
                 <span>保存原图</span>
@@ -325,11 +325,11 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
           {(activeTab === 'all' || activeTab === 'danmaku') && (
             <>
               <SpotlightCard
-                className="flex items-center justify-between group"
+                className="flex items-center justify-between"
                 onClick={handleDownloadDanmaku}
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted/80 text-foreground border border-border/80 shadow-2xs group-hover:bg-muted transition-colors">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/30 text-emerald-800 dark:text-emerald-300 border border-secondary/40 shadow-2xs group-hover:bg-primary/25 group-hover:text-emerald-950 dark:group-hover:text-emerald-100 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-200">
                     <MessageSquare className="w-4 h-4" strokeWidth={2.2} />
                   </div>
                   <div>
@@ -344,7 +344,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
 
                 <button
                   title="将本视频全量弹幕转换为标准 ASS 字幕文件"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/80 bg-card text-foreground hover:bg-muted text-xs font-semibold transition-all duration-150 active:scale-[0.98] shadow-2xs"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border border-secondary/40 font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs"
                 >
                   <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
                   <span>导出 ASS</span>
@@ -354,11 +354,11 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
               {data.subtitles.map((sub) => (
                 <SpotlightCard
                   key={sub.id}
-                  className="flex items-center justify-between group"
+                  className="flex items-center justify-between"
                   onClick={() => handleDownloadSubtitle(sub.subtitle_url, sub.lan_doc)}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted/80 text-foreground border border-border/80 shadow-2xs group-hover:bg-muted transition-colors">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/30 text-emerald-800 dark:text-emerald-300 border border-secondary/40 shadow-2xs group-hover:bg-primary/25 group-hover:text-emerald-950 dark:group-hover:text-emerald-100 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-200">
                       <FileText className="w-4 h-4" strokeWidth={2.2} />
                     </div>
                     <div>
@@ -373,7 +373,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
 
                   <button
                     title={`导出 ${sub.lan_doc} 官方双语字幕文件 (.srt)`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/80 bg-card text-foreground hover:bg-muted text-xs font-semibold transition-all duration-150 active:scale-[0.98] shadow-2xs"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border border-secondary/40 font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs"
                   >
                     <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
                     <span>导出 SRT</span>
@@ -383,11 +383,11 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
 
               {data.aiSummaryMarkdown && (
                 <SpotlightCard
-                  className="flex items-center justify-between group"
+                  className="flex items-center justify-between"
                   onClick={handleCopyAiSummary}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted/80 text-foreground border border-border/80 shadow-2xs group-hover:bg-muted transition-colors">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/30 text-emerald-800 dark:text-emerald-300 border border-secondary/40 shadow-2xs group-hover:bg-primary/25 group-hover:text-emerald-950 dark:group-hover:text-emerald-100 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-200">
                       <Bot className="w-4 h-4" strokeWidth={2.2} />
                     </div>
                     <div>
@@ -402,7 +402,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
 
                   <button
                     title="复制 B 站官方 AI 总结与时间轴章节笔记"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/80 bg-card text-foreground hover:bg-muted text-xs font-semibold transition-all duration-150 active:scale-[0.98] shadow-2xs"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border border-secondary/40 font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs"
                   >
                     {copiedSummary ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" strokeWidth={2.4} /> : <Copy className="w-3.5 h-3.5" strokeWidth={2.2} />}
                     <span>{copiedSummary ? '已复制' : '复制 MD'}</span>
@@ -414,7 +414,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
         </div>
 
         {/* 底部进度条 */}
-        <div className="px-6 pb-5 bg-background border-t border-border/60">
+        <div className="px-6 pb-5 bg-muted/30 border-t border-border/70">
           <ProgressBar progress={progress} />
         </div>
       </div>
