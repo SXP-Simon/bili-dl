@@ -34,7 +34,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     const pAttr = el.getAttribute('p');
     if (!pAttr) return;
 
-    const [timeStr, modeStr, , colorIntStr] = pAttr.split(',');
+    const [timeStr, , , colorIntStr] = pAttr.split(',');
     const startTimeSec = parseFloat(timeStr);
     const duration = 8.0; // 弹幕滚动显示时长（秒）
     const endTimeSec = startTimeSec + duration;

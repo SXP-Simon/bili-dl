@@ -1,0 +1,20 @@
+# Lefthook configuration for git hooks and CI reuse
+# https://github.com/evilmartians/lefthook
+
+pre-commit:
+  parallel: true
+  commands:
+    lint:
+      glob: "*.{ts,tsx,js,jsx}"
+      run: pnpm oxlint
+    typecheck:
+      glob: "*.{ts,tsx}"
+      run: pnpm typecheck
+
+ci:
+  parallel: true
+  commands:
+    lint:
+      run: pnpm lint
+    typecheck:
+      run: pnpm typecheck

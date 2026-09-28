@@ -1,0 +1,132 @@
+name: CI & Auto Release
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # 1. 代码质量与类型检查（复用 Lefthook + OXC Oxlint）
+  quality-check:
+    name: Typecheck & Oxlint (Lefthook)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Lefthook CI (Parallel Oxlint + Typecheck)
+        run: pnpm lefthook run ci
+
+      - name: Verify Build
+        run: pnpm build
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bili-dl-user-script
+          path: |
+            dist/bili-dl.user.js
+            dist/bili-dl.meta.js
+          if-no-files-found: warn
+
+  # 2. 版本号变更检测与自动构建发布
+  release:
+    name: Version Bump Detect & Release
+    needs: quality-check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Version Change
+        id: version_check
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "is_tag=true" >> $GITHUB_OUTPUT
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "tag_name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+            # 比较上一 commit 与当前 package.json 的版本号变化
+            git checkout HEAD~1 package.json 2>/dev/null || true
+            PREV_VERSION=$(node -p "try { require('./package.json').version } catch(e) { '' }")
+            git checkout HEAD package.json
+
+            echo "Previous version: $PREV_VERSION, Current version: $CURRENT_VERSION"
+
+            if [ "$CURRENT_VERSION" != "$PREV_VERSION" ] && [ -n "$CURRENT_VERSION" ]; then
+              echo "should_release=true" >> $GITHUB_OUTPUT
+              echo "tag_name=v$CURRENT_VERSION" >> $GITHUB_OUTPUT
+            else
+              echo "should_release=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Build Production Userscript
+        if: steps.version_check.outputs.should_release == 'true'
+        run: pnpm build
+
+      - name: Create Git Tag and GitHub Release
+        if: steps.version_check.outputs.should_release == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.version_check.outputs.tag_name }}
+          VERSION: ${{ steps.version_check.outputs.current_version }}
+        run: |
+          # 如果 tag 不存在则创建本地 tag
+          if ! git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            git tag "$TAG_NAME"
+            git push origin "$TAG_NAME" || true
+          fi
+
+          # 自动创建 GitHub Release 并附带编译完成的 user.js 脚本
+          gh release create "$TAG_NAME" \
+            dist/bili-dl.user.js \
+            --title "Release $TAG_NAME" \
+            --generate-notes \
+            --latest || gh release upload "$TAG_NAME" dist/bili-dl.user.js --clobber
