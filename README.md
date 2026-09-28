@@ -97,10 +97,25 @@ bili-dl/
 
 ---
 
-## 🔨 构建发布
+## 🔨 开发与工程化
+
+本项目采用现代化的前端代码检查与自动化 CI/CD 工具链：
+
+- **Linter**：使用又新又快的 **OXC ([Oxlint](https://oxc.rs/docs/guide/usage/linter.html))** 进行毫秒级代码静态检查。
+- **Git Hooks**：基于 **[Lefthook](https://github.com/evilmartians/lefthook)** 实现轻量极速的 pre-commit 钩子，提交前并行校验 Typecheck 与 Oxlint。
+- **CI / CD**：GitHub Actions 在代码推送或 PR 时复用 Lefthook 执行代码质检；并在检测到版本号变更（`package.json` 更新或推送 `v*` tag）时自动构建并发布 GitHub Release 产物。
 
 ```bash
-# 运行 TypeScript 类型检查并打包为单一油猴脚本
+# 1. 运行 OXC 代码静态检查
+pnpm lint
+
+# 2. 运行 TypeScript 类型检查
+pnpm typecheck
+
+# 3. 本地手动复用 Lefthook 运行全部 CI 校验
+pnpm check # 或 pnpm lefthook run ci
+
+# 4. 生产打包
 pnpm build
 ```
 
@@ -111,3 +126,4 @@ pnpm build
 ## 📄 开源许可
 
 本项目基于 [MIT License](./LICENSE) 开源。仅供技术交流与学习使用。
+
