@@ -31,7 +31,7 @@
 }
 
 :host, :root {
-  /* 浅色模式：温润米灰底色 + 纯白卡片 + 高对比黑字 */
+  /* 浅色模式：温润米灰底色 + 纯白卡片 + 高对比字色 */
   --background: oklch(0.975 0.008 85);
   --foreground: oklch(0.18 0.03 260);
   --card: oklch(1 0 0);
@@ -82,7 +82,7 @@
     border-color: var(--border);
   }
   #bili-dl-app {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "HarmonyOS Sans SC", "MiSans", Roboto, Inter, system-ui, sans-serif;
+    font-family: 'LXGW WenKai Screen', 'LXGW WenKai', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', system-ui, -apple-system, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
