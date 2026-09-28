@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import type { CategoryType } from '../types';
 
 interface TabItem {
@@ -14,26 +14,66 @@ interface TabPillProps {
 }
 
 export const TabPill: React.FC<TabPillProps> = ({ tabs, activeTab, onChange }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef<Map<CategoryType, HTMLButtonElement>>(new Map());
+  const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number; opacity: number }>({
+    left: 0,
+    width: 0,
+    opacity: 0,
+  });
+
+  useEffect(() => {
+    const activeEl = tabRefs.current.get(activeTab);
+    const container = containerRef.current;
+    if (activeEl && container) {
+      const containerRect = container.getBoundingClientRect();
+      const tabRect = activeEl.getBoundingClientRect();
+      setIndicatorStyle({
+        left: tabRect.left - containerRect.left,
+        width: tabRect.width,
+        opacity: 1,
+      });
+    }
+  }, [activeTab, tabs]);
+
   return (
-    <div className="flex p-1 gap-1 rounded-xl bg-muted/80 border border-border/70">
+    <div
+      ref={containerRef}
+      className="relative flex p-1 gap-1 rounded-xl bg-muted/80 border border-border/70 select-none overflow-hidden"
+    >
+      {/* 真实物理平滑滑块（Sliding Pill） */}
+      <div
+        className="absolute top-1 bottom-1 rounded-lg bg-card border border-border/80 shadow-xs pointer-events-none transition-all duration-300"
+        style={{
+          left: `${indicatorStyle.left}px`,
+          width: `${indicatorStyle.width}px`,
+          opacity: indicatorStyle.opacity,
+          transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
+      />
+
       {tabs.map((tab) => {
         const isActive = activeTab === tab.key;
         return (
           <button
             key={tab.key}
+            ref={(el) => {
+              if (el) tabRefs.current.set(tab.key, el);
+              else tabRefs.current.delete(tab.key);
+            }}
             onClick={() => onChange(tab.key)}
-            className={`relative flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98] ${
+            className={`relative z-10 flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-colors duration-200 cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98] ${
               isActive
-                ? 'bg-card text-foreground font-bold shadow-xs border border-border/70'
-                : 'text-muted-foreground hover:text-foreground hover:bg-background/50 border border-transparent'
+                ? 'text-foreground font-bold'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <span className="tracking-tight">{tab.label}</span>
             {typeof tab.badge === 'number' && (
               <span
-                className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold transition-colors ${
+                className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold transition-all duration-200 ${
                   isActive
-                    ? 'bg-primary/20 text-emerald-950 dark:text-emerald-200'
+                    ? 'bg-primary/20 text-emerald-950 dark:text-emerald-200 shadow-2xs'
                     : 'bg-muted text-muted-foreground'
                 }`}
               >
