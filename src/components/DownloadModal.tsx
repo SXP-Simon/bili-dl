@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Sparkles,
@@ -12,6 +12,7 @@ import {
   Bot,
   Copy,
   Check,
+  Info,
 } from 'lucide-react';
 import { SpotlightCard } from './SpotlightCard';
 import { TabPill } from './TabPill';
@@ -43,6 +44,15 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   const [activeTab, setActiveTab] = useState<CategoryType>('all');
   const [copiedSummary, setCopiedSummary] = useState(false);
 
+  // 支持按下 ESC 键关闭
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const tabs = [
     { key: 'all' as CategoryType, label: '全部' },
     { key: 'video' as CategoryType, label: '视频', badge: data.videos.length },
@@ -55,7 +65,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
     if (data.aiSummaryMarkdown) {
       navigator.clipboard.writeText(data.aiSummaryMarkdown);
       setCopiedSummary(true);
-      onShowToast('AI 提炼总结已复制到剪贴板', 'success');
+      onShowToast('AI 提炼总结与大纲已复制为 Markdown', 'success');
       setTimeout(() => setCopiedSummary(false), 2000);
     }
   };
@@ -64,7 +74,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
     try {
       const blob = await fetchDanmakuAss(data.cid, data.title);
       saveBlobAsFile(blob, `${data.title}-弹幕.ass`);
-      onShowToast('弹幕文件已生成并开始下载', 'success');
+      onShowToast('弹幕文件已转换完成并保存', 'success');
     } catch (err: any) {
       onShowToast(`弹幕导出失败: ${err.message}`, 'error');
     }
@@ -74,7 +84,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
     try {
       const blob = await fetchSubtitleSrt(subUrl);
       saveBlobAsFile(blob, `${data.title}-${lanDoc}字幕.srt`);
-      onShowToast(`${lanDoc}字幕已生成并开始下载`, 'success');
+      onShowToast(`${lanDoc}字幕已保存为 SRT 格式`, 'success');
     } catch (err: any) {
       onShowToast(`字幕导出失败: ${err.message}`, 'error');
     }
@@ -83,10 +93,15 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   const bestAudio = data.audios[0];
 
   return (
-    <div className="fixed inset-0 z-[1000000] flex items-center justify-center bg-black/50 backdrop-blur-md p-4">
-      <div className="relative w-full max-w-2xl max-h-[88vh] flex flex-col rounded-3xl bg-zinc-900/90 text-white backdrop-blur-2xl border border-white/10 shadow-2xl shadow-black/40 overflow-hidden animate-spring-pop">
+    <div
+      className="fixed inset-0 z-[1000000] flex items-center justify-center bg-black/60 backdrop-blur-md p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="relative w-full max-w-2xl max-h-[88vh] flex flex-col rounded-3xl bg-zinc-900/95 text-white backdrop-blur-3xl border border-white/10 shadow-2xl shadow-black/50 overflow-hidden animate-modal-pop">
         {/* 顶部 Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-3">
+        <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-white/5">
           <div className="flex items-center gap-2.5">
             <span className="p-2 rounded-xl bg-pink-500/10 text-[#FF6699] border border-pink-500/20">
               <Sparkles className="w-4 h-4" />
@@ -96,21 +111,22 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                 哔哩下载 · Bili-DL
               </h2>
               <p className="text-[11px] font-normal text-zinc-400">
-                4K / 1080P 前端无损混流 · 独立纯音频 · 弹幕字幕
+                4K / 1080P 前端无损混流 · 独立纯音频 · 弹幕转 ASS
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
+            title="关闭面板 (Esc)"
             className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* 视频预览信息 */}
-        <div className="px-6 py-2">
+        {/* 视频预览卡片 */}
+        <div className="px-6 py-3">
           <div className="flex gap-3.5 p-3 rounded-2xl bg-white/5 border border-white/10 items-center">
             {data.cover && (
               <img
@@ -120,10 +136,10 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
               />
             )}
             <div className="flex-1 min-w-0">
-              <h3 className="text-xs font-semibold text-zinc-100 line-clamp-2 leading-relaxed">
+              <h3 className="text-xs font-semibold text-zinc-100 line-clamp-2 leading-relaxed" title={data.title}>
                 {data.title}
               </h3>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2 mt-1.5">
                 <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-md bg-[#FF6699]/15 text-[#FF6699] border border-[#FF6699]/20">
                   {data.bvid}
                 </span>
@@ -147,12 +163,12 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
         </div>
 
         {/* Tab 控制条 */}
-        <div className="px-6 py-2">
+        <div className="px-6 py-1">
           <TabPill tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
         </div>
 
         {/* 资源列表区 */}
-        <div className="flex-1 overflow-y-auto px-6 py-2 space-y-2.5 max-h-[46vh] scrollbar-thin">
+        <div className="flex-1 overflow-y-auto px-6 py-3 space-y-2.5 max-h-[46vh] scrollbar-thin">
           {/* 1. 视频列表 */}
           {(activeTab === 'all' || activeTab === 'video') &&
             data.videos.map((v) => (
@@ -170,7 +186,14 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                         {v.qualityName}
                       </span>
                       <span
-                        className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold tracking-wide ${
+                        title={
+                          v.codecName === 'AVC'
+                            ? 'AVC (H.264)：全设备与剪辑软件完美兼容'
+                            : v.codecName === 'HEVC'
+                            ? 'HEVC (H.265)：高压缩率，画质清晰'
+                            : 'AV1：最新极致压缩格式'
+                        }
+                        className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold tracking-wide cursor-help ${
                           v.codecName === 'AVC'
                             ? 'bg-blue-500/15 text-blue-400 border border-blue-500/20'
                             : v.codecName === 'HEVC'
@@ -187,7 +210,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                       )}
                     </div>
                     <span className="text-[11px] font-mono text-zinc-400 mt-0.5 block">
-                      预估大小: {v.sizeMB} MB
+                      预估体积: {v.sizeMB} MB
                     </span>
                   </div>
                 </div>
@@ -199,7 +222,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                       exportAria2Command(data.title, v, bestAudio);
                       onShowToast('Aria2 / curl 下载命令已复制到剪贴板', 'success');
                     }}
-                    title="复制 Aria2 下载命令"
+                    title="复制 Aria2 / curl 多线程下载命令行"
                     className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition-colors cursor-pointer border border-white/5"
                   >
                     <Terminal className="w-3.5 h-3.5" />
@@ -207,6 +230,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
 
                   <button
                     onClick={() => onDownloadVideo(v, bestAudio)}
+                    title="下载视频+音频并在浏览器中无损合成为完整 MP4 文件"
                     className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#FF6699] hover:bg-[#FF3366] text-white font-semibold text-xs shadow-md shadow-pink-500/20 transition-all cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -246,7 +270,10 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                   </div>
                 </div>
 
-                <button className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-500 hover:bg-purple-600 text-white font-semibold text-xs shadow-md shadow-purple-500/20 transition-all">
+                <button
+                  title="单独提取并下载该独立音轨 (.m4a / .flac)"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-500 hover:bg-purple-600 text-white font-semibold text-xs shadow-md shadow-purple-500/20 transition-all"
+                >
                   <Download className="w-3.5 h-3.5" />
                   <span>下载音频</span>
                 </button>
@@ -271,12 +298,15 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                     超高清视频封面 (原图)
                   </span>
                   <span className="text-[11px] text-zinc-400 mt-0.5 block">
-                    无水印高清大图
+                    无水印 1080P/4K 原始图源
                   </span>
                 </div>
               </div>
 
-              <button className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs shadow-md shadow-emerald-500/20 transition-all">
+              <button
+                title="保存 B 站官方未压缩封面原图"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs shadow-md shadow-emerald-500/20 transition-all"
+              >
                 <Download className="w-3.5 h-3.5" />
                 <span>保存原图</span>
               </button>
@@ -304,7 +334,10 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                   </div>
                 </div>
 
-                <button className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs shadow-md shadow-amber-500/20 transition-all">
+                <button
+                  title="将本视频全量弹幕转换为标准 ASS 字幕文件"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs shadow-md shadow-amber-500/20 transition-all"
+                >
                   <Download className="w-3.5 h-3.5" />
                   <span>导出 ASS</span>
                 </button>
@@ -330,7 +363,10 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                     </div>
                   </div>
 
-                  <button className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-semibold text-xs shadow-md shadow-indigo-500/20 transition-all">
+                  <button
+                    title={`导出 ${sub.lan_doc} 官方双语字幕文件 (.srt)`}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-semibold text-xs shadow-md shadow-indigo-500/20 transition-all"
+                  >
                     <Download className="w-3.5 h-3.5" />
                     <span>导出 SRT</span>
                   </button>
@@ -356,7 +392,10 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                     </div>
                   </div>
 
-                  <button className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-semibold text-xs shadow-md shadow-sky-500/20 transition-all">
+                  <button
+                    title="复制 B 站官方 AI 总结与时间轴章节笔记"
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-semibold text-xs shadow-md shadow-sky-500/20 transition-all"
+                  >
                     {copiedSummary ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                     <span>{copiedSummary ? '已复制' : '复制 MD'}</span>
                   </button>
