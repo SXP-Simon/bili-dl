@@ -15,26 +15,26 @@ interface TabPillProps {
 
 export const TabPill: React.FC<TabPillProps> = ({ tabs, activeTab, onChange }) => {
   return (
-    <div className="flex p-1 gap-1 rounded-xl bg-black/5 dark:bg-white/10 backdrop-blur-md border border-white/10">
+    <div className="flex p-1 gap-1 rounded-xl bg-muted/80 border border-border/70">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.key;
         return (
           <button
             key={tab.key}
             onClick={() => onChange(tab.key)}
-            className={`relative flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 ${
+            className={`relative flex-1 py-1.5 px-3 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98] ${
               isActive
-                ? 'bg-[#FF6699] text-white shadow-md shadow-pink-500/25 scale-[1.02]'
-                : 'text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-white hover:bg-white/30 dark:hover:bg-white/5'
+                ? 'bg-card text-foreground font-semibold shadow-xs border border-border/70'
+                : 'text-muted-foreground hover:text-foreground hover:bg-background/50 border border-transparent'
             }`}
           >
-            <span>{tab.label}</span>
+            <span className="tracking-tight">{tab.label}</span>
             {typeof tab.badge === 'number' && (
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-medium transition-colors ${
                   isActive
-                    ? 'bg-white text-[#FF6699]'
-                    : 'bg-black/10 dark:bg-white/10 text-zinc-500 dark:text-zinc-400'
+                    ? 'bg-primary/20 text-primary-foreground font-semibold'
+                    : 'bg-muted text-muted-foreground'
                 }`}
               >
                 {tab.badge}

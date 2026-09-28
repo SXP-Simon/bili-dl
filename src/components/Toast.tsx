@@ -31,14 +31,14 @@ const ToastItem: React.FC<{ toast: ToastMessage; onRemove: () => void }> = ({ to
   }, [onRemove]);
 
   return (
-    <div className="pointer-events-auto flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-zinc-900/90 dark:bg-zinc-800/95 text-white text-xs font-medium shadow-2xl border border-white/15 backdrop-blur-xl animate-spring-pop">
-      {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
-      {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />}
-      {toast.type === 'info' && <Info className="w-4 h-4 text-sky-400 flex-shrink-0" />}
+    <div className="pointer-events-auto flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-popover text-popover-foreground text-xs font-medium shadow-lg border border-border/80 animate-toast-in">
+      {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />}
+      {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />}
+      {toast.type === 'info' && <Info className="w-4 h-4 text-primary flex-shrink-0" />}
       <span className="leading-snug">{toast.content}</span>
       <button
         onClick={onRemove}
-        className="ml-1 p-0.5 rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+        className="ml-1 p-0.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
       >
         <X className="w-3.5 h-3.5" />
       </button>

@@ -16,23 +16,23 @@ export const EpisodePicker: React.FC<EpisodePickerProps> = ({
   if (!pages || pages.length <= 1) return null;
 
   return (
-    <div className="mb-4 p-3 rounded-2xl bg-white/40 dark:bg-zinc-800/40 border border-white/20 backdrop-blur-sm">
-      <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-600 dark:text-zinc-300 mb-2">
-        <Layers className="w-3.5 h-3.5 text-[#FF6699]" />
-        <span>分 P / 剧集选择 (共 {pages.length} 集)</span>
+    <div className="mb-3 p-3 rounded-2xl bg-muted/40 border border-border/70">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
+        <Layers className="w-3.5 h-3.5 text-primary" />
+        <span>分 P 剧集 ({pages.length} 集)</span>
       </div>
 
-      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-clean">
         {pages.map((p) => {
           const isSelected = p.cid === currentCid;
           return (
             <button
               key={p.cid}
               onClick={() => onSelectEpisode(p.cid)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all duration-200 cursor-pointer active:scale-[0.98] ${
                 isSelected
-                  ? 'bg-[#FF6699] text-white shadow-sm scale-105'
-                  : 'bg-white/60 dark:bg-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-600'
+                  ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
+                  : 'bg-card text-card-foreground hover:bg-muted border border-border/70 shadow-2xs'
               }`}
             >
               P{p.page}: {p.part || `第${p.page}集`}
