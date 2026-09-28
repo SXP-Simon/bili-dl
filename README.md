@@ -9,6 +9,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 
 <p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/SXP-Simon/bili-dl@master/bilidl-demo.png" alt="bilidl-demo">
   <b>极简 · 清爽 · 高性能</b><br>
   基于 React 19 + TypeScript 7 + Tailwind CSS v4 构建的现代化 B 站资源下载油猴脚本。<br>
   支持 4K/1080P 前端无损秒级合成 MP4、独立音频提取、弹幕转 ASS、官方字幕转 SRT 及多 P 批量导出。
