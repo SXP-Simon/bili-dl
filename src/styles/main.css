@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@layer base {
+  :host {
+    --bili-pink: #FF6699;
+    --bili-pink-hover: #FF3366;
+    --bili-blue: #00AEEC;
+  }
+}
+
+/* 自定义物理弹性动画与光斑效果 */
+@keyframes springPop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-spring-pop {
+  animation: springPop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
