@@ -26,6 +26,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
   const [copied, setCopied] = useState(false);
   const [expandedDetails, setExpandedDetails] = useState<Record<string, boolean>>({});
   const logContainerRef = useRef<HTMLDivElement>(null);
+  const traceScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const unsubscribe = logger.subscribe((newLogs) => {
@@ -40,6 +41,22 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
       logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
     }
   }, [logs]);
+
+  // 任务 TraceID 标签栏支持鼠标滚轮横向滑动
+  useEffect(() => {
+    const el = traceScrollRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY;
+      }
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, []);
 
   const availableTraces = Array.from(
     new Set(logs.map((l) => l.traceId).filter((t): t is string => Boolean(t)))
@@ -126,9 +143,12 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-          {/* 任务 TraceID 快速筛选 */}
+          {/* 任务 TraceID 快速筛选 (支持滚轮横向滑动) */}
           {availableTraces.length > 0 && (
-            <div className="flex items-center bg-background rounded-lg p-0.5 border border-border/70 text-[10px] font-mono max-w-[150px] overflow-x-auto scrollbar-clean">
+            <div
+              ref={traceScrollRef}
+              className="flex items-center bg-background rounded-lg p-0.5 border border-border/70 text-[10px] font-mono max-w-[170px] overflow-x-auto scrollbar-clean select-none"
+            >
               <button
                 onClick={() => setFilterTrace('all')}
                 className={`px-1.5 py-0.5 rounded shrink-0 transition-colors cursor-pointer ${
