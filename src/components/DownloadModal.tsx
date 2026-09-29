@@ -290,8 +290,10 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                   }}
                   className="flex items-center justify-between"
                   onClick={() => {
-                    directDownload(a.baseUrl, `${data.title}-${a.name}.m4a`);
-                    onShowToast(`正在下载音频: ${a.name}`, 'info');
+                    const isFlac = a.codec?.toLowerCase().includes('flac') || a.qualityDesc?.includes('FLAC');
+                    const ext = isFlac ? 'flac' : 'm4a';
+                    directDownload(a.baseUrl, `${data.title}-${a.name}.${ext}`);
+                    onShowToast(`正在下载音频: ${a.name} (.${ext})`, 'info');
                   }}
                 >
                   <div className="flex items-center gap-3">
