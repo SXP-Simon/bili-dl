@@ -30,14 +30,16 @@ export default defineConfig({
           'GM_setClipboard'
         ],
         connect: [
-          '*',
-          'api.bilibili.com',
-          '*.bilibili.com',
-          '*.bilivideo.com',
-          '*.bilivideo.cn',
-          '*.hdslb.com',
-          '*.akamaized.net',
-          '*.szbdyd.com'
+          'bilibili.com',
+          'bilivideo.com',
+          'bilivideo.cn',
+          'hdslb.com',
+          'biliapi.net',
+          'szbdyd.com',
+          'akamaized.net',
+          'xycdn.com',
+          'mcdn.bilivideo.cn',
+          'self'
         ]
       },
       build: {
