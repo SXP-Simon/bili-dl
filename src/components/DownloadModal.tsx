@@ -20,6 +20,7 @@ import { SpotlightCard } from './SpotlightCard';
 import { TabPill } from './TabPill';
 import { ProgressBar } from './ProgressBar';
 import { EpisodePicker } from './EpisodePicker';
+import { LogViewer } from './LogViewer';
 import { exportAria2Command } from '../media/aria2';
 import { fetchDanmakuAss } from '../media/danmaku';
 import { fetchSubtitleSrt } from '../media/subtitle';
@@ -60,6 +61,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   const [activeTab, setActiveTab] = useState<CategoryType>('all');
   const [copiedSummary, setCopiedSummary] = useState(false);
   const [activeActionKey, setActiveActionKey] = useState<string | null>(null);
+  const [showLogs, setShowLogs] = useState(false);
   const innerListRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState<number | undefined>(undefined);
 
@@ -152,6 +154,19 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setShowLogs(!showLogs)}
+              title={showLogs ? '收起诊断日志' : '查看运行日志与诊断信息'}
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all duration-150 active:scale-95 cursor-pointer shadow-2xs ${
+                showLogs
+                  ? 'bg-primary/25 text-emerald-950 dark:text-emerald-100 border-primary/50 font-bold'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted border-border/60'
+              }`}
+            >
+              <Terminal className="w-3.5 h-3.5" strokeWidth={2.2} />
+              <span className="text-[11px] font-medium">日志</span>
+            </button>
+
             <button
               onClick={onToggleDark}
               title={isDark ? '切换浅色模式' : '切换深色模式'}
@@ -594,6 +609,13 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
               onClearCompleted={onClearCompleted}
               progress={progress}
             />
+          </div>
+        )}
+
+        {/* 底部运行日志与诊断控制台 */}
+        {showLogs && (
+          <div className="max-h-64 border-t border-border/70">
+            <LogViewer onClose={() => setShowLogs(false)} />
           </div>
         )}
       </div>

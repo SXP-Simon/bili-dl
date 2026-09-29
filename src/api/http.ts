@@ -1,4 +1,5 @@
 import { GM_xmlhttpRequest } from '$';
+import { logger } from '../utils/logger';
 
 export interface RequestProgressCallback {
   (loaded: number, total: number, speed?: string): void;
@@ -141,6 +142,7 @@ export async function requestChunkedBuffer(
 
   // 如果未能探测到大小或文件较小（< 3MB），使用标准单流下载
   if (!totalBytes || totalBytes < 3 * 1024 * 1024) {
+    logger.info('Network', '文件较小或不支持 Range 探测，降级为单流下载', { totalBytes });
     return requestBuffer(url, onProgress);
   }
 
@@ -148,6 +150,8 @@ export async function requestChunkedBuffer(
   const chunkCount = Math.min(concurrency, Math.max(2, Math.ceil(totalBytes / (6 * 1024 * 1024))));
   const chunkSize = Math.ceil(totalBytes / chunkCount);
   const chunks: Array<{ start: number; end: number; index: number }> = [];
+
+  logger.info('Range', `启动多分片并发加速: ${(totalBytes / 1024 / 1024).toFixed(1)} MB (${chunkCount} 线程并发)`);
 
   for (let i = 0; i < chunkCount; i++) {
     const start = i * chunkSize;
@@ -195,6 +199,7 @@ export async function requestChunkedBuffer(
     })
   );
 
+  logger.success('Range', `分片数据传输完毕: ${(totalBytes / 1024 / 1024).toFixed(1)} MB 全部就绪`);
   return finalBuffer.buffer as ArrayBuffer;
 }
 

@@ -1,4 +1,5 @@
 import MP4Box from 'mp4box';
+import { logger } from '../utils/logger';
 
 /**
  * 将 B 站的视频轨 (video.m4s) 和音频轨 (audio.m4s) 通过 mp4box.js 提取 sample 并完整混流为标准可播放的 MP4
@@ -8,6 +9,10 @@ export async function muxMp4(
   audioBuffer?: ArrayBuffer | null,
   onProgress?: (progress: number) => void
 ): Promise<Blob> {
+  logger.info('Muxer', '开始音视频解封装与 MP4 容器混流...', {
+    videoBytes: videoBuffer.byteLength,
+    audioBytes: audioBuffer?.byteLength || 0,
+  });
   return new Promise((resolve, reject) => {
     try {
       const outMp4 = MP4Box.createFile();

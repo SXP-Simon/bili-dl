@@ -1,4 +1,5 @@
 import { requestJson } from './http';
+import { logger } from '../utils/logger';
 import type { MediaResourceData, VideoStreamItem, AudioStreamItem, VideoPageItem, SubtitleItem } from '../types';
 
 const QUALITY_MAP: Record<number, string> = {
@@ -192,6 +193,15 @@ export async function fetchCurrentMediaData(targetCid?: number): Promise<MediaRe
 
   // 6. AI 总结
   const aiSummary = await fetchAiSummary(bvid, cid);
+
+  logger.success('API', `成功解析媒体资源: ${title}`, {
+    bvid,
+    cid,
+    videos: videos.length,
+    audios: audios.length,
+    subtitles: subtitles.length,
+    duration: `${duration}s`,
+  });
 
   return {
     bvid,

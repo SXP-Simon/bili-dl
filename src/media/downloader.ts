@@ -1,6 +1,7 @@
 import { GM_download } from '$';
 import { requestChunkedBuffer } from '../api/http';
 import { muxMp4 } from './muxer';
+import { logger } from '../utils/logger';
 import type { VideoStreamItem, AudioStreamItem, DownloadProgress } from '../types';
 
 /**
@@ -45,6 +46,13 @@ export async function downloadAndMuxMp4(
   audio: AudioStreamItem | undefined,
   onProgress: (state: DownloadProgress) => void
 ): Promise<void> {
+  const startTime = Date.now();
+  logger.info('Downloader', `开始下载任务: ${title}`, {
+    video: `${video.qualityName} (${video.codecName})`,
+    audio: audio?.name || '无',
+    estimatedSize: `${video.sizeMB} MB`,
+  });
+
   try {
     let videoLoaded = 0;
     let videoTotal = 1;
@@ -88,6 +96,8 @@ export async function downloadAndMuxMp4(
       : Promise.resolve(null);
 
     const [videoBuffer, audioBuffer] = await Promise.all([videoPromise, audioPromise]);
+    const downloadTime = ((Date.now() - startTime) / 1000).toFixed(1);
+    logger.success('Downloader', `双轨媒体流拉取完毕，耗时 ${downloadTime}s，进入 MP4 混流封装`);
 
     // 2. 前端 mp4box 快速混流合成
     onProgress({
@@ -112,6 +122,8 @@ export async function downloadAndMuxMp4(
     // 3. 保存文件
     const filename = `${title}_${video.qualityName}_${video.codecName}.mp4`;
     saveBlobAsFile(finalBlob, filename);
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+    logger.success('Downloader', `文件保存成功: ${filename} (总耗时 ${totalTime}s)`);
 
     onProgress({
       status: 'completed',
@@ -119,6 +131,7 @@ export async function downloadAndMuxMp4(
       message: '下载与混流完成，已保存到本地',
     });
   } catch (err: any) {
+    logger.error('Downloader', `下载失败: ${err.message}`, err);
     onProgress({
       status: 'error',
       progress: 0,
@@ -136,12 +149,15 @@ export async function downloadAudio(
   audio: AudioStreamItem,
   onProgress: (state: DownloadProgress) => void
 ): Promise<void> {
-  try {
-    const isFlac = audio.codec?.toLowerCase().includes('flac') || audio.qualityDesc?.includes('FLAC');
-    const ext = isFlac ? 'flac' : 'm4a';
-    const mimeType = isFlac ? 'audio/flac' : 'audio/mp4';
-    const filename = `${title}_${audio.name}.${ext}`;
+  const startTime = Date.now();
+  const isFlac = audio.codec?.toLowerCase().includes('flac') || audio.qualityDesc?.includes('FLAC');
+  const ext = isFlac ? 'flac' : 'm4a';
+  const mimeType = isFlac ? 'audio/flac' : 'audio/mp4';
+  const filename = `${title}_${audio.name}.${ext}`;
 
+  logger.info('Downloader', `开始下载音频轨: ${filename}`);
+
+  try {
     onProgress({
       status: 'downloading_audio',
       progress: 0,
@@ -160,6 +176,8 @@ export async function downloadAudio(
 
     const blob = new Blob([audioBuffer], { type: mimeType });
     saveBlobAsFile(blob, filename);
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+    logger.success('Downloader', `音频保存成功: ${filename} (耗时 ${totalTime}s)`);
 
     onProgress({
       status: 'completed',
@@ -167,6 +185,7 @@ export async function downloadAudio(
       message: `音频下载完成，已保存为 .${ext} 文件`,
     });
   } catch (err: any) {
+    logger.error('Downloader', `音频下载失败: ${err.message}`, err);
     onProgress({
       status: 'error',
       progress: 0,

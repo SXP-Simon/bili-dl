@@ -72,3 +72,16 @@ export interface DownloadProgress {
   message?: string;
 }
 
+export type LogLevel = 'info' | 'warn' | 'error' | 'success' | 'debug';
+
+export interface LogEntry {
+  id: string;
+  timestamp: number;
+  timeStr: string;
+  level: LogLevel;
+  tag: string;
+  message: string;
+  details?: any;
+}
+
+
