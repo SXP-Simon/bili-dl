@@ -8,6 +8,7 @@ import type { MediaResourceData, VideoStreamItem, AudioStreamItem, DownloadProgr
 
 export const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
+  const [loadingCid, setLoadingCid] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [mediaData, setMediaData] = useState<MediaResourceData | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -65,6 +66,7 @@ export const App: React.FC = () => {
 
   const handleOpenModal = async (targetCid?: number) => {
     setLoading(true);
+    if (targetCid) setLoadingCid(targetCid);
     try {
       const data = await fetchCurrentMediaData(targetCid);
       if (data) {
@@ -77,6 +79,7 @@ export const App: React.FC = () => {
       showToast(`解析失败: ${err.message}`, 'error');
     } finally {
       setLoading(false);
+      setLoadingCid(null);
     }
   };
 
@@ -104,6 +107,7 @@ export const App: React.FC = () => {
         <DownloadModal
           data={mediaData}
           isDark={isDark}
+          loadingCid={loadingCid}
           onToggleDark={handleToggleDark}
           onClose={() => {
             setIsModalOpen(false);

@@ -29,6 +29,7 @@ import type { MediaResourceData, CategoryType, VideoStreamItem, AudioStreamItem,
 interface DownloadModalProps {
   data: MediaResourceData;
   isDark: boolean;
+  loadingCid?: number | null;
   onToggleDark: () => void;
   onClose: () => void;
   onDownloadVideo: (video: VideoStreamItem, audio?: AudioStreamItem) => void;
@@ -40,6 +41,7 @@ interface DownloadModalProps {
 export const DownloadModal: React.FC<DownloadModalProps> = ({
   data,
   isDark,
+  loadingCid,
   onToggleDark,
   onClose,
   onDownloadVideo,
@@ -193,6 +195,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
           <EpisodePicker
             pages={data.pages}
             currentCid={data.cid}
+            loadingCid={loadingCid}
             onSelectEpisode={onSelectEpisode}
           />
         </div>
