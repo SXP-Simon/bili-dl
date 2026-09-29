@@ -10,13 +10,19 @@ export interface RequestProgressCallback {
  */
 export async function requestBuffer(
   url: string,
-  onProgress?: RequestProgressCallback
+  onProgress?: RequestProgressCallback,
+  signal?: AbortSignal
 ): Promise<ArrayBuffer> {
+  if (signal?.aborted) {
+    throw new DOMException('Download aborted by user', 'AbortError');
+  }
+
   return new Promise((resolve, reject) => {
     let lastLoaded = 0;
     let lastTime = Date.now();
+    let hasFinished = false;
 
-    GM_xmlhttpRequest({
+    const req = GM_xmlhttpRequest({
       method: 'GET',
       url,
       responseType: 'arraybuffer',
@@ -25,7 +31,7 @@ export async function requestBuffer(
         'User-Agent': navigator.userAgent,
       },
       onprogress: (event: any) => {
-        if (onProgress && event.lengthComputable) {
+        if (!hasFinished && onProgress && event.lengthComputable) {
           const now = Date.now();
           const timeDiff = (now - lastTime) / 1000;
           let speedStr = '';
@@ -40,6 +46,7 @@ export async function requestBuffer(
         }
       },
       onload: (response: any) => {
+        hasFinished = true;
         if (response.status >= 200 && response.status < 300) {
           resolve(response.response as ArrayBuffer);
         } else {
@@ -47,9 +54,26 @@ export async function requestBuffer(
         }
       },
       onerror: (err: any) => {
+        hasFinished = true;
         reject(new Error(err.error || 'Network error'));
       },
     });
+
+    if (signal) {
+      signal.addEventListener(
+        'abort',
+        () => {
+          if (!hasFinished) {
+            hasFinished = true;
+            try {
+              (req as any)?.abort?.();
+            } catch {}
+            reject(new DOMException('Download aborted by user', 'AbortError'));
+          }
+        },
+        { once: true }
+      );
+    }
   });
 }
 
@@ -158,7 +182,7 @@ class GlobalConcurrencyLimiter {
 const globalLimiter = new GlobalConcurrencyLimiter();
 
 /**
- * 单分片下载 Promise（带全局并发控制、多 CDN 节点轮转与防雷鸣抖动重试）
+ * 单分片下载 Promise（带全局并发控制、多 CDN 节点轮转、防雷鸣抖动重试与主动取消机制）
  */
 async function fetchChunkWithRetry(
   urls: string[],
@@ -167,17 +191,27 @@ async function fetchChunkWithRetry(
   onChunkProgress: (loaded: number) => void,
   retries = Math.max(3, urls.length),
   traceId?: string,
-  streamLabel?: string
+  streamLabel?: string,
+  signal?: AbortSignal
 ): Promise<Uint8Array> {
   let lastError: any = null;
   const streamPrefix = streamLabel ? `[${streamLabel}] ` : '';
 
   for (let attempt = 1; attempt <= retries; attempt++) {
+    if (signal?.aborted) {
+      throw new DOMException('Download aborted by user', 'AbortError');
+    }
+
     const targetUrl = urls[(attempt - 1) % urls.length];
     const currentNodeLabel = getCdnNodeLabel(targetUrl);
 
     // 申请全局并发配额槽位（排队保证不超出 IP 阈值）
     const release = await globalLimiter.acquire();
+
+    if (signal?.aborted) {
+      release();
+      throw new DOMException('Download aborted by user', 'AbortError');
+    }
 
     try {
       const result = await new Promise<Uint8Array>((resolve, reject) => {
@@ -218,6 +252,23 @@ async function fetchChunkWithRetry(
           },
         });
 
+        // 绑定外部取消中断信号
+        if (signal) {
+          signal.addEventListener(
+            'abort',
+            () => {
+              if (!hasFinished) {
+                hasFinished = true;
+                try {
+                  (req as any)?.abort?.();
+                } catch {}
+                reject(new DOMException('Download aborted by user', 'AbortError'));
+              }
+            },
+            { once: true }
+          );
+        }
+
         // 兜底看门狗（18s）防死锁
         setTimeout(() => {
           if (!hasFinished) {
@@ -233,6 +284,9 @@ async function fetchChunkWithRetry(
       return result;
     } catch (err: any) {
       release();
+      if (signal?.aborted || (err as any)?.name === 'AbortError') {
+        throw new DOMException('Download aborted by user', 'AbortError');
+      }
       lastError = err;
       const nextTargetUrl = urls[attempt % urls.length];
       const nextNodeLabel = getCdnNodeLabel(nextTargetUrl);
@@ -254,26 +308,35 @@ async function fetchChunkWithRetry(
 }
 
 /**
- * 分块多连接高速并发下载器（支持 3~4 线程 Range 并发，多 CDN 自动故障转移）
+ * 分块多连接高速并发下载器（支持 3~4 线程 Range 并发，多 CDN 自动故障转移与主动 Abort 取消）
  */
 export async function requestChunkedBuffer(
   urls: string | string[],
   onProgress?: RequestProgressCallback,
   concurrency = 3,
   traceId?: string,
-  streamLabel?: string
+  streamLabel?: string,
+  signal?: AbortSignal
 ): Promise<ArrayBuffer> {
   const urlList = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
   if (urlList.length === 0) throw new Error('No valid URL provided');
+  if (signal?.aborted) {
+    throw new DOMException('Download aborted by user', 'AbortError');
+  }
+
   const streamPrefix = streamLabel ? `[${streamLabel}] ` : '';
 
   // 1. 探测资源总大小
   const totalBytes = await probeContentLength(urlList);
 
+  if (signal?.aborted) {
+    throw new DOMException('Download aborted by user', 'AbortError');
+  }
+
   // 如果未能探测到大小或文件较小（< 3MB），使用标准单流下载
   if (!totalBytes || totalBytes < 3 * 1024 * 1024) {
     logger.info('Network', `${streamPrefix}文件较小或不支持 Range 探测，使用标准流下载`, { totalBytes }, traceId);
-    return requestBuffer(urlList[0], onProgress);
+    return requestBuffer(urlList[0], onProgress, signal);
   }
 
   // 2. 切分分片（按 3~4 个并发连接均分，避免单 IP 过载被 B 站 CDN 丢包）
@@ -353,7 +416,8 @@ export async function requestChunkedBuffer(
           },
           Math.max(3, urlList.length),
           traceId,
-          streamLabel
+          streamLabel,
+          signal
         );
         finalBuffer.set(u8, chunk.start);
         loadedPerChunk[chunk.index] = u8.length;
@@ -369,6 +433,10 @@ export async function requestChunkedBuffer(
     return finalBuffer.buffer as ArrayBuffer;
   } catch (err: any) {
     clearInterval(timer);
+    if (signal?.aborted || (err as any)?.name === 'AbortError') {
+      logger.warn('Range', `${streamPrefix}分片下载已主动取消并释放连接`, null, traceId);
+      throw new DOMException('Download aborted by user', 'AbortError');
+    }
     logger.error('Range', `${streamPrefix}多连接分片下载失败: ${err.message}`, err, traceId);
     throw err;
   }

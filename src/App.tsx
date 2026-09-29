@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FloatButton } from './components/FloatButton';
 import { DownloadModal } from './components/DownloadModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
@@ -13,6 +13,8 @@ export const App: React.FC = () => {
   const [mediaData, setMediaData] = useState<MediaResourceData | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
+  const activeControllers = useRef<Map<string, AbortController>>(new Map());
+
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('bili_dl_theme');
@@ -26,6 +28,24 @@ export const App: React.FC = () => {
       return false;
     }
   });
+
+  // 监听页面卸载/刷新，主动释放并中止所有在途后台请求
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      activeControllers.current.forEach((controller) => {
+        try {
+          controller.abort();
+        } catch {}
+      });
+      activeControllers.current.clear();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      handleBeforeUnload();
+    };
+  }, []);
 
   // 监听 B 站或系统的深色模式变化
   useEffect(() => {
@@ -79,11 +99,17 @@ export const App: React.FC = () => {
   };
 
   const handleRemoveTask = (id: string) => {
+    // 若任务正在执行，先触发 Abort 取消断开底层连接与释放资源
+    const controller = activeControllers.current.get(id);
+    if (controller) {
+      controller.abort();
+      activeControllers.current.delete(id);
+    }
     setTasks((prev) => prev.filter((t) => t.id !== id));
   };
 
   const handleClearCompletedTasks = () => {
-    setTasks((prev) => prev.filter((t) => t.status !== 'completed'));
+    setTasks((prev) => prev.filter((t) => t.status !== 'completed' && t.status !== 'cancelled'));
   };
 
   const handleOpenModal = async (targetCid?: number) => {
@@ -117,6 +143,10 @@ export const App: React.FC = () => {
     const taskTitle = `${video.qualityName} (${video.codecName})`;
     const traceId = `${video.qualityName.replace(/\s+/g, '')}-${video.codecName}`;
 
+    // 创建并注册该任务的 AbortController
+    const controller = new AbortController();
+    activeControllers.current.set(taskId, controller);
+
     upsertTask({
       id: taskId,
       type: 'video',
@@ -140,15 +170,28 @@ export const App: React.FC = () => {
             message: prog.message,
           });
         },
-        traceId
+        traceId,
+        controller.signal
       );
-      showToast(`MP4 无损封装完成 (${taskTitle})`, 'success');
+      if (!controller.signal.aborted) {
+        showToast(`MP4 无损封装完成 (${taskTitle})`, 'success');
+      }
     } catch (err: any) {
-      updateTaskProgress(taskId, {
-        status: 'error',
-        message: `下载失败: ${err.message}`,
-      });
-      showToast(`下载失败: ${err.message}`, 'error');
+      if (controller.signal.aborted || err?.name === 'AbortError') {
+        updateTaskProgress(taskId, {
+          status: 'cancelled',
+          message: '已手动取消下载',
+        });
+        showToast(`任务已取消 (${taskTitle})`, 'info');
+      } else {
+        updateTaskProgress(taskId, {
+          status: 'error',
+          message: `下载失败: ${err.message}`,
+        });
+        showToast(`下载失败: ${err.message}`, 'error');
+      }
+    } finally {
+      activeControllers.current.delete(taskId);
     }
   };
 
@@ -157,6 +200,10 @@ export const App: React.FC = () => {
     const taskId = `audio_${audio.id}`;
     const taskTitle = audio.name;
     const traceId = `音频-${audio.name.replace(/\s+/g, '')}`;
+
+    // 创建并注册该任务的 AbortController
+    const controller = new AbortController();
+    activeControllers.current.set(taskId, controller);
 
     upsertTask({
       id: taskId,
@@ -180,17 +227,30 @@ export const App: React.FC = () => {
             message: prog.message,
           });
         },
-        traceId
+        traceId,
+        controller.signal
       );
-      const isFlac = audio.codec?.toLowerCase().includes('flac') || audio.qualityDesc?.includes('FLAC');
-      const ext = isFlac ? 'flac' : 'm4a';
-      showToast(`音频已保存为 .${ext} 文件 (${taskTitle})`, 'success');
+      if (!controller.signal.aborted) {
+        const isFlac = audio.codec?.toLowerCase().includes('flac') || audio.qualityDesc?.includes('FLAC');
+        const ext = isFlac ? 'flac' : 'm4a';
+        showToast(`音频已保存为 .${ext} 文件 (${taskTitle})`, 'success');
+      }
     } catch (err: any) {
-      updateTaskProgress(taskId, {
-        status: 'error',
-        message: `下载失败: ${err.message}`,
-      });
-      showToast(`音频下载失败: ${err.message}`, 'error');
+      if (controller.signal.aborted || err?.name === 'AbortError') {
+        updateTaskProgress(taskId, {
+          status: 'cancelled',
+          message: '已手动取消下载',
+        });
+        showToast(`音频任务已取消 (${taskTitle})`, 'info');
+      } else {
+        updateTaskProgress(taskId, {
+          status: 'error',
+          message: `下载失败: ${err.message}`,
+        });
+        showToast(`音频下载失败: ${err.message}`, 'error');
+      }
+    } finally {
+      activeControllers.current.delete(taskId);
     }
   };
 

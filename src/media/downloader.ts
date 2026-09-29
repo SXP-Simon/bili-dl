@@ -45,7 +45,8 @@ export async function downloadAndMuxMp4(
   video: VideoStreamItem,
   audio: AudioStreamItem | undefined,
   onProgress: (state: DownloadProgress) => void,
-  traceId?: string
+  traceId?: string,
+  signal?: AbortSignal
 ): Promise<void> {
   const finalTraceId = traceId || `${video.qualityName.replace(/\s+/g, '')}-${video.codecName}`;
   const startTime = Date.now();
@@ -68,6 +69,7 @@ export async function downloadAndMuxMp4(
     let currentSpeed = '';
 
     const updateCombinedProgress = () => {
+      if (signal?.aborted) return;
       const totalLoaded = videoLoaded + audioLoaded;
       const totalBytes = videoTotal + (audioTotal || 0);
       const pct = Math.min(90, Math.floor((totalLoaded / totalBytes) * 90));
@@ -85,7 +87,7 @@ export async function downloadAndMuxMp4(
       message: `正在建立多连接下载: ${video.qualityName} (${video.codecName})`,
     });
 
-    // 1. 双轨多连接并行拉取（带备用 CDN 故障转移）
+    // 1. 双轨多连接并行拉取（带备用 CDN 故障转移与 AbortSignal）
     const videoUrls = [video.baseUrl, ...(video.backupUrl || [])].filter(Boolean);
     const videoPromise = requestChunkedBuffer(
       videoUrls,
@@ -97,7 +99,8 @@ export async function downloadAndMuxMp4(
       },
       3,
       finalTraceId,
-      '视频轨'
+      '视频轨',
+      signal
     );
 
     const audioUrls = audio ? [audio.baseUrl, ...(audio.backupUrl || [])].filter(Boolean) : [];
@@ -112,11 +115,17 @@ export async function downloadAndMuxMp4(
           },
           2,
           finalTraceId,
-          '音频轨'
+          '音频轨',
+          signal
         )
       : Promise.resolve(null);
 
     const [videoBuffer, audioBuffer] = await Promise.all([videoPromise, audioPromise]);
+
+    if (signal?.aborted) {
+      throw new DOMException('Download aborted by user', 'AbortError');
+    }
+
     const downloadTime = ((Date.now() - startTime) / 1000).toFixed(1);
     logger.success('Downloader', `双轨媒体流拉取完毕，耗时 ${downloadTime}s，进入 MP4 混流封装`, null, finalTraceId);
 
@@ -133,6 +142,7 @@ export async function downloadAndMuxMp4(
         videoBuffer,
         audioBuffer,
         (muxPct) => {
+          if (signal?.aborted) return;
           onProgress({
             status: 'muxing',
             progress: 90 + Math.floor(muxPct * 0.09),
@@ -143,6 +153,10 @@ export async function downloadAndMuxMp4(
       );
     } else {
       finalBlob = new Blob([videoBuffer], { type: 'video/mp4' });
+    }
+
+    if (signal?.aborted) {
+      throw new DOMException('Download aborted by user', 'AbortError');
     }
 
     // 3. 保存文件
@@ -157,6 +171,15 @@ export async function downloadAndMuxMp4(
       message: '下载与混流完成，已保存到本地',
     });
   } catch (err: any) {
+    if (signal?.aborted || err?.name === 'AbortError') {
+      logger.warn('Downloader', `下载任务已由用户手动取消: ${title}`, null, finalTraceId);
+      onProgress({
+        status: 'cancelled',
+        progress: 0,
+        message: '下载任务已手动取消',
+      });
+      return;
+    }
     logger.error('Downloader', `下载失败: ${err.message}`, err, finalTraceId);
     onProgress({
       status: 'error',
@@ -174,7 +197,8 @@ export async function downloadAudio(
   title: string,
   audio: AudioStreamItem,
   onProgress: (state: DownloadProgress) => void,
-  traceId?: string
+  traceId?: string,
+  signal?: AbortSignal
 ): Promise<void> {
   const finalTraceId = traceId || `音频-${audio.name.replace(/\s+/g, '')}`;
   const startTime = Date.now();
@@ -196,6 +220,7 @@ export async function downloadAudio(
     const audioBuffer = await requestChunkedBuffer(
       audioUrls,
       (loaded, total, speed) => {
+        if (signal?.aborted) return;
         const pct = Math.min(99, Math.floor((loaded / total) * 100));
         onProgress({
           status: 'downloading_audio',
@@ -206,8 +231,13 @@ export async function downloadAudio(
       },
       2,
       finalTraceId,
-      '独立音频轨'
+      '独立音频轨',
+      signal
     );
+
+    if (signal?.aborted) {
+      throw new DOMException('Download aborted by user', 'AbortError');
+    }
 
     const blob = new Blob([audioBuffer], { type: mimeType });
     saveBlobAsFile(blob, filename);
@@ -220,6 +250,15 @@ export async function downloadAudio(
       message: `音频下载完成，已保存为 .${ext} 文件`,
     });
   } catch (err: any) {
+    if (signal?.aborted || err?.name === 'AbortError') {
+      logger.warn('Downloader', `音频任务已由用户手动取消: ${filename}`, null, finalTraceId);
+      onProgress({
+        status: 'cancelled',
+        progress: 0,
+        message: '音频任务已手动取消',
+      });
+      return;
+    }
     logger.error('Downloader', `音频下载失败: ${err.message}`, err, finalTraceId);
     onProgress({
       status: 'error',

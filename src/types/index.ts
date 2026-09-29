@@ -58,7 +58,7 @@ export interface DownloadTask {
   id: string;
   type: TaskType;
   title: string;
-  status: 'pending' | 'downloading_video' | 'downloading_audio' | 'muxing' | 'completed' | 'error' | 'idle';
+  status: 'pending' | 'downloading_video' | 'downloading_audio' | 'muxing' | 'completed' | 'error' | 'cancelled' | 'idle';
   progress: number; // 0 ~ 100
   speed?: string;
   message?: string;
@@ -66,7 +66,7 @@ export interface DownloadTask {
 }
 
 export interface DownloadProgress {
-  status: 'idle' | 'downloading_video' | 'downloading_audio' | 'muxing' | 'completed' | 'error';
+  status: 'idle' | 'downloading_video' | 'downloading_audio' | 'muxing' | 'completed' | 'error' | 'cancelled';
   progress: number; // 0 ~ 100
   speed?: string;
   message?: string;

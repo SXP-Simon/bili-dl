@@ -75,7 +75,8 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
           {tasks.map((task) => {
             const isCompleted = task.status === 'completed';
             const isError = task.status === 'error';
-            const isActive = !isCompleted && !isError;
+            const isCancelled = task.status === 'cancelled';
+            const isActive = !isCompleted && !isError && !isCancelled;
 
             return (
               <div
@@ -92,11 +93,11 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
                       {task.title}
                     </span>
                     <span className="text-[11px] text-muted-foreground truncate flex-1" title={task.message}>
-                      {task.message || (isCompleted ? '已完成' : '处理中...')}
+                      {task.message || (isCompleted ? '已完成' : isCancelled ? '已取消' : '处理中...')}
                     </span>
                   </div>
 
-                  {/* 右侧：状态指示器 + 进度百分比 + 移除按键 */}
+                  {/* 右侧：状态指示器 + 进度百分比 + 取消/移除按键 */}
                   <div className="flex items-center gap-2 shrink-0">
                     {isCompleted && (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-md border border-emerald-500/20">
@@ -108,6 +109,11 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-destructive bg-destructive/10 px-1.5 py-0.5 rounded-md border border-destructive/20">
                         <AlertCircle className="w-3 h-3" strokeWidth={2.4} />
                         失败
+                      </span>
+                    )}
+                    {isCancelled && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded-md border border-border/60">
+                        已取消
                       </span>
                     )}
                     {task.status === 'pending' && (
@@ -126,7 +132,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
                       <button
                         onClick={() => onRemoveTask(task.id)}
                         className="p-1 rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-                        title="移除任务项"
+                        title={isActive ? '中断并取消当前下载任务' : '从列表中移除'}
                       >
                         <X className="w-3 h-3" strokeWidth={2.2} />
                       </button>
@@ -138,7 +144,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
                 <div className="relative h-1.5 w-full bg-muted rounded-full overflow-hidden mt-2">
                   <div
                     className={`h-full transition-all duration-200 ease-out rounded-full relative overflow-hidden ${
-                      isCompleted ? 'bg-emerald-500' : 'bg-primary'
+                      isCompleted ? 'bg-emerald-500' : isCancelled ? 'bg-muted-foreground/40' : 'bg-primary'
                     }`}
                     style={{ width: `${Math.min(100, Math.max(0, task.progress))}%` }}
                   >
