@@ -33,6 +33,7 @@ interface DownloadModalProps {
   onToggleDark: () => void;
   onClose: () => void;
   onDownloadVideo: (video: VideoStreamItem, audio?: AudioStreamItem) => void;
+  onDownloadAudio: (audio: AudioStreamItem) => void;
   onSelectEpisode: (cid: number) => void;
   onShowToast: (content: string, type?: 'success' | 'error' | 'info') => void;
   progress: DownloadProgress;
@@ -45,6 +46,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   onToggleDark,
   onClose,
   onDownloadVideo,
+  onDownloadAudio,
   onSelectEpisode,
   onShowToast,
   progress,
@@ -311,7 +313,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
             {/* 2. 音频列表 */}
             {(activeTab === 'all' || activeTab === 'audio') &&
               data.audios.map((a, idx) => {
-                const isTriggered = activeActionKey === `audio_${a.id}`;
+                const isProcessing = activeActionKey === `audio_${a.id}`;
                 return (
                   <SpotlightCard
                     key={a.id}
@@ -341,25 +343,26 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                     </div>
 
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         setActiveActionKey(`audio_${a.id}`);
-                        const isFlac = a.codec?.toLowerCase().includes('flac') || a.qualityDesc?.includes('FLAC');
-                        const ext = isFlac ? 'flac' : 'm4a';
-                        directDownload(a.baseUrl, `${data.title}-${a.name}.${ext}`);
-                        onShowToast(`已触发下载: ${a.name} (.${ext})`, 'info');
-                        setTimeout(() => setActiveActionKey(null), 1500);
+                        try {
+                          await onDownloadAudio(a);
+                        } finally {
+                          setActiveActionKey(null);
+                        }
                       }}
+                      disabled={isProcessing}
                       title="单独提取并下载该独立音轨 (.m4a / .flac)"
-                      className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer ${
-                        isTriggered
-                          ? 'bg-secondary/60 text-secondary-foreground border-secondary/80'
-                          : 'bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border-secondary/40'
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer ${
+                        isProcessing
+                          ? 'bg-primary/40 text-emerald-950 dark:text-emerald-100 border-primary/60 cursor-wait'
+                          : 'bg-primary/20 hover:bg-primary text-emerald-950 dark:text-emerald-100 hover:text-primary-foreground border-primary/40 hover:border-primary hover:shadow-xs'
                       }`}
                     >
-                      {isTriggered ? (
+                      {isProcessing ? (
                         <>
-                          <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" strokeWidth={2.4} />
-                          <span>已触发</span>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-800 dark:text-emerald-200" strokeWidth={2.4} />
+                          <span>下载中...</span>
                         </>
                       ) : (
                         <>

@@ -3,7 +3,7 @@ import { FloatButton } from './components/FloatButton';
 import { DownloadModal } from './components/DownloadModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { fetchCurrentMediaData } from './api/bilibili';
-import { downloadAndMuxMp4 } from './media/downloader';
+import { downloadAndMuxMp4, downloadAudio } from './media/downloader';
 import type { MediaResourceData, VideoStreamItem, AudioStreamItem, DownloadProgress } from './types';
 
 export const App: React.FC = () => {
@@ -66,7 +66,10 @@ export const App: React.FC = () => {
 
   const handleOpenModal = async (targetCid?: number) => {
     setLoading(true);
-    if (targetCid) setLoadingCid(targetCid);
+    if (targetCid) {
+      setLoadingCid(targetCid);
+      setProgress({ status: 'idle', progress: 0 });
+    }
     try {
       const data = await fetchCurrentMediaData(targetCid);
       if (data) {
@@ -99,6 +102,20 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleDownloadAudio = async (audio: AudioStreamItem) => {
+    if (!mediaData) return;
+    try {
+      await downloadAudio(mediaData.title, audio, (prog) => {
+        setProgress(prog);
+      });
+      const isFlac = audio.codec?.toLowerCase().includes('flac') || audio.qualityDesc?.includes('FLAC');
+      const ext = isFlac ? 'flac' : 'm4a';
+      showToast(`音频已保存为 .${ext} 文件`, 'success');
+    } catch (err: any) {
+      showToast(`音频下载失败: ${err.message}`, 'error');
+    }
+  };
+
   return (
     <div className={isDark ? 'dark' : ''}>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
@@ -114,6 +131,7 @@ export const App: React.FC = () => {
             setProgress({ status: 'idle', progress: 0 });
           }}
           onDownloadVideo={handleDownloadVideo}
+          onDownloadAudio={handleDownloadAudio}
           onSelectEpisode={handleSelectEpisode}
           onShowToast={showToast}
           progress={progress}

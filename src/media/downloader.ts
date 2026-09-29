@@ -122,3 +122,52 @@ export async function downloadAndMuxMp4(
     throw err;
   }
 }
+
+/**
+ * 全流程下载独立音频轨，支持实时进度条、网速显示与格式自动适配 (.m4a / .flac)
+ */
+export async function downloadAudio(
+  title: string,
+  audio: AudioStreamItem,
+  onProgress: (state: DownloadProgress) => void
+): Promise<void> {
+  try {
+    const isFlac = audio.codec?.toLowerCase().includes('flac') || audio.qualityDesc?.includes('FLAC');
+    const ext = isFlac ? 'flac' : 'm4a';
+    const mimeType = isFlac ? 'audio/flac' : 'audio/mp4';
+    const filename = `${title}_${audio.name}.${ext}`;
+
+    onProgress({
+      status: 'downloading_audio',
+      progress: 0,
+      message: `正在下载音频轨 (${audio.name})`,
+    });
+
+    const audioBuffer = await requestBuffer(audio.baseUrl, (loaded, total, speed) => {
+      const pct = Math.min(99, Math.floor((loaded / total) * 100));
+      onProgress({
+        status: 'downloading_audio',
+        progress: pct,
+        speed,
+        message: `正在下载音频轨 (${audio.name}): ${pct}% ${speed ? `(${speed})` : ''}`,
+      });
+    });
+
+    const blob = new Blob([audioBuffer], { type: mimeType });
+    saveBlobAsFile(blob, filename);
+
+    onProgress({
+      status: 'completed',
+      progress: 100,
+      message: `音频下载完成，已保存为 .${ext} 文件`,
+    });
+  } catch (err: any) {
+    onProgress({
+      status: 'error',
+      progress: 0,
+      message: `音频下载失败: ${err.message}`,
+    });
+    throw err;
+  }
+}
+
