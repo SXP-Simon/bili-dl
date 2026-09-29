@@ -82,7 +82,7 @@ export async function downloadAndMuxMp4(
     const videoPromise = requestChunkedBuffer(video.baseUrl, (loaded, total, speed) => {
       videoLoaded = loaded;
       videoTotal = total;
-      if (speed) currentSpeed = speed;
+      if (speed !== undefined) currentSpeed = speed;
       updateCombinedProgress();
     });
 
@@ -90,7 +90,7 @@ export async function downloadAndMuxMp4(
       ? requestChunkedBuffer(audio.baseUrl, (loaded, total, speed) => {
           audioLoaded = loaded;
           audioTotal = total;
-          if (speed) currentSpeed = speed;
+          if (speed !== undefined) currentSpeed = speed;
           updateCombinedProgress();
         })
       : Promise.resolve(null);

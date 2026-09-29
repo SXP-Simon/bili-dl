@@ -92,45 +92,84 @@ async function probeContentLength(url: string): Promise<number> {
 }
 
 /**
- * 单分片下载 Promise
+ * 单分片下载 Promise（带超时与自动重试机制）
  */
-function fetchChunk(
+async function fetchChunkWithRetry(
   url: string,
   start: number,
   end: number,
-  onChunkProgress: (loaded: number) => void
+  onChunkProgress: (loaded: number) => void,
+  retries = 3
 ): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    GM_xmlhttpRequest({
-      method: 'GET',
-      url,
-      responseType: 'arraybuffer',
-      headers: {
-        'Referer': 'https://www.bilibili.com/',
-        'User-Agent': navigator.userAgent,
-        'Range': `bytes=${start}-${end}`,
-      },
-      onprogress: (event: any) => {
-        onChunkProgress(event.loaded || 0);
-      },
-      onload: (response: any) => {
-        if (response.status >= 200 && response.status < 300) {
-          const u8 = new Uint8Array(response.response as ArrayBuffer);
-          onChunkProgress(u8.length);
-          resolve(u8);
-        } else {
-          reject(new Error(`Chunk ${start}-${end} failed: HTTP ${response.status}`));
-        }
-      },
-      onerror: (err: any) => {
-        reject(new Error(err.error || `Chunk ${start}-${end} network error`));
-      },
-    });
-  });
+  let lastError: any = null;
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const result = await new Promise<Uint8Array>((resolve, reject) => {
+        let hasFinished = false;
+
+        const req = GM_xmlhttpRequest({
+          method: 'GET',
+          url,
+          responseType: 'arraybuffer',
+          timeout: 25000,
+          headers: {
+            'Referer': 'https://www.bilibili.com/',
+            'User-Agent': navigator.userAgent,
+            'Range': `bytes=${start}-${end}`,
+          },
+          onprogress: (event: any) => {
+            if (!hasFinished) {
+              onChunkProgress(event.loaded || 0);
+            }
+          },
+          onload: (response: any) => {
+            hasFinished = true;
+            if (response.status >= 200 && response.status < 300) {
+              const u8 = new Uint8Array(response.response as ArrayBuffer);
+              onChunkProgress(u8.length);
+              resolve(u8);
+            } else {
+              reject(new Error(`HTTP ${response.status} on chunk ${start}-${end}`));
+            }
+          },
+          ontimeout: () => {
+            hasFinished = true;
+            reject(new Error(`Chunk ${start}-${end} timeout (25s)`));
+          },
+          onerror: (err: any) => {
+            hasFinished = true;
+            reject(new Error(err.error || `Chunk ${start}-${end} network error`));
+          },
+        });
+
+        // 兜底超时清理
+        setTimeout(() => {
+          if (!hasFinished) {
+            try {
+              (req as any)?.abort?.();
+            } catch {}
+            reject(new Error(`Chunk ${start}-${end} watchdog timeout`));
+          }
+        }, 30000);
+      });
+
+      return result;
+    } catch (err: any) {
+      lastError = err;
+      logger.warn('Range', `分片 [${start}-${end}] 第 ${attempt}/${retries} 次尝试失败: ${err.message}`);
+      if (attempt < retries) {
+        // 退避 800ms 重试
+        await new Promise((r) => setTimeout(r, 800 * attempt));
+      }
+    }
+  }
+
+  throw lastError || new Error(`Chunk ${start}-${end} download failed after ${retries} attempts`);
 }
 
 /**
- * 分块多连接高速并发下载器（支持 4~6 线程 Range 并发，突破 CDN 单连接限速）
+ * 分块多连接高速并发下载器（支持 4~6 线程 Range 并发，主动心跳测速与停滞检测）
  */
 export async function requestChunkedBuffer(
   url: string,
@@ -164,43 +203,70 @@ export async function requestChunkedBuffer(
 
   let lastLoaded = 0;
   let lastTime = Date.now();
+  let lastDataTime = Date.now();
+  let smoothedSpeed = 0;
 
-  const updateProgress = () => {
+  // 主动定时心跳刷新（确保网络卡顿/无数据时网速归零，拒绝假死死锁）
+  const timer = setInterval(() => {
     if (!onProgress) return;
     const currentLoaded = loadedPerChunk.reduce((acc, curr) => acc + curr, 0);
     const now = Date.now();
     const timeDiff = (now - lastTime) / 1000;
-    let speedStr = '';
-    if (timeDiff >= 0.4) {
-      const bytesDiff = currentLoaded - lastLoaded;
-      const speedMB = (bytesDiff / 1024 / 1024 / timeDiff).toFixed(1);
-      if (parseFloat(speedMB) >= 1) {
-        speedStr = `${speedMB} MB/s`;
-      } else {
-        const speedKB = (bytesDiff / 1024 / timeDiff).toFixed(0);
-        speedStr = `${speedKB} KB/s`;
+
+    if (timeDiff >= 0.3) {
+      const bytesDiff = Math.max(0, currentLoaded - lastLoaded);
+      const instantSpeed = bytesDiff / timeDiff;
+
+      if (bytesDiff > 0) {
+        lastDataTime = now;
       }
+
+      // 指数移动平均 (EMA) 平滑网速
+      smoothedSpeed = smoothedSpeed === 0 ? instantSpeed : 0.65 * smoothedSpeed + 0.35 * instantSpeed;
+
+      let speedStr = '';
+      const idleTime = now - lastDataTime;
+
+      if (idleTime > 3000) {
+        speedStr = '0 KB/s';
+        smoothedSpeed = 0;
+      } else if (smoothedSpeed > 1024 * 1024) {
+        speedStr = `${(smoothedSpeed / 1024 / 1024).toFixed(1)} MB/s`;
+      } else if (smoothedSpeed > 0) {
+        speedStr = `${(smoothedSpeed / 1024).toFixed(0)} KB/s`;
+      }
+
+      onProgress(currentLoaded, totalBytes, speedStr);
       lastLoaded = currentLoaded;
       lastTime = now;
     }
-    onProgress(currentLoaded, totalBytes, speedStr);
-  };
+  }, 300);
 
-  // 3. 并发执行各分片下载
-  await Promise.all(
-    chunks.map(async (chunk) => {
-      const u8 = await fetchChunk(url, chunk.start, chunk.end, (loaded) => {
-        loadedPerChunk[chunk.index] = loaded;
-        updateProgress();
-      });
-      finalBuffer.set(u8, chunk.start);
-      loadedPerChunk[chunk.index] = u8.length;
-      updateProgress();
-    })
-  );
+  try {
+    // 3. 并发执行各分片下载
+    await Promise.all(
+      chunks.map(async (chunk) => {
+        const u8 = await fetchChunkWithRetry(url, chunk.start, chunk.end, (loaded) => {
+          loadedPerChunk[chunk.index] = loaded;
+          lastDataTime = Date.now();
+        });
+        finalBuffer.set(u8, chunk.start);
+        loadedPerChunk[chunk.index] = u8.length;
+        lastDataTime = Date.now();
+      })
+    );
 
-  logger.success('Range', `分片数据传输完毕: ${(totalBytes / 1024 / 1024).toFixed(1)} MB 全部就绪`);
-  return finalBuffer.buffer as ArrayBuffer;
+    clearInterval(timer);
+    if (onProgress) {
+      onProgress(totalBytes, totalBytes, '');
+    }
+    logger.success('Range', `分片数据传输完毕: ${(totalBytes / 1024 / 1024).toFixed(1)} MB 全部就绪`);
+    return finalBuffer.buffer as ArrayBuffer;
+  } catch (err: any) {
+    clearInterval(timer);
+    logger.error('Range', `多连接分片下载失败: ${err.message}`, err);
+    throw err;
+  }
 }
 
 /**
