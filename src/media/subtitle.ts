@@ -4,8 +4,10 @@ import { logger } from '../utils/logger';
 export interface BiliSubtitleBody {
   from: number;
   to: number;
-  location: number;
-  content: string;
+  location?: number;
+  content?: string;
+  text?: string;
+  words?: string;
 }
 
 /**
@@ -14,10 +16,19 @@ export interface BiliSubtitleBody {
 export async function fetchSubtitleSrt(subtitleUrl: string, traceId?: string): Promise<Blob> {
   const finalUrl = subtitleUrl.startsWith('//') ? `https:${subtitleUrl}` : subtitleUrl;
   logger.info('Subtitle', `开始请求外挂字幕源: ${finalUrl.slice(0, 70)}...`, null, traceId);
-  const data = await requestJson<{ body: BiliSubtitleBody[] }>(finalUrl);
+  const data = await requestJson<any>(finalUrl);
 
-  const list = data?.body || [];
-  logger.info('Subtitle', `成功获取 ${list.length} 条字幕文本，正在封装 SRT...`, null, traceId);
+  const rawList = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.body)
+    ? data.body
+    : Array.isArray(data?.list)
+    ? data.list
+    : Array.isArray(data?.lines)
+    ? data.lines
+    : [];
+
+  logger.info('Subtitle', `成功获取 ${rawList.length} 条字幕文本，正在封装 SRT...`, null, traceId);
 
   let srt = '';
   const formatSrtTime = (seconds: number) => {
@@ -30,13 +41,20 @@ export async function fetchSubtitleSrt(subtitleUrl: string, traceId?: string): P
     return `${h}:${m}:${s},${ms}`;
   };
 
-  list.forEach((item, index) => {
-    srt += `${index + 1}\n`;
-    srt += `${formatSrtTime(item.from)} --> ${formatSrtTime(item.to)}\n`;
-    srt += `${item.content?.trim() || ''}\n\n`;
+  let validIndex = 1;
+  rawList.forEach((item: any) => {
+    const from = typeof item.from === 'number' ? item.from : parseFloat(item.from) || 0;
+    const to = typeof item.to === 'number' ? item.to : parseFloat(item.to) || (from + 2);
+    const content = (item.content || item.text || item.words || '').trim();
+    if (content) {
+      srt += `${validIndex}\n`;
+      srt += `${formatSrtTime(from)} --> ${formatSrtTime(to)}\n`;
+      srt += `${content}\n\n`;
+      validIndex++;
+    }
   });
 
   const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });
-  logger.success('Subtitle', `SRT 字幕生成完成: 共 ${list.length} 行 (${(blob.size / 1024).toFixed(1)} KB)`, null, traceId);
+  logger.success('Subtitle', `SRT 字幕生成完成: 共 ${validIndex - 1} 行 (${(blob.size / 1024).toFixed(1)} KB)`, null, traceId);
   return blob;
 }

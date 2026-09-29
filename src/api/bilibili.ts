@@ -1,5 +1,6 @@
 import { requestJson } from './http';
 import { logger } from '../utils/logger';
+import { signWbiQuery } from '../utils/wbi';
 import type { MediaResourceData, VideoStreamItem, AudioStreamItem, VideoPageItem, SubtitleItem } from '../types';
 
 const QUALITY_MAP: Record<number, string> = {
@@ -203,14 +204,47 @@ export async function fetchCurrentMediaData(targetCid?: number): Promise<MediaRe
     });
   });
 
-  // 5. 获取官方双语字幕
+  // 5. 获取官方双语字幕 (采用 WBI 签名请求 /x/player/wbi/v2，彻底防止旧版 v2 接口 CDN 缓存导致的分 P 字幕串扰)
   const subtitles: SubtitleItem[] = [];
   try {
-    const subRes = await requestJson<any>(`https://api.bilibili.com/x/player/v2?bvid=${bvid}&cid=${cid}`);
-    if (subRes.code === 0 && subRes.data?.subtitle?.subtitles) {
-      subtitles.push(...subRes.data.subtitle.subtitles);
+    const signedQuery = await signWbiQuery({ bvid, cid });
+    const subRes = await requestJson<any>(`https://api.bilibili.com/x/player/wbi/v2?${signedQuery}`);
+    const rawList = subRes?.data?.subtitle?.subtitles || subRes?.data?.subtitle?.list || [];
+    if (Array.isArray(rawList) && rawList.length > 0) {
+      for (const sub of rawList) {
+        if (sub.subtitle_url || sub.url) {
+          subtitles.push({
+            id: Number(sub.id) || Number(sub.id_str) || Math.random(),
+            lan: sub.lan || sub.lang || 'zh-CN',
+            lan_doc: sub.lan_doc || sub.lang_doc || sub.lan || '官方字幕',
+            subtitle_url: sub.subtitle_url || sub.url,
+          });
+        }
+      }
     }
-  } catch {}
+  } catch (wbiErr: any) {
+    logger.warn('API', 'WBI 播放器信息请求失败，尝试降级请求', { error: wbiErr?.message || String(wbiErr) });
+  }
+
+  // 若 WBI 未能获取且 subtitles 仍为空，尝试旧版 player/v2 兼容
+  if (subtitles.length === 0) {
+    try {
+      const fallbackRes = await requestJson<any>(`https://api.bilibili.com/x/player/v2?bvid=${bvid}&cid=${cid}`);
+      const fallbackList = fallbackRes?.data?.subtitle?.subtitles || fallbackRes?.data?.subtitle?.list || [];
+      if (Array.isArray(fallbackList)) {
+        for (const sub of fallbackList) {
+          if (sub.subtitle_url || sub.url) {
+            subtitles.push({
+              id: Number(sub.id) || Number(sub.id_str) || Math.random(),
+              lan: sub.lan || sub.lang || 'zh-CN',
+              lan_doc: sub.lan_doc || sub.lang_doc || sub.lan || '官方字幕',
+              subtitle_url: sub.subtitle_url || sub.url,
+            });
+          }
+        }
+      }
+    } catch {}
+  }
 
   // 6. AI 总结
   const aiSummary = await fetchAiSummary(bvid, cid);
