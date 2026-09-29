@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Layers, Loader2, FolderArchive } from 'lucide-react';
 import type { VideoPageItem } from '../types';
 
@@ -19,14 +19,68 @@ export const EpisodePicker: React.FC<EpisodePickerProps> = ({
   onDownloadBatchSubtitles,
   isBatchSubtitleActive,
 }) => {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const scrollLeftPos = useRef(0);
+  const hasDragged = useRef(false);
+
+  // 1. 监听鼠标滚轮垂直滑动，转换为平滑横向滚动
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY;
+      }
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  // 2. 当前选中集数自动平滑滚动至居中视口
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const activeBtn = el.querySelector<HTMLElement>('[data-selected="true"]');
+    if (activeBtn) {
+      activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [currentCid]);
+
   if (!pages || pages.length <= 1) return null;
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!scrollContainerRef.current) return;
+    isDragging.current = true;
+    hasDragged.current = false;
+    startX.current = e.pageX - scrollContainerRef.current.offsetLeft;
+    scrollLeftPos.current = scrollContainerRef.current.scrollLeft;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging.current || !scrollContainerRef.current) return;
+    const x = e.pageX - scrollContainerRef.current.offsetLeft;
+    const walk = (x - startX.current) * 1.2;
+    if (Math.abs(walk) > 3) {
+      hasDragged.current = true;
+    }
+    scrollContainerRef.current.scrollLeft = scrollLeftPos.current - walk;
+  };
+
+  const handleMouseUpOrLeave = () => {
+    isDragging.current = false;
+  };
 
   return (
     <div className="mb-3 p-3 rounded-2xl bg-muted/40 border border-border/70">
       <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground mb-2">
         <div className="flex items-center gap-1.5">
           <Layers className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
-          <span>分 P 剧集 ({pages.length} 集)</span>
+          <span>分 P 剧集 ({pages.length} 集 · 支持滚轮/拖拽横滑)</span>
         </div>
         
         <div className="flex items-center gap-2">
@@ -59,7 +113,14 @@ export const EpisodePicker: React.FC<EpisodePickerProps> = ({
         </div>
       </div>
 
-      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-clean">
+      <div
+        ref={scrollContainerRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUpOrLeave}
+        onMouseLeave={handleMouseUpOrLeave}
+        className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-clean cursor-grab active:cursor-grabbing select-none"
+      >
         {pages.map((p) => {
           const isSelected = p.cid === currentCid;
           const isLoading = p.cid === loadingCid;
@@ -67,7 +128,9 @@ export const EpisodePicker: React.FC<EpisodePickerProps> = ({
           return (
             <button
               key={p.cid}
+              data-selected={isSelected ? 'true' : undefined}
               onClick={() => {
+                if (hasDragged.current) return;
                 if (!loadingCid && p.cid !== currentCid) {
                   onSelectEpisode(p.cid);
                 }
