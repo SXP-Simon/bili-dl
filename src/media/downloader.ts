@@ -1,5 +1,5 @@
 import { GM_download } from '$';
-import { requestBuffer } from '../api/http';
+import { requestChunkedBuffer } from '../api/http';
 import { muxMp4 } from './muxer';
 import type { VideoStreamItem, AudioStreamItem, DownloadProgress } from '../types';
 
@@ -37,7 +37,7 @@ export function directDownload(url: string, filename: string): void {
 }
 
 /**
- * 全流程下载视频 + 音频，并在前端纯 JS 自动无损混流为 MP4 保存
+ * 全流程下载视频 + 音频（双轨多连接并发加速），并在前端纯 JS 自动无损混流为 MP4 保存
  */
 export async function downloadAndMuxMp4(
   title: string,
@@ -46,45 +46,50 @@ export async function downloadAndMuxMp4(
   onProgress: (state: DownloadProgress) => void
 ): Promise<void> {
   try {
-    onProgress({
-      status: 'downloading_video',
-      progress: 0,
-      message: `正在下载视频轨 (${video.qualityName} ${video.codecName})`,
-    });
+    let videoLoaded = 0;
+    let videoTotal = 1;
+    let audioLoaded = 0;
+    let audioTotal = 0;
+    let currentSpeed = '';
 
-    // 1. 下载视频轨
-    const videoBuffer = await requestBuffer(video.baseUrl, (loaded, total, speed) => {
-      const pct = Math.floor((loaded / total) * 50);
+    const updateCombinedProgress = () => {
+      const totalLoaded = videoLoaded + audioLoaded;
+      const totalBytes = videoTotal + (audioTotal || 0);
+      const pct = Math.min(90, Math.floor((totalLoaded / totalBytes) * 90));
       onProgress({
         status: 'downloading_video',
         progress: pct,
-        speed,
-        message: `正在下载视频轨: ${pct * 2}% ${speed ? `(${speed})` : ''}`,
+        speed: currentSpeed,
+        message: `高速下载中: ${pct}% ${currentSpeed ? `(${currentSpeed})` : ''}`,
       });
+    };
+
+    onProgress({
+      status: 'downloading_video',
+      progress: 0,
+      message: `正在建立多连接下载: ${video.qualityName} (${video.codecName})`,
     });
 
-    let audioBuffer: ArrayBuffer | null = null;
+    // 1. 双轨多连接并行拉取（Zero-Wait Parallelism）
+    const videoPromise = requestChunkedBuffer(video.baseUrl, (loaded, total, speed) => {
+      videoLoaded = loaded;
+      videoTotal = total;
+      if (speed) currentSpeed = speed;
+      updateCombinedProgress();
+    });
 
-    // 2. 下载音频轨
-    if (audio) {
-      onProgress({
-        status: 'downloading_audio',
-        progress: 50,
-        message: `正在下载音频轨 (${audio.name})`,
-      });
+    const audioPromise = audio
+      ? requestChunkedBuffer(audio.baseUrl, (loaded, total, speed) => {
+          audioLoaded = loaded;
+          audioTotal = total;
+          if (speed) currentSpeed = speed;
+          updateCombinedProgress();
+        })
+      : Promise.resolve(null);
 
-      audioBuffer = await requestBuffer(audio.baseUrl, (loaded, total, speed) => {
-        const pct = 50 + Math.floor((loaded / total) * 40);
-        onProgress({
-          status: 'downloading_audio',
-          progress: pct,
-          speed,
-          message: `正在下载音频轨: ${(pct - 50) * 2.5}% ${speed ? `(${speed})` : ''}`,
-        });
-      });
-    }
+    const [videoBuffer, audioBuffer] = await Promise.all([videoPromise, audioPromise]);
 
-    // 3. 前端 mp4box 混流合成
+    // 2. 前端 mp4box 快速混流合成
     onProgress({
       status: 'muxing',
       progress: 92,
@@ -96,22 +101,22 @@ export async function downloadAndMuxMp4(
       finalBlob = await muxMp4(videoBuffer, audioBuffer, (muxPct) => {
         onProgress({
           status: 'muxing',
-          progress: 90 + Math.floor(muxPct * 0.08),
-          message: '正在封装 MP4 容器',
+          progress: 90 + Math.floor(muxPct * 0.09),
+          message: `正在封装 MP4 容器: ${Math.floor(muxPct)}%`,
         });
       });
     } else {
       finalBlob = new Blob([videoBuffer], { type: 'video/mp4' });
     }
 
-    // 4. 保存文件
+    // 3. 保存文件
     const filename = `${title}_${video.qualityName}_${video.codecName}.mp4`;
     saveBlobAsFile(finalBlob, filename);
 
     onProgress({
       status: 'completed',
       progress: 100,
-      message: '下载与合成完成，已保存到本地',
+      message: '下载与混流完成，已保存到本地',
     });
   } catch (err: any) {
     onProgress({
@@ -124,7 +129,7 @@ export async function downloadAndMuxMp4(
 }
 
 /**
- * 全流程下载独立音频轨，支持实时进度条、网速显示与格式自动适配 (.m4a / .flac)
+ * 全流程下载独立音频轨（分块多连接并发加速），支持格式自动适配 (.m4a / .flac)
  */
 export async function downloadAudio(
   title: string,
@@ -140,16 +145,16 @@ export async function downloadAudio(
     onProgress({
       status: 'downloading_audio',
       progress: 0,
-      message: `正在下载音频轨 (${audio.name})`,
+      message: `正在建立多连接下载: ${audio.name}`,
     });
 
-    const audioBuffer = await requestBuffer(audio.baseUrl, (loaded, total, speed) => {
+    const audioBuffer = await requestChunkedBuffer(audio.baseUrl, (loaded, total, speed) => {
       const pct = Math.min(99, Math.floor((loaded / total) * 100));
       onProgress({
         status: 'downloading_audio',
         progress: pct,
         speed,
-        message: `正在下载音频轨 (${audio.name}): ${pct}% ${speed ? `(${speed})` : ''}`,
+        message: `多连接下载音频 (${audio.name}): ${pct}% ${speed ? `(${speed})` : ''}`,
       });
     });
 
@@ -170,4 +175,5 @@ export async function downloadAudio(
     throw err;
   }
 }
+
 
