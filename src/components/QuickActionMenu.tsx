@@ -39,9 +39,12 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('mousedown', handleClickOutside);
+    const timer = setTimeout(() => {
+      window.addEventListener('mousedown', handleClickOutside);
+    }, 20);
 
     return () => {
+      clearTimeout(timer);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('mousedown', handleClickOutside);
     };
@@ -88,10 +91,15 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
                 key={action.id}
                 disabled={isDisabled}
                 onClick={async (e) => {
+                  e.preventDefault();
                   e.stopPropagation();
                   if (isDisabled) return;
                   onClose();
-                  await action.onClick();
+                  try {
+                    await action.onClick();
+                  } catch (err) {
+                    console.error('[QuickAction] 执行异常:', err);
+                  }
                 }}
                 className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-all duration-150 group cursor-pointer ${
                   action.danger

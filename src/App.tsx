@@ -144,8 +144,8 @@ export const App: React.FC = () => {
     handleOpenModal(cid);
   };
 
-  const handleDownloadVideo = async (video: VideoStreamItem, audio?: AudioStreamItem) => {
-    if (!mediaData) return;
+  const handleDownloadVideo = async (video: VideoStreamItem, audio?: AudioStreamItem, customTitle?: string) => {
+    const title = customTitle || mediaData?.title || getVideoTitle();
     const taskId = `video_${video.id}_${video.codecName}`;
     const taskTitle = `${video.qualityName} (${video.codecName})`;
     const traceId = `${video.qualityName.replace(/\s+/g, '')}-${video.codecName}`;
@@ -166,7 +166,7 @@ export const App: React.FC = () => {
 
     try {
       await downloadAndMuxMp4(
-        mediaData.title,
+        title,
         video,
         audio,
         (prog) => {
@@ -202,8 +202,8 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleDownloadAudio = async (audio: AudioStreamItem) => {
-    if (!mediaData) return;
+  const handleDownloadAudio = async (audio: AudioStreamItem, customTitle?: string) => {
+    const title = customTitle || mediaData?.title || getVideoTitle();
     const taskId = `audio_${audio.id}`;
     const taskTitle = audio.name;
     const traceId = `音频-${audio.name.replace(/\s+/g, '')}`;
@@ -224,7 +224,7 @@ export const App: React.FC = () => {
 
     try {
       await downloadAudio(
-        mediaData.title,
+        title,
         audio,
         (prog) => {
           updateTaskProgress(taskId, {
@@ -261,12 +261,38 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleDownloadBatchSubtitles = async () => {
-    if (!mediaData || mediaData.pages.length <= 1) return;
-    const taskId = `batch_subtitles_${mediaData.bvid}`;
+  const handleDownloadBatchSubtitles = async (customData?: MediaResourceData) => {
+    let data = customData || mediaData;
+    if (!data) {
+      setLoading(true);
+      try {
+        data = await fetchCurrentMediaData();
+        if (data) setMediaData(data);
+      } finally {
+        setLoading(false);
+      }
+    }
+    if (!data) {
+      showToast('未能解析到视频资源，请确认处于播放页面', 'error');
+      return;
+    }
+
+    if (data.pages.length <= 1) {
+      if (data.subtitles.length > 0) {
+        const sub = data.subtitles[0];
+        const blob = await fetchSubtitleSrt(sub.subtitle_url, '快捷字幕');
+        saveBlobAsFile(blob, `${data.title}-${sub.lan_doc}字幕.srt`);
+        showToast(`${sub.lan_doc}字幕已保存`, 'success');
+      } else {
+        showToast('当前视频未探测到外挂字幕', 'info');
+      }
+      return;
+    }
+
+    const taskId = `batch_subtitles_${data.bvid}`;
     const mainTitle = getVideoTitle();
-    const taskTitle = `全集字幕打包 (${mediaData.pages.length}P)`;
-    const traceId = `全集字幕-${mediaData.bvid}`;
+    const taskTitle = `全集字幕打包 (${data.pages.length}P)`;
+    const traceId = `全集字幕-${data.bvid}`;
 
     const controller = new AbortController();
     activeControllers.current.set(taskId, controller);
@@ -277,15 +303,15 @@ export const App: React.FC = () => {
       title: taskTitle,
       status: 'pending',
       progress: 0,
-      message: `开始探测 ${mediaData.pages.length} 集字幕...`,
+      message: `开始探测 ${data.pages.length} 集字幕...`,
       timestamp: Date.now(),
     });
 
     try {
       const res = await batchDetectAndDownloadSubtitles(
-        mediaData.bvid,
+        data.bvid,
         mainTitle,
-        mediaData.pages,
+        data.pages,
         (prog) => {
           const percent = prog.total > 0 ? Math.round((prog.current / prog.total) * 100) : 0;
           updateTaskProgress(taskId, {
@@ -344,7 +370,7 @@ export const App: React.FC = () => {
       // 单 P 视频：直接下载最低音质
       const lowestAudio = [...data.audios].sort((a, b) => a.bandwidth - b.bandwidth)[0] || data.audios[data.audios.length - 1];
       if (lowestAudio) {
-        await handleDownloadAudio(lowestAudio);
+        await handleDownloadAudio(lowestAudio, data.title);
       } else {
         showToast('未能获取到音频流', 'error');
       }
@@ -367,7 +393,7 @@ export const App: React.FC = () => {
         controller.signal
       );
       if (!controller.signal.aborted) {
-        showToast(`全集 ${data.pages.length} P 音频批量下载任务已就绪`, 'success');
+        showToast(`全集 ${data.pages.length} P 音频批量下载任务已完成`, 'success');
       }
     } catch (err: any) {
       if (controller.signal.aborted || err?.name === 'AbortError') {
@@ -401,7 +427,7 @@ export const App: React.FC = () => {
       const highestVideo = data.videos[0];
       const bestAudio = data.audios[0];
       if (highestVideo) {
-        await handleDownloadVideo(highestVideo, bestAudio);
+        await handleDownloadVideo(highestVideo, bestAudio, data.title);
       } else {
         showToast('未能获取到视频流', 'error');
       }
@@ -424,7 +450,7 @@ export const App: React.FC = () => {
         controller.signal
       );
       if (!controller.signal.aborted) {
-        showToast(`全集 ${data.pages.length} P 视频批量合成任务已就绪`, 'success');
+        showToast(`全集 ${data.pages.length} P 视频批量合成任务已完成`, 'success');
       }
     } catch (err: any) {
       if (controller.signal.aborted || err?.name === 'AbortError') {
@@ -464,28 +490,7 @@ export const App: React.FC = () => {
         : '提取当前视频官方/AI双语字幕 (.srt)',
       badge: 'SRT',
       onClick: async () => {
-        let targetData = mediaData;
-        if (!targetData) {
-          setLoading(true);
-          try {
-            targetData = await fetchCurrentMediaData();
-            if (targetData) setMediaData(targetData);
-          } finally {
-            setLoading(false);
-          }
-        }
-        if (targetData) {
-          if (targetData.pages.length > 1) {
-            await handleDownloadBatchSubtitles();
-          } else if (targetData.subtitles.length > 0) {
-            const sub = targetData.subtitles[0];
-            const blob = await fetchSubtitleSrt(sub.subtitle_url, '快捷字幕');
-            saveBlobAsFile(blob, `${targetData.title}-${sub.lan_doc}字幕.srt`);
-            showToast(`${sub.lan_doc}字幕已保存`, 'success');
-          } else {
-            showToast('当前视频未探测到外挂字幕', 'info');
-          }
-        }
+        await handleDownloadBatchSubtitles();
       },
     },
     {

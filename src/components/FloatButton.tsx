@@ -48,10 +48,13 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
     };
     setIsDragging(false);
 
+    let moved = false;
+
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const dx = moveEvent.clientX - dragStartRef.current.startX;
       const dy = moveEvent.clientY - dragStartRef.current.startY;
       if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+        moved = true;
         setIsDragging(true);
         const newX = Math.max(12, Math.min(window.innerWidth - 180, dragStartRef.current.initialX + dx));
         const newY = Math.max(12, Math.min(window.innerHeight - 56, dragStartRef.current.initialY + dy));
@@ -62,8 +65,13 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
     const handleMouseUp = () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
-      if (position.x !== undefined && position.y !== undefined) {
-        localStorage.setItem('bili_dl_btn_pos', JSON.stringify(position));
+      if (moved) {
+        setTimeout(() => setIsDragging(false), 80);
+        if (position.x !== undefined && position.y !== undefined) {
+          localStorage.setItem('bili_dl_btn_pos', JSON.stringify(position));
+        }
+      } else {
+        setIsDragging(false);
       }
     };
 
@@ -71,7 +79,8 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
     window.addEventListener('mouseup', handleMouseUp);
   };
 
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
     if (!isDragging && !loading) {
       onClick();
     }
