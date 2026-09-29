@@ -54,6 +54,26 @@ export async function requestBuffer(
 }
 
 /**
+ * 识别 B 站 CDN 节点提供商与主机名
+ */
+export function getCdnNodeLabel(url: string): string {
+  try {
+    const host = new URL(url).hostname;
+    if (host.includes('mirrorcos') || host.includes('upcdnbd')) return `腾讯云 COS (${host})`;
+    if (host.includes('mirrorali')) return `阿里云 OSS (${host})`;
+    if (host.includes('mirrorhw')) return `华为云 OBS (${host})`;
+    if (host.includes('mirror08c') || host.includes('mirror08h')) return `金山云/BGP (${host})`;
+    if (host.includes('upcdnws')) return `网宿 CDN (${host})`;
+    if (host.includes('upcdntx')) return `腾讯直连 (${host})`;
+    if (host.includes('akamai')) return `Akamai 海外 (${host})`;
+    if (host.includes('fastly')) return `Fastly 海外 (${host})`;
+    return host;
+  } catch {
+    return '未知节点';
+  }
+}
+
+/**
  * 探测媒体资源总字节大小（通过轻量 Range 探测，支持多 CDN 备用节点）
  */
 async function probeContentLength(urls: string[]): Promise<number> {
@@ -99,12 +119,13 @@ async function fetchChunkWithRetry(
   start: number,
   end: number,
   onChunkProgress: (loaded: number) => void,
-  retries = 3
+  retries = Math.max(3, urls.length)
 ): Promise<Uint8Array> {
   let lastError: any = null;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     const targetUrl = urls[(attempt - 1) % urls.length];
+    const currentNodeLabel = getCdnNodeLabel(targetUrl);
     try {
       const result = await new Promise<Uint8Array>((resolve, reject) => {
         let hasFinished = false;
@@ -136,21 +157,21 @@ async function fetchChunkWithRetry(
           },
           ontimeout: () => {
             hasFinished = true;
-            reject(new Error(`Chunk ${start}-${end} timeout (15s)`));
+            reject(new Error(`分片 ${start}-${end} 响应超时 (15s)`));
           },
           onerror: (err: any) => {
             hasFinished = true;
-            reject(new Error(err.error || `Chunk ${start}-${end} network error`));
+            reject(new Error(err.error || `分片 ${start}-${end} 网络中断`));
           },
         });
 
-        // 兜底看门狗
+        // 兜底看门狗（18s）防死锁
         setTimeout(() => {
           if (!hasFinished) {
             try {
               (req as any)?.abort?.();
             } catch {}
-            reject(new Error(`Chunk ${start}-${end} watchdog timeout`));
+            reject(new Error(`分片 ${start}-${end} 连接挂起 (18s 看门狗强关)`));
           }
         }, 18000);
       });
@@ -158,9 +179,14 @@ async function fetchChunkWithRetry(
       return result;
     } catch (err: any) {
       lastError = err;
-      logger.warn('Range', `分片 [${start}-${end}] 第 ${attempt}/${retries} 次尝试失败，正在切换备用节点: ${err.message}`);
+      const nextTargetUrl = urls[attempt % urls.length];
+      const nextNodeLabel = getCdnNodeLabel(nextTargetUrl);
+      logger.warn(
+        'Range',
+        `分片 [${start}-${end}] 在节点【${currentNodeLabel}】第 ${attempt}/${retries} 次尝试失败，正在无缝切换至备用节点【${nextNodeLabel}】: ${err.message}`
+      );
       if (attempt < retries) {
-        await new Promise((r) => setTimeout(r, 600 * attempt));
+        await new Promise((r) => setTimeout(r, 500 * attempt));
       }
     }
   }
@@ -193,7 +219,8 @@ export async function requestChunkedBuffer(
   const chunkSize = Math.ceil(totalBytes / chunkCount);
   const chunks: Array<{ start: number; end: number; index: number }> = [];
 
-  logger.info('Range', `启动多分片并发加速: ${(totalBytes / 1024 / 1024).toFixed(1)} MB (${chunkCount} 线程并发，${urlList.length} 个 CDN 节点备用)`);
+  const cdnLabels = urlList.map(getCdnNodeLabel).join(', ');
+  logger.info('Range', `启动多分片并发加速: ${(totalBytes / 1024 / 1024).toFixed(1)} MB (${chunkCount} 线程并发，高可用节点池已就绪: [${cdnLabels}])`);
 
   for (let i = 0; i < chunkCount; i++) {
     const start = i * chunkSize;
