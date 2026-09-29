@@ -673,9 +673,9 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
           </div>
         )}
 
-        {/* 底部运行日志与诊断控制台 (固定高度内部滚动) */}
+        {/* 底部运行日志与诊断控制台 */}
         {showLogs && (
-          <div className="flex-shrink-0 max-h-56 border-t border-border/70 flex flex-col overflow-hidden">
+          <div className="flex-shrink-0 h-60 min-h-0 border-t border-border/70 flex flex-col overflow-hidden bg-card">
             <LogViewer onClose={() => setShowLogs(false)} />
           </div>
         )}

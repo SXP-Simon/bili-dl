@@ -25,7 +25,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
   const [filterTrace, setFilterTrace] = useState<string>('all');
   const [copied, setCopied] = useState(false);
   const [expandedDetails, setExpandedDetails] = useState<Record<string, boolean>>({});
-  const listEndRef = useRef<HTMLDivElement>(null);
+  const logContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const unsubscribe = logger.subscribe((newLogs) => {
@@ -34,8 +34,11 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
     return () => unsubscribe();
   }, []);
 
+  // 内部精确定位滚动，避免 scrollIntoView 导致上层 Modal 或 Header 被顶出视口
   useEffect(() => {
-    listEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
   }, [logs]);
 
   const availableTraces = Array.from(
@@ -202,7 +205,10 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
       </div>
 
       {/* 日志内容区域 */}
-      <div className="flex-1 max-h-56 overflow-y-auto p-3 font-mono text-[11px] space-y-1.5 scrollbar-clean bg-background/50">
+      <div
+        ref={logContainerRef}
+        className="flex-1 min-h-0 overflow-y-auto p-3 font-mono text-[11px] space-y-1.5 scrollbar-clean bg-background/50"
+      >
         {filteredLogs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 text-muted-foreground/60 text-xs">
             <Terminal className="w-6 h-6 mb-1 opacity-40" />
@@ -270,7 +276,6 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
             );
           })
         )}
-        <div ref={listEndRef} />
       </div>
     </div>
   );
