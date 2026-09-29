@@ -18,7 +18,18 @@ const QUALITY_MAP: Record<number, string> = {
 
 export function getBvidFromUrl(): string | null {
   const match = location.pathname.match(/\/video\/(BV[a-zA-Z0-9]+)/);
-  return match ? match[1] : null;
+  if (match) return match[1];
+  const anyWindow = window as any;
+  if (anyWindow.__INITIAL_STATE__?.videoData?.bvid) {
+    return anyWindow.__INITIAL_STATE__.videoData.bvid;
+  }
+  if (anyWindow.__INITIAL_STATE__?.bvid) {
+    return anyWindow.__INITIAL_STATE__.bvid;
+  }
+  if (anyWindow.__INITIAL_STATE__?.epInfo?.bvid) {
+    return anyWindow.__INITIAL_STATE__.epInfo.bvid;
+  }
+  return null;
 }
 
 export function getEpisodeIdFromUrl(): string | null {
@@ -90,8 +101,18 @@ export async function fetchCurrentMediaData(targetCid?: number): Promise<MediaRe
 
   if (!cid) return null;
 
-  const title = getVideoTitle();
+  const baseTitle = getVideoTitle();
   const cover = getVideoCover();
+
+  // 若存在多 P 剧集，精准拼接分 P 标题与序号，防止多 P 下载时文件名相同产生冲突
+  let title = baseTitle;
+  const currentPage = pages.find((p) => p.cid === cid) || pages[pageIndex] || pages[0];
+  if (pages.length > 1 && currentPage) {
+    const partSuffix = currentPage.part
+      ? `_P${currentPage.page}_${currentPage.part.replace(/[\\/:*?"<>|]/g, '_').trim()}`
+      : `_P${currentPage.page}`;
+    title = `${baseTitle}${partSuffix}`;
+  }
 
   // 1. 请求 DASH 格式播放流
   let dashData: any = null;

@@ -21,17 +21,19 @@ export async function fetchSubtitleSrt(subtitleUrl: string, traceId?: string): P
 
   let srt = '';
   const formatSrtTime = (seconds: number) => {
-    const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
-    const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
-    const s = Math.floor(seconds % 60).toString().padStart(2, '0');
-    const ms = Math.floor((seconds % 1) * 1000).toString().padStart(3, '0');
+    const totalMs = Math.max(0, Math.round(seconds * 1000));
+    const ms = (totalMs % 1000).toString().padStart(3, '0');
+    const totalSec = Math.floor(totalMs / 1000);
+    const s = (totalSec % 60).toString().padStart(2, '0');
+    const m = (Math.floor(totalSec / 60) % 60).toString().padStart(2, '0');
+    const h = Math.floor(totalSec / 3600).toString().padStart(2, '0');
     return `${h}:${m}:${s},${ms}`;
   };
 
   list.forEach((item, index) => {
     srt += `${index + 1}\n`;
     srt += `${formatSrtTime(item.from)} --> ${formatSrtTime(item.to)}\n`;
-    srt += `${item.content}\n\n`;
+    srt += `${item.content?.trim() || ''}\n\n`;
   });
 
   const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });

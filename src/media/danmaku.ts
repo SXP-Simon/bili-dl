@@ -43,10 +43,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     const endTimeSec = startTimeSec + duration;
 
     const formatTime = (sec: number) => {
-      const h = Math.floor(sec / 3600);
-      const m = Math.floor((sec % 3600) / 60);
-      const s = (sec % 60).toFixed(2);
-      return `${h}:${m.toString().padStart(2, '0')}:${s.padStart(5, '0')}`;
+      const totalCs = Math.max(0, Math.round(sec * 100));
+      const cs = (totalCs % 100).toString().padStart(2, '0');
+      const totalSec = Math.floor(totalCs / 100);
+      const s = (totalSec % 60).toString().padStart(2, '0');
+      const m = (Math.floor(totalSec / 60) % 60).toString().padStart(2, '0');
+      const h = Math.floor(totalSec / 3600);
+      return `${h}:${m}:${s}.${cs}`;
     };
 
     const text = el.textContent || '';
