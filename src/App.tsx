@@ -442,12 +442,23 @@ export const App: React.FC = () => {
     setIsQuickMenuOpen(true);
   };
 
+  const isBatchSubtitlesRunning = tasks.some(
+    (t) => t.id.startsWith('batch_subtitles_') && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled'
+  );
+  const isBatchAudiosRunning = tasks.some(
+    (t) => (t.id.startsWith('batch_audios_') || t.id.startsWith('batch_audio_')) && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled'
+  );
+  const isBatchVideosRunning = tasks.some(
+    (t) => (t.id.startsWith('batch_videos_') || t.id.startsWith('batch_video_')) && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled'
+  );
+
   // 抽象与配置右键快捷操作列表 (支持任意未来快捷项灵活追加)
   const quickActions: QuickActionItem[] = [
     {
       id: 'quick_batch_subtitles',
       icon: <FolderArchive className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
       label: '一键下载全部字幕',
+      loading: isBatchSubtitlesRunning,
       description: mediaData && mediaData.pages.length > 1
         ? `批量探测全集 ${mediaData.pages.length} P 字幕并打包 ZIP 文件夹`
         : '提取当前视频官方/AI双语字幕 (.srt)',
@@ -481,6 +492,7 @@ export const App: React.FC = () => {
       id: 'quick_batch_audios_lowest',
       icon: <Music className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
       label: '一键下载全部最低质量音频',
+      loading: isBatchAudiosRunning,
       description: mediaData && mediaData.pages.length > 1
         ? `批量提取全集 ${mediaData.pages.length} P 最低码率音频 (省流)`
         : '提取当前视频最低码率独立音轨 (.m4a)',
@@ -493,6 +505,7 @@ export const App: React.FC = () => {
       id: 'quick_batch_videos_highest',
       icon: <Video className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
       label: '一键下载全部最高质量视频',
+      loading: isBatchVideosRunning,
       description: mediaData && mediaData.pages.length > 1
         ? `批量下载全集 ${mediaData.pages.length} P 并无损封装含音频 MP4`
         : '下载最高画质视频并合成含音频 MP4',
@@ -508,6 +521,7 @@ export const App: React.FC = () => {
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       <FloatButton
         loading={loading}
+        tasks={tasks}
         onClick={() => handleOpenModal()}
         onContextMenu={handleFloatButtonContextMenu}
       />
