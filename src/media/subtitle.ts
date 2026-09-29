@@ -11,13 +11,13 @@ export interface BiliSubtitleBody {
 /**
  * 将 B 站官方 JSON 双语字幕转换为标准 SRT 格式
  */
-export async function fetchSubtitleSrt(subtitleUrl: string): Promise<Blob> {
+export async function fetchSubtitleSrt(subtitleUrl: string, traceId?: string): Promise<Blob> {
   const finalUrl = subtitleUrl.startsWith('//') ? `https:${subtitleUrl}` : subtitleUrl;
-  logger.info('Subtitle', `开始请求外挂字幕源: ${finalUrl.slice(0, 70)}...`);
+  logger.info('Subtitle', `开始请求外挂字幕源: ${finalUrl.slice(0, 70)}...`, null, traceId);
   const data = await requestJson<{ body: BiliSubtitleBody[] }>(finalUrl);
 
   const list = data?.body || [];
-  logger.info('Subtitle', `成功获取 ${list.length} 条字幕文本，正在封装 SRT...`);
+  logger.info('Subtitle', `成功获取 ${list.length} 条字幕文本，正在封装 SRT...`, null, traceId);
 
   let srt = '';
   const formatSrtTime = (seconds: number) => {
@@ -35,6 +35,6 @@ export async function fetchSubtitleSrt(subtitleUrl: string): Promise<Blob> {
   });
 
   const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });
-  logger.success('Subtitle', `SRT 字幕生成完成: 共 ${list.length} 行 (${(blob.size / 1024).toFixed(1)} KB)`);
+  logger.success('Subtitle', `SRT 字幕生成完成: 共 ${list.length} 行 (${(blob.size / 1024).toFixed(1)} KB)`, null, traceId);
   return blob;
 }

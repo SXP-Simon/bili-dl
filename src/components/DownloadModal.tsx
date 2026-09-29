@@ -109,7 +109,8 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
 
   const handleDownloadDanmaku = async () => {
     try {
-      const blob = await fetchDanmakuAss(data.cid, data.title);
+      const traceId = '弹幕-ASS';
+      const blob = await fetchDanmakuAss(data.cid, data.title, traceId);
       saveBlobAsFile(blob, `${data.title}-弹幕.ass`);
       onShowToast('弹幕文件已转换完成并保存', 'success');
     } catch (err: any) {
@@ -119,7 +120,8 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
 
   const handleDownloadSubtitle = async (subUrl: string, lanDoc: string) => {
     try {
-      const blob = await fetchSubtitleSrt(subUrl);
+      const traceId = `字幕-${lanDoc}`;
+      const blob = await fetchSubtitleSrt(subUrl, traceId);
       saveBlobAsFile(blob, `${data.title}-${lanDoc}字幕.srt`);
       onShowToast(`${lanDoc}字幕已保存为 SRT 格式`, 'success');
     } catch (err: any) {

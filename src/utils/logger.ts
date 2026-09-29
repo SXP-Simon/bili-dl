@@ -7,7 +7,7 @@ class Logger {
   private maxLogs = 500;
   private listeners: Set<LogListener> = new Set();
 
-  public log(level: LogLevel, tag: string, message: string, details?: any): void {
+  public log(level: LogLevel, tag: string, message: string, details?: any, traceId?: string): void {
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now
       .getMinutes()
@@ -24,13 +24,15 @@ class Logger {
       level,
       tag,
       message,
+      traceId,
       details,
     };
 
     this.logs = [...this.logs.slice(-(this.maxLogs - 1)), entry];
 
     // 同步输出到控制台
-    const prefix = `[Bili-DL][${tag}]`;
+    const tracePrefix = traceId ? `[#${traceId}]` : '';
+    const prefix = `[Bili-DL][${tag}]${tracePrefix}`;
     if (level === 'error') {
       console.error(prefix, message, details !== undefined ? details : '');
     } else if (level === 'warn') {
@@ -44,24 +46,24 @@ class Logger {
     this.notify();
   }
 
-  public info(tag: string, message: string, details?: any): void {
-    this.log('info', tag, message, details);
+  public info(tag: string, message: string, details?: any, traceId?: string): void {
+    this.log('info', tag, message, details, traceId);
   }
 
-  public success(tag: string, message: string, details?: any): void {
-    this.log('success', tag, message, details);
+  public success(tag: string, message: string, details?: any, traceId?: string): void {
+    this.log('success', tag, message, details, traceId);
   }
 
-  public warn(tag: string, message: string, details?: any): void {
-    this.log('warn', tag, message, details);
+  public warn(tag: string, message: string, details?: any, traceId?: string): void {
+    this.log('warn', tag, message, details, traceId);
   }
 
-  public error(tag: string, message: string, details?: any): void {
-    this.log('error', tag, message, details);
+  public error(tag: string, message: string, details?: any, traceId?: string): void {
+    this.log('error', tag, message, details, traceId);
   }
 
-  public debug(tag: string, message: string, details?: any): void {
-    this.log('debug', tag, message, details);
+  public debug(tag: string, message: string, details?: any, traceId?: string): void {
+    this.log('debug', tag, message, details, traceId);
   }
 
   public getLogs(): LogEntry[] {

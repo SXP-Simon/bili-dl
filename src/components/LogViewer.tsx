@@ -22,6 +22,7 @@ interface LogViewerProps {
 export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filterLevel, setFilterLevel] = useState<string>('all');
+  const [filterTrace, setFilterTrace] = useState<string>('all');
   const [copied, setCopied] = useState(false);
   const [expandedDetails, setExpandedDetails] = useState<Record<string, boolean>>({});
   const listEndRef = useRef<HTMLDivElement>(null);
@@ -37,16 +38,22 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
     listEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
+  const availableTraces = Array.from(
+    new Set(logs.map((l) => l.traceId).filter((t): t is string => Boolean(t)))
+  );
+
   const filteredLogs = logs.filter((log) => {
-    if (filterLevel === 'all') return true;
-    return log.level === filterLevel;
+    if (filterLevel !== 'all' && log.level !== filterLevel) return false;
+    if (filterTrace !== 'all' && log.traceId !== filterTrace) return false;
+    return true;
   });
 
   const handleCopyLogs = () => {
-    const text = logs
+    const targetLogs = filterTrace !== 'all' || filterLevel !== 'all' ? filteredLogs : logs;
+    const text = targetLogs
       .map(
         (l) =>
-          `[${l.timeStr}] [${l.level.toUpperCase()}] [${l.tag}] ${l.message}${
+          `[${l.timeStr}] [${l.level.toUpperCase()}] [${l.tag}]${l.traceId ? ` [${l.traceId}]` : ''} ${l.message}${
             l.details ? `\nDetails: ${typeof l.details === 'object' ? JSON.stringify(l.details, null, 2) : String(l.details)}` : ''
           }`
       )
@@ -116,8 +123,38 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
         </div>
 
         <div className="flex items-center gap-1.5">
-          {/* 筛选器 */}
-          <div className="flex items-center bg-background rounded-lg p-0.5 border border-border/70 mr-1 text-[11px]">
+          {/* 任务 TraceID 快速筛选 */}
+          {availableTraces.length > 0 && (
+            <div className="flex items-center bg-background rounded-lg p-0.5 border border-border/70 text-[10px] font-mono max-w-[200px] overflow-x-auto scrollbar-clean">
+              <button
+                onClick={() => setFilterTrace('all')}
+                className={`px-1.5 py-0.5 rounded shrink-0 transition-colors cursor-pointer ${
+                  filterTrace === 'all'
+                    ? 'bg-primary/20 text-emerald-950 dark:text-emerald-100 font-bold'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                全任务
+              </button>
+              {availableTraces.map((tr) => (
+                <button
+                  key={tr}
+                  onClick={() => setFilterTrace(filterTrace === tr ? 'all' : tr)}
+                  title={`仅查看任务 [#${tr}] 的穿透日志`}
+                  className={`px-1.5 py-0.5 rounded shrink-0 transition-colors cursor-pointer ${
+                    filterTrace === tr
+                      ? 'bg-primary/25 text-emerald-950 dark:text-emerald-100 font-bold'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  #{tr}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* 级别筛选器 */}
+          <div className="flex items-center bg-background rounded-lg p-0.5 border border-border/70 text-[11px]">
             {['all', 'info', 'success', 'error'].map((lvl) => (
               <button
                 key={lvl}
@@ -135,7 +172,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
 
           <button
             onClick={handleCopyLogs}
-            title="复制全部日志到剪贴板"
+            title={filterTrace !== 'all' ? `复制任务 [#${filterTrace}] 的日志` : '复制全部日志到剪贴板'}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-card hover:bg-muted text-muted-foreground hover:text-foreground border border-border/70 text-[11px] font-semibold transition-all active:scale-95 cursor-pointer shadow-2xs"
           >
             {copied ? (
@@ -169,7 +206,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
         {filteredLogs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 text-muted-foreground/60 text-xs">
             <Terminal className="w-6 h-6 mb-1 opacity-40" />
-            <span>暂无日志记录</span>
+            <span>{filterTrace !== 'all' ? `未找到任务 [#${filterTrace}] 的日志` : '暂无日志记录'}</span>
           </div>
         ) : (
           filteredLogs.map((log) => {
@@ -195,6 +232,19 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
                   <span className="text-[10px] font-bold px-1 py-0.2 rounded bg-muted text-muted-foreground border border-border/60 shrink-0">
                     {log.tag}
                   </span>
+                  {log.traceId && (
+                    <button
+                      onClick={() => setFilterTrace(filterTrace === log.traceId ? 'all' : log.traceId!)}
+                      title={`点击聚焦该任务 (#${log.traceId}) 的链路日志`}
+                      className={`inline-flex items-center text-[9px] font-mono px-1.5 py-0.2 rounded font-semibold transition-all cursor-pointer shrink-0 ${
+                        filterTrace === log.traceId
+                          ? 'bg-primary/30 text-emerald-950 dark:text-emerald-100 border border-primary/60 shadow-2xs font-bold'
+                          : 'bg-secondary/35 text-secondary-foreground hover:bg-secondary/60 border border-secondary/50'
+                      }`}
+                    >
+                      #{log.traceId}
+                    </button>
+                  )}
                   <span className="flex-1 break-all text-xs font-normal">
                     {log.message}
                   </span>

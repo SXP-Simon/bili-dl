@@ -165,9 +165,12 @@ async function fetchChunkWithRetry(
   start: number,
   end: number,
   onChunkProgress: (loaded: number) => void,
-  retries = Math.max(3, urls.length)
+  retries = Math.max(3, urls.length),
+  traceId?: string,
+  streamLabel?: string
 ): Promise<Uint8Array> {
   let lastError: any = null;
+  const streamPrefix = streamLabel ? `[${streamLabel}] ` : '';
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     const targetUrl = urls[(attempt - 1) % urls.length];
@@ -235,7 +238,9 @@ async function fetchChunkWithRetry(
       const nextNodeLabel = getCdnNodeLabel(nextTargetUrl);
       logger.warn(
         'Range',
-        `分片 [${start}-${end}] 在节点【${currentNodeLabel}】第 ${attempt}/${retries} 次尝试失败，正在无缝切换至备用节点【${nextNodeLabel}】: ${err.message}`
+        `${streamPrefix}分片 [${start}-${end}] 在节点【${currentNodeLabel}】第 ${attempt}/${retries} 次尝试失败，正在无缝切换至备用节点【${nextNodeLabel}】: ${err.message}`,
+        null,
+        traceId
       );
       if (attempt < retries) {
         // 加入 300ms~800ms 随机退避抖动，防止重试群体风暴 (Thundering Herd)
@@ -254,17 +259,20 @@ async function fetchChunkWithRetry(
 export async function requestChunkedBuffer(
   urls: string | string[],
   onProgress?: RequestProgressCallback,
-  concurrency = 3
+  concurrency = 3,
+  traceId?: string,
+  streamLabel?: string
 ): Promise<ArrayBuffer> {
   const urlList = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
   if (urlList.length === 0) throw new Error('No valid URL provided');
+  const streamPrefix = streamLabel ? `[${streamLabel}] ` : '';
 
   // 1. 探测资源总大小
   const totalBytes = await probeContentLength(urlList);
 
   // 如果未能探测到大小或文件较小（< 3MB），使用标准单流下载
   if (!totalBytes || totalBytes < 3 * 1024 * 1024) {
-    logger.info('Network', '文件较小或不支持 Range 探测，使用标准流下载', { totalBytes });
+    logger.info('Network', `${streamPrefix}文件较小或不支持 Range 探测，使用标准流下载`, { totalBytes }, traceId);
     return requestBuffer(urlList[0], onProgress);
   }
 
@@ -274,7 +282,12 @@ export async function requestChunkedBuffer(
   const chunks: Array<{ start: number; end: number; index: number }> = [];
 
   const cdnLabels = urlList.map(getCdnNodeLabel).join(', ');
-  logger.info('Range', `启动多分片并发加速: ${(totalBytes / 1024 / 1024).toFixed(1)} MB (${chunkCount} 线程并发，高可用节点池已就绪: [${cdnLabels}])`);
+  logger.info(
+    'Range',
+    `${streamPrefix}启动多分片并发加速: ${(totalBytes / 1024 / 1024).toFixed(1)} MB (${chunkCount} 线程并发，高可用节点池已就绪: [${cdnLabels}])`,
+    null,
+    traceId
+  );
 
   for (let i = 0; i < chunkCount; i++) {
     const start = i * chunkSize;
@@ -330,10 +343,18 @@ export async function requestChunkedBuffer(
     // 3. 并发执行各分片下载
     await Promise.all(
       chunks.map(async (chunk) => {
-        const u8 = await fetchChunkWithRetry(urlList, chunk.start, chunk.end, (loaded) => {
-          loadedPerChunk[chunk.index] = loaded;
-          lastDataTime = Date.now();
-        });
+        const u8 = await fetchChunkWithRetry(
+          urlList,
+          chunk.start,
+          chunk.end,
+          (loaded) => {
+            loadedPerChunk[chunk.index] = loaded;
+            lastDataTime = Date.now();
+          },
+          Math.max(3, urlList.length),
+          traceId,
+          streamLabel
+        );
         finalBuffer.set(u8, chunk.start);
         loadedPerChunk[chunk.index] = u8.length;
         lastDataTime = Date.now();
@@ -344,11 +365,11 @@ export async function requestChunkedBuffer(
     if (onProgress) {
       onProgress(totalBytes, totalBytes, '');
     }
-    logger.success('Range', `分片数据传输完毕: ${(totalBytes / 1024 / 1024).toFixed(1)} MB 全部就绪`);
+    logger.success('Range', `${streamPrefix}分片数据传输完毕: ${(totalBytes / 1024 / 1024).toFixed(1)} MB 全部就绪`, null, traceId);
     return finalBuffer.buffer as ArrayBuffer;
   } catch (err: any) {
     clearInterval(timer);
-    logger.error('Range', `多连接分片下载失败: ${err.message}`, err);
+    logger.error('Range', `${streamPrefix}多连接分片下载失败: ${err.message}`, err, traceId);
     throw err;
   }
 }

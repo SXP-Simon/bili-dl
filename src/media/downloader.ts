@@ -44,14 +44,21 @@ export async function downloadAndMuxMp4(
   title: string,
   video: VideoStreamItem,
   audio: AudioStreamItem | undefined,
-  onProgress: (state: DownloadProgress) => void
+  onProgress: (state: DownloadProgress) => void,
+  traceId?: string
 ): Promise<void> {
+  const finalTraceId = traceId || `${video.qualityName.replace(/\s+/g, '')}-${video.codecName}`;
   const startTime = Date.now();
-  logger.info('Downloader', `开始下载任务: ${title}`, {
-    video: `${video.qualityName} (${video.codecName})`,
-    audio: audio?.name || '无',
-    estimatedSize: `${video.sizeMB} MB`,
-  });
+  logger.info(
+    'Downloader',
+    `开始下载任务: ${title}`,
+    {
+      video: `${video.qualityName} (${video.codecName})`,
+      audio: audio?.name || '无',
+      estimatedSize: `${video.sizeMB} MB`,
+    },
+    finalTraceId
+  );
 
   try {
     let videoLoaded = 0;
@@ -80,26 +87,38 @@ export async function downloadAndMuxMp4(
 
     // 1. 双轨多连接并行拉取（带备用 CDN 故障转移）
     const videoUrls = [video.baseUrl, ...(video.backupUrl || [])].filter(Boolean);
-    const videoPromise = requestChunkedBuffer(videoUrls, (loaded, total, speed) => {
-      videoLoaded = loaded;
-      videoTotal = total;
-      if (speed !== undefined) currentSpeed = speed;
-      updateCombinedProgress();
-    });
+    const videoPromise = requestChunkedBuffer(
+      videoUrls,
+      (loaded, total, speed) => {
+        videoLoaded = loaded;
+        videoTotal = total;
+        if (speed !== undefined) currentSpeed = speed;
+        updateCombinedProgress();
+      },
+      3,
+      finalTraceId,
+      '视频轨'
+    );
 
     const audioUrls = audio ? [audio.baseUrl, ...(audio.backupUrl || [])].filter(Boolean) : [];
     const audioPromise = audioUrls.length > 0
-      ? requestChunkedBuffer(audioUrls, (loaded, total, speed) => {
-          audioLoaded = loaded;
-          audioTotal = total;
-          if (speed !== undefined) currentSpeed = speed;
-          updateCombinedProgress();
-        })
+      ? requestChunkedBuffer(
+          audioUrls,
+          (loaded, total, speed) => {
+            audioLoaded = loaded;
+            audioTotal = total;
+            if (speed !== undefined) currentSpeed = speed;
+            updateCombinedProgress();
+          },
+          2,
+          finalTraceId,
+          '音频轨'
+        )
       : Promise.resolve(null);
 
     const [videoBuffer, audioBuffer] = await Promise.all([videoPromise, audioPromise]);
     const downloadTime = ((Date.now() - startTime) / 1000).toFixed(1);
-    logger.success('Downloader', `双轨媒体流拉取完毕，耗时 ${downloadTime}s，进入 MP4 混流封装`);
+    logger.success('Downloader', `双轨媒体流拉取完毕，耗时 ${downloadTime}s，进入 MP4 混流封装`, null, finalTraceId);
 
     // 2. 前端 mp4box 快速混流合成
     onProgress({
@@ -110,13 +129,18 @@ export async function downloadAndMuxMp4(
 
     let finalBlob: Blob;
     if (audioBuffer) {
-      finalBlob = await muxMp4(videoBuffer, audioBuffer, (muxPct) => {
-        onProgress({
-          status: 'muxing',
-          progress: 90 + Math.floor(muxPct * 0.09),
-          message: `正在封装 MP4 容器: ${Math.floor(muxPct)}%`,
-        });
-      });
+      finalBlob = await muxMp4(
+        videoBuffer,
+        audioBuffer,
+        (muxPct) => {
+          onProgress({
+            status: 'muxing',
+            progress: 90 + Math.floor(muxPct * 0.09),
+            message: `正在封装 MP4 容器: ${Math.floor(muxPct)}%`,
+          });
+        },
+        finalTraceId
+      );
     } else {
       finalBlob = new Blob([videoBuffer], { type: 'video/mp4' });
     }
@@ -125,7 +149,7 @@ export async function downloadAndMuxMp4(
     const filename = `${title}_${video.qualityName}_${video.codecName}.mp4`;
     saveBlobAsFile(finalBlob, filename);
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
-    logger.success('Downloader', `文件保存成功: ${filename} (总耗时 ${totalTime}s)`);
+    logger.success('Downloader', `文件保存成功: ${filename} (总耗时 ${totalTime}s)`, null, finalTraceId);
 
     onProgress({
       status: 'completed',
@@ -133,7 +157,7 @@ export async function downloadAndMuxMp4(
       message: '下载与混流完成，已保存到本地',
     });
   } catch (err: any) {
-    logger.error('Downloader', `下载失败: ${err.message}`, err);
+    logger.error('Downloader', `下载失败: ${err.message}`, err, finalTraceId);
     onProgress({
       status: 'error',
       progress: 0,
@@ -149,8 +173,10 @@ export async function downloadAndMuxMp4(
 export async function downloadAudio(
   title: string,
   audio: AudioStreamItem,
-  onProgress: (state: DownloadProgress) => void
+  onProgress: (state: DownloadProgress) => void,
+  traceId?: string
 ): Promise<void> {
+  const finalTraceId = traceId || `音频-${audio.name.replace(/\s+/g, '')}`;
   const startTime = Date.now();
   const isFlac = audio.codec?.toLowerCase().includes('flac') || audio.qualityDesc?.includes('FLAC');
   const ext = isFlac ? 'flac' : 'm4a';
@@ -158,7 +184,7 @@ export async function downloadAudio(
   const filename = `${title}_${audio.name}.${ext}`;
   const audioUrls = [audio.baseUrl, ...(audio.backupUrl || [])].filter(Boolean);
 
-  logger.info('Downloader', `开始下载音频轨: ${filename}`);
+  logger.info('Downloader', `开始下载音频轨: ${filename}`, null, finalTraceId);
 
   try {
     onProgress({
@@ -167,20 +193,26 @@ export async function downloadAudio(
       message: `正在建立多连接下载: ${audio.name}`,
     });
 
-    const audioBuffer = await requestChunkedBuffer(audioUrls, (loaded, total, speed) => {
-      const pct = Math.min(99, Math.floor((loaded / total) * 100));
-      onProgress({
-        status: 'downloading_audio',
-        progress: pct,
-        speed,
-        message: `多连接下载音频 (${audio.name}): ${pct}% ${speed ? `(${speed})` : ''}`,
-      });
-    });
+    const audioBuffer = await requestChunkedBuffer(
+      audioUrls,
+      (loaded, total, speed) => {
+        const pct = Math.min(99, Math.floor((loaded / total) * 100));
+        onProgress({
+          status: 'downloading_audio',
+          progress: pct,
+          speed,
+          message: `多连接下载音频 (${audio.name}): ${pct}% ${speed ? `(${speed})` : ''}`,
+        });
+      },
+      2,
+      finalTraceId,
+      '独立音频轨'
+    );
 
     const blob = new Blob([audioBuffer], { type: mimeType });
     saveBlobAsFile(blob, filename);
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
-    logger.success('Downloader', `音频保存成功: ${filename} (耗时 ${totalTime}s)`);
+    logger.success('Downloader', `音频保存成功: ${filename} (耗时 ${totalTime}s)`, null, finalTraceId);
 
     onProgress({
       status: 'completed',
@@ -188,7 +220,7 @@ export async function downloadAudio(
       message: `音频下载完成，已保存为 .${ext} 文件`,
     });
   } catch (err: any) {
-    logger.error('Downloader', `音频下载失败: ${err.message}`, err);
+    logger.error('Downloader', `音频下载失败: ${err.message}`, err, finalTraceId);
     onProgress({
       status: 'error',
       progress: 0,

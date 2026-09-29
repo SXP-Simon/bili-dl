@@ -7,12 +7,18 @@ import { logger } from '../utils/logger';
 export async function muxMp4(
   videoBuffer: ArrayBuffer,
   audioBuffer?: ArrayBuffer | null,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  traceId?: string
 ): Promise<Blob> {
-  logger.info('Muxer', '开始音视频解封装与 MP4 容器混流...', {
-    videoBytes: videoBuffer.byteLength,
-    audioBytes: audioBuffer?.byteLength || 0,
-  });
+  logger.info(
+    'Muxer',
+    '开始音视频解封装与 MP4 容器混流...',
+    {
+      videoBytes: videoBuffer.byteLength,
+      audioBytes: audioBuffer?.byteLength || 0,
+    },
+    traceId
+  );
   return new Promise((resolve, reject) => {
     try {
       const outMp4 = MP4Box.createFile();
@@ -31,15 +37,15 @@ export async function muxMp4(
             outMp4.flush();
             const buffer = outMp4.getBuffer();
             if (buffer && buffer.byteLength > 0) {
-              logger.success('Muxer', `MP4 封装合成成功: ${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB`);
+              logger.success('Muxer', `MP4 封装合成成功: ${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB`, null, traceId);
               onProgress?.(100);
               resolve(new Blob([buffer], { type: 'video/mp4' }));
             } else {
-              logger.warn('Muxer', '封装输出为空，降级回退原始视频流');
+              logger.warn('Muxer', '封装输出为空，降级回退原始视频流', null, traceId);
               resolve(new Blob([videoBuffer], { type: 'video/mp4' }));
             }
           } catch (e: any) {
-            logger.error('Muxer', `MP4 导出异常: ${e.message}`, e);
+            logger.error('Muxer', `MP4 导出异常: ${e.message}`, e, traceId);
             reject(new Error(`MP4 导出异常: ${e.message}`));
           }
         }
@@ -53,7 +59,7 @@ export async function muxMp4(
           const entry = inTrak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
           const entryType = entry?.type || (track.codec ? track.codec.substring(0, 4) : 'avc1');
 
-          logger.info('Muxer', `提取视频轨: ${entryType} (${track.track_width}x${track.track_height}), 样本数: ${track.nb_samples}`);
+          logger.info('Muxer', `提取视频轨: ${entryType} (${track.track_width}x${track.track_height}), 样本数: ${track.nb_samples}`, null, traceId);
 
           videoOutTrackId = outMp4.addTrack({
             type: entryType,
@@ -108,7 +114,12 @@ export async function muxMp4(
             const entry = inTrak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
             const entryType = entry?.type || (track.codec ? track.codec.substring(0, 4) : 'mp4a');
 
-            logger.info('Muxer', `提取音频轨: ${entryType}, 采样率: ${(track as any).audio?.sample_rate || 44100}Hz, 声道: ${(track as any).audio?.channel_count || 2}`);
+            logger.info(
+              'Muxer',
+              `提取音频轨: ${entryType}, 采样率: ${(track as any).audio?.sample_rate || 44100}Hz, 声道: ${(track as any).audio?.channel_count || 2}`,
+              null,
+              traceId
+            );
 
             audioOutTrackId = outMp4.addTrack({
               type: entryType,

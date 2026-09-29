@@ -115,6 +115,7 @@ export const App: React.FC = () => {
     if (!mediaData) return;
     const taskId = `video_${video.id}_${video.codecName}`;
     const taskTitle = `${video.qualityName} (${video.codecName})`;
+    const traceId = `${video.qualityName.replace(/\s+/g, '')}-${video.codecName}`;
 
     upsertTask({
       id: taskId,
@@ -127,14 +128,20 @@ export const App: React.FC = () => {
     });
 
     try {
-      await downloadAndMuxMp4(mediaData.title, video, audio, (prog) => {
-        updateTaskProgress(taskId, {
-          status: prog.status,
-          progress: prog.progress,
-          speed: prog.speed,
-          message: prog.message,
-        });
-      });
+      await downloadAndMuxMp4(
+        mediaData.title,
+        video,
+        audio,
+        (prog) => {
+          updateTaskProgress(taskId, {
+            status: prog.status,
+            progress: prog.progress,
+            speed: prog.speed,
+            message: prog.message,
+          });
+        },
+        traceId
+      );
       showToast(`MP4 无损封装完成 (${taskTitle})`, 'success');
     } catch (err: any) {
       updateTaskProgress(taskId, {
@@ -149,6 +156,7 @@ export const App: React.FC = () => {
     if (!mediaData) return;
     const taskId = `audio_${audio.id}`;
     const taskTitle = audio.name;
+    const traceId = `音频-${audio.name.replace(/\s+/g, '')}`;
 
     upsertTask({
       id: taskId,
@@ -161,14 +169,19 @@ export const App: React.FC = () => {
     });
 
     try {
-      await downloadAudio(mediaData.title, audio, (prog) => {
-        updateTaskProgress(taskId, {
-          status: prog.status,
-          progress: prog.progress,
-          speed: prog.speed,
-          message: prog.message,
-        });
-      });
+      await downloadAudio(
+        mediaData.title,
+        audio,
+        (prog) => {
+          updateTaskProgress(taskId, {
+            status: prog.status,
+            progress: prog.progress,
+            speed: prog.speed,
+            message: prog.message,
+          });
+        },
+        traceId
+      );
       const isFlac = audio.codec?.toLowerCase().includes('flac') || audio.qualityDesc?.includes('FLAC');
       const ext = isFlac ? 'flac' : 'm4a';
       showToast(`音频已保存为 .${ext} 文件 (${taskTitle})`, 'success');

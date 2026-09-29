@@ -81,7 +81,9 @@ export interface LogEntry {
   level: LogLevel;
   tag: string;
   message: string;
+  traceId?: string;
   details?: any;
 }
+
 
 
