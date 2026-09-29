@@ -18,14 +18,14 @@ export function saveBlobAsFile(blob: Blob, filename: string): void {
 }
 
 /**
- * 直接下载文件（支持 GM_download 防盗链下载）
+ * 直接下载文件（支持 GM_download 防盗链快速静默下载）
  */
 export function directDownload(url: string, filename: string): void {
   if (typeof GM_download !== 'undefined') {
     GM_download({
       url,
       name: filename,
-      saveAs: true,
+      saveAs: false,
       headers: {
         'Referer': 'https://www.bilibili.com/',
       },

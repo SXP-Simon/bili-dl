@@ -14,6 +14,7 @@ import {
   Check,
   Sun,
   Moon,
+  Loader2,
 } from 'lucide-react';
 import { SpotlightCard } from './SpotlightCard';
 import { TabPill } from './TabPill';
@@ -48,6 +49,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<CategoryType>('all');
   const [copiedSummary, setCopiedSummary] = useState(false);
+  const [activeActionKey, setActiveActionKey] = useState<string | null>(null);
   const innerListRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState<number | undefined>(undefined);
 
@@ -211,119 +213,161 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
           <div ref={innerListRef} className="space-y-2 py-2">
             {/* 1. 视频列表 */}
             {(activeTab === 'all' || activeTab === 'video') &&
-              data.videos.map((v, idx) => (
-                <SpotlightCard
-                  key={`${v.id}_${v.codecName}`}
-                  style={{
-                    animation: 'staggerIn 0.35s cubic-bezier(0.2, 0.9, 0.3, 1) both',
-                    animationDelay: `${idx * 28}ms`,
-                  }}
-                  className="flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/30 text-emerald-800 dark:text-emerald-300 border border-secondary/40 shadow-2xs group-hover:bg-primary/25 group-hover:text-emerald-950 dark:group-hover:text-emerald-100 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-200">
-                      <Video className="w-4 h-4" strokeWidth={2.2} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-foreground tracking-tight">
-                          {v.qualityName}
-                        </span>
-                        <span
-                          title={
-                            v.codecName === 'AVC'
-                              ? 'AVC (H.264)：全平台硬件解码与剪辑软件完美兼容'
-                              : v.codecName === 'HEVC'
-                              ? 'HEVC (H.265)：高压缩比，画质更细腻'
-                              : 'AV1：最新极致压缩格式'
-                          }
-                          className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-secondary/35 text-secondary-foreground border border-secondary/50 font-bold cursor-help"
-                        >
-                          {v.codecName}
-                        </span>
-                        {v.frameRate && (
-                          <span className="text-[10px] font-mono text-muted-foreground">
-                            {v.frameRate}fps
-                          </span>
-                        )}
+              data.videos.map((v, idx) => {
+                const isProcessing = activeActionKey === `video_${v.id}_${v.codecName}`;
+                return (
+                  <SpotlightCard
+                    key={`${v.id}_${v.codecName}`}
+                    style={{
+                      animation: 'staggerIn 0.35s cubic-bezier(0.2, 0.9, 0.3, 1) both',
+                      animationDelay: `${idx * 28}ms`,
+                    }}
+                    className="flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/30 text-emerald-800 dark:text-emerald-300 border border-secondary/40 shadow-2xs group-hover:bg-primary/25 group-hover:text-emerald-950 dark:group-hover:text-emerald-100 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-200">
+                        <Video className="w-4 h-4" strokeWidth={2.2} />
                       </div>
-                      <span className="text-[11px] font-mono text-muted-foreground mt-0.5 block">
-                        预估体积: {v.sizeMB} MB
-                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-foreground tracking-tight">
+                            {v.qualityName}
+                          </span>
+                          <span
+                            title={
+                              v.codecName === 'AVC'
+                                ? 'AVC (H.264)：全平台硬件解码与剪辑软件完美兼容'
+                                : v.codecName === 'HEVC'
+                                ? 'HEVC (H.265)：高压缩比，画质更细腻'
+                                : 'AV1：最新极致压缩格式'
+                            }
+                            className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-secondary/35 text-secondary-foreground border border-secondary/50 font-bold cursor-help"
+                          >
+                            {v.codecName}
+                          </span>
+                          {v.frameRate && (
+                            <span className="text-[10px] font-mono text-muted-foreground">
+                              {v.frameRate}fps
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] font-mono text-muted-foreground mt-0.5 block">
+                          预估体积: {v.sizeMB} MB
+                        </span>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        exportAria2Command(data.title, v, bestAudio);
-                        onShowToast('Aria2 / curl 下载命令已复制到剪贴板', 'success');
-                      }}
-                      title="复制 Aria2 / curl / FFmpeg 多线程下载命令行"
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border border-secondary/40 text-xs font-semibold shadow-2xs active:scale-95 transition-all duration-150 cursor-pointer"
-                    >
-                      <Terminal className="w-3.5 h-3.5" strokeWidth={2.2} />
-                      <span className="text-[11px] font-medium">命令</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          exportAria2Command(data.title, v, bestAudio);
+                          onShowToast('Aria2 / curl 下载命令已复制到剪贴板', 'success');
+                        }}
+                        title="复制 Aria2 / curl / FFmpeg 多线程下载命令行"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border border-secondary/40 text-xs font-semibold shadow-2xs active:scale-95 transition-all duration-150 cursor-pointer"
+                      >
+                        <Terminal className="w-3.5 h-3.5" strokeWidth={2.2} />
+                        <span className="text-[11px] font-medium">命令</span>
+                      </button>
 
-                    <button
-                      onClick={() => onDownloadVideo(v, bestAudio)}
-                      title="下载视频与音频并在浏览器中无损封装为 MP4 文件"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/20 hover:bg-primary text-emerald-950 dark:text-emerald-100 hover:text-primary-foreground font-semibold text-xs border border-primary/40 hover:border-primary shadow-2xs hover:shadow-xs active:scale-95 transition-all duration-200 cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
-                      <span>合成 MP4</span>
-                    </button>
-                  </div>
-                </SpotlightCard>
-              ))}
+                      <button
+                        onClick={async () => {
+                          setActiveActionKey(`video_${v.id}_${v.codecName}`);
+                          try {
+                            await onDownloadVideo(v, bestAudio);
+                          } finally {
+                            setActiveActionKey(null);
+                          }
+                        }}
+                        disabled={isProcessing}
+                        title="下载视频与音频并在浏览器中无损封装为 MP4 文件"
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold text-xs border shadow-2xs active:scale-95 transition-all duration-200 cursor-pointer ${
+                          isProcessing
+                            ? 'bg-primary/40 text-emerald-950 dark:text-emerald-100 border-primary/60 cursor-wait'
+                            : 'bg-primary/20 hover:bg-primary text-emerald-950 dark:text-emerald-100 hover:text-primary-foreground border-primary/40 hover:border-primary hover:shadow-xs'
+                        }`}
+                      >
+                        {isProcessing ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-800 dark:text-emerald-200" strokeWidth={2.4} />
+                            <span>处理中...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
+                            <span>合成 MP4</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </SpotlightCard>
+                );
+              })}
 
             {/* 2. 音频列表 */}
             {(activeTab === 'all' || activeTab === 'audio') &&
-              data.audios.map((a, idx) => (
-                <SpotlightCard
-                  key={a.id}
-                  style={{
-                    animation: 'staggerIn 0.35s cubic-bezier(0.2, 0.9, 0.3, 1) both',
-                    animationDelay: `${(activeTab === 'all' ? data.videos.length + idx : idx) * 28}ms`,
-                  }}
-                  className="flex items-center justify-between"
-                  onClick={() => {
-                    const isFlac = a.codec?.toLowerCase().includes('flac') || a.qualityDesc?.includes('FLAC');
-                    const ext = isFlac ? 'flac' : 'm4a';
-                    directDownload(a.baseUrl, `${data.title}-${a.name}.${ext}`);
-                    onShowToast(`正在下载音频: ${a.name} (.${ext})`, 'info');
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/30 text-emerald-800 dark:text-emerald-300 border border-secondary/40 shadow-2xs group-hover:bg-primary/25 group-hover:text-emerald-950 dark:group-hover:text-emerald-100 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-200">
-                      <Music className="w-4 h-4" strokeWidth={2.2} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-foreground tracking-tight">
-                          {a.name}
-                        </span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-secondary/35 text-secondary-foreground border border-secondary/50 font-bold">
-                          {a.qualityDesc}
+              data.audios.map((a, idx) => {
+                const isTriggered = activeActionKey === `audio_${a.id}`;
+                return (
+                  <SpotlightCard
+                    key={a.id}
+                    style={{
+                      animation: 'staggerIn 0.35s cubic-bezier(0.2, 0.9, 0.3, 1) both',
+                      animationDelay: `${(activeTab === 'all' ? data.videos.length + idx : idx) * 28}ms`,
+                    }}
+                    className="flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/30 text-emerald-800 dark:text-emerald-300 border border-secondary/40 shadow-2xs group-hover:bg-primary/25 group-hover:text-emerald-950 dark:group-hover:text-emerald-100 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-200">
+                        <Music className="w-4 h-4" strokeWidth={2.2} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-foreground tracking-tight">
+                            {a.name}
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-secondary/35 text-secondary-foreground border border-secondary/50 font-bold">
+                            {a.qualityDesc}
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-mono text-muted-foreground mt-0.5 block">
+                          文件大小: {a.sizeMB} MB
                         </span>
                       </div>
-                      <span className="text-[11px] font-mono text-muted-foreground mt-0.5 block">
-                        文件大小: {a.sizeMB} MB
-                      </span>
                     </div>
-                  </div>
 
-                  <button
-                    title="单独提取并下载该独立音轨 (.m4a / .flac)"
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border border-secondary/40 font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs"
-                  >
-                    <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
-                    <span>下载音频</span>
-                  </button>
-                </SpotlightCard>
-              ))}
+                    <button
+                      onClick={() => {
+                        setActiveActionKey(`audio_${a.id}`);
+                        const isFlac = a.codec?.toLowerCase().includes('flac') || a.qualityDesc?.includes('FLAC');
+                        const ext = isFlac ? 'flac' : 'm4a';
+                        directDownload(a.baseUrl, `${data.title}-${a.name}.${ext}`);
+                        onShowToast(`已触发下载: ${a.name} (.${ext})`, 'info');
+                        setTimeout(() => setActiveActionKey(null), 1500);
+                      }}
+                      title="单独提取并下载该独立音轨 (.m4a / .flac)"
+                      className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer ${
+                        isTriggered
+                          ? 'bg-secondary/60 text-secondary-foreground border-secondary/80'
+                          : 'bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border-secondary/40'
+                      }`}
+                    >
+                      {isTriggered ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" strokeWidth={2.4} />
+                          <span>已触发</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
+                          <span>下载音频</span>
+                        </>
+                      )}
+                    </button>
+                  </SpotlightCard>
+                );
+              })}
 
             {/* 3. 封面 */}
             {(activeTab === 'all' || activeTab === 'cover') && data.cover && (
@@ -333,10 +377,6 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                   animationDelay: `${(activeTab === 'all' ? data.videos.length + data.audios.length : 0) * 28}ms`,
                 }}
                 className="flex items-center justify-between"
-                onClick={() => {
-                  directDownload(data.cover, `${data.title}-高清原图封面.jpg`);
-                  onShowToast('正在下载超高清封面原图', 'info');
-                }}
               >
                 <div className="flex items-center gap-3">
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/30 text-emerald-800 dark:text-emerald-300 border border-secondary/40 shadow-2xs group-hover:bg-primary/25 group-hover:text-emerald-950 dark:group-hover:text-emerald-100 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-200">
@@ -353,11 +393,30 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                 </div>
 
                 <button
+                  onClick={() => {
+                    setActiveActionKey('cover');
+                    directDownload(data.cover, `${data.title}-高清原图封面.jpg`);
+                    onShowToast('已触发封面下载', 'info');
+                    setTimeout(() => setActiveActionKey(null), 1500);
+                  }}
                   title="保存 B 站官方未压缩封面原图"
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border border-secondary/40 font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs"
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer ${
+                    activeActionKey === 'cover'
+                      ? 'bg-secondary/60 text-secondary-foreground border-secondary/80'
+                      : 'bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border-secondary/40'
+                  }`}
                 >
-                  <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
-                  <span>保存原图</span>
+                  {activeActionKey === 'cover' ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" strokeWidth={2.4} />
+                      <span>已触发</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
+                      <span>保存原图</span>
+                    </>
+                  )}
                 </button>
               </SpotlightCard>
             )}
@@ -371,7 +430,6 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                     animationDelay: `${(activeTab === 'all' ? data.videos.length + data.audios.length + 1 : 0) * 28}ms`,
                   }}
                   className="flex items-center justify-between"
-                  onClick={handleDownloadDanmaku}
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/30 text-emerald-800 dark:text-emerald-300 border border-secondary/40 shadow-2xs group-hover:bg-primary/25 group-hover:text-emerald-950 dark:group-hover:text-emerald-100 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-200">
@@ -388,47 +446,91 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                   </div>
 
                   <button
+                    onClick={async () => {
+                      setActiveActionKey('danmaku');
+                      try {
+                        await handleDownloadDanmaku();
+                      } finally {
+                        setActiveActionKey(null);
+                      }
+                    }}
                     title="将本视频全量弹幕转换为标准 ASS 字幕文件"
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border border-secondary/40 font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs"
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer ${
+                      activeActionKey === 'danmaku'
+                        ? 'bg-secondary/60 text-secondary-foreground border-secondary/80'
+                        : 'bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border-secondary/40'
+                    }`}
                   >
-                    <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
-                    <span>导出 ASS</span>
+                    {activeActionKey === 'danmaku' ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={2.4} />
+                        <span>转换中...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
+                        <span>导出 ASS</span>
+                      </>
+                    )}
                   </button>
                 </SpotlightCard>
 
-                {data.subtitles.map((sub, sIdx) => (
-                  <SpotlightCard
-                    key={sub.id}
-                    style={{
-                      animation: 'staggerIn 0.35s cubic-bezier(0.2, 0.9, 0.3, 1) both',
-                      animationDelay: `${(activeTab === 'all' ? data.videos.length + data.audios.length + 2 + sIdx : sIdx + 1) * 28}ms`,
-                    }}
-                    className="flex items-center justify-between"
-                    onClick={() => handleDownloadSubtitle(sub.subtitle_url, sub.lan_doc)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/30 text-emerald-800 dark:text-emerald-300 border border-secondary/40 shadow-2xs group-hover:bg-primary/25 group-hover:text-emerald-950 dark:group-hover:text-emerald-100 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-200">
-                        <FileText className="w-4 h-4" strokeWidth={2.2} />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-foreground tracking-tight block">
-                          官方字幕 ({sub.lan_doc})
-                        </span>
-                        <span className="text-[11px] text-muted-foreground mt-0.5 block">
-                          导出为标准 .srt 字幕格式
-                        </span>
-                      </div>
-                    </div>
-
-                    <button
-                      title={`导出 ${sub.lan_doc} 官方双语字幕文件 (.srt)`}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border border-secondary/40 font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs"
+                {data.subtitles.map((sub, sIdx) => {
+                  const isSubActive = activeActionKey === `subtitle_${sub.id}`;
+                  return (
+                    <SpotlightCard
+                      key={sub.id}
+                      style={{
+                        animation: 'staggerIn 0.35s cubic-bezier(0.2, 0.9, 0.3, 1) both',
+                        animationDelay: `${(activeTab === 'all' ? data.videos.length + data.audios.length + 2 + sIdx : sIdx + 1) * 28}ms`,
+                      }}
+                      className="flex items-center justify-between"
                     >
-                      <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
-                      <span>导出 SRT</span>
-                    </button>
-                  </SpotlightCard>
-                ))}
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/30 text-emerald-800 dark:text-emerald-300 border border-secondary/40 shadow-2xs group-hover:bg-primary/25 group-hover:text-emerald-950 dark:group-hover:text-emerald-100 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-200">
+                          <FileText className="w-4 h-4" strokeWidth={2.2} />
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-foreground tracking-tight block">
+                            官方字幕 ({sub.lan_doc})
+                          </span>
+                          <span className="text-[11px] text-muted-foreground mt-0.5 block">
+                            导出为标准 .srt 字幕格式
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={async () => {
+                          setActiveActionKey(`subtitle_${sub.id}`);
+                          try {
+                            await handleDownloadSubtitle(sub.subtitle_url, sub.lan_doc);
+                          } finally {
+                            setActiveActionKey(null);
+                          }
+                        }}
+                        title={`导出 ${sub.lan_doc} 官方双语字幕文件 (.srt)`}
+                        className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer ${
+                          isSubActive
+                            ? 'bg-secondary/60 text-secondary-foreground border-secondary/80'
+                            : 'bg-secondary/25 hover:bg-secondary/50 text-secondary-foreground border-secondary/40'
+                        }`}
+                      >
+                        {isSubActive ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={2.4} />
+                            <span>导出中...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
+                            <span>导出 SRT</span>
+                          </>
+                        )}
+                      </button>
+                    </SpotlightCard>
+                  );
+                })}
 
                 {data.aiSummaryMarkdown && (
                   <SpotlightCard
