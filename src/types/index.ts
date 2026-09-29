@@ -52,9 +52,23 @@ export interface MediaResourceData {
   aiSummaryMarkdown?: string;
 }
 
+export type TaskType = 'video' | 'audio' | 'danmaku' | 'subtitle' | 'cover';
+
+export interface DownloadTask {
+  id: string;
+  type: TaskType;
+  title: string;
+  status: 'pending' | 'downloading_video' | 'downloading_audio' | 'muxing' | 'completed' | 'error' | 'idle';
+  progress: number; // 0 ~ 100
+  speed?: string;
+  message?: string;
+  timestamp: number;
+}
+
 export interface DownloadProgress {
   status: 'idle' | 'downloading_video' | 'downloading_audio' | 'muxing' | 'completed' | 'error';
   progress: number; // 0 ~ 100
   speed?: string;
   message?: string;
 }
+

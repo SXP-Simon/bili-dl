@@ -24,25 +24,31 @@ import { exportAria2Command } from '../media/aria2';
 import { fetchDanmakuAss } from '../media/danmaku';
 import { fetchSubtitleSrt } from '../media/subtitle';
 import { saveBlobAsFile, directDownload } from '../media/downloader';
-import type { MediaResourceData, CategoryType, VideoStreamItem, AudioStreamItem, DownloadProgress } from '../types';
+import type { MediaResourceData, CategoryType, VideoStreamItem, AudioStreamItem, DownloadProgress, DownloadTask } from '../types';
 
 interface DownloadModalProps {
   data: MediaResourceData;
   isDark: boolean;
   loadingCid?: number | null;
+  tasks?: DownloadTask[];
+  onRemoveTask?: (id: string) => void;
+  onClearCompleted?: () => void;
   onToggleDark: () => void;
   onClose: () => void;
   onDownloadVideo: (video: VideoStreamItem, audio?: AudioStreamItem) => void;
   onDownloadAudio: (audio: AudioStreamItem) => void;
   onSelectEpisode: (cid: number) => void;
   onShowToast: (content: string, type?: 'success' | 'error' | 'info') => void;
-  progress: DownloadProgress;
+  progress?: DownloadProgress;
 }
 
 export const DownloadModal: React.FC<DownloadModalProps> = ({
   data,
   isDark,
   loadingCid,
+  tasks = [],
+  onRemoveTask,
+  onClearCompleted,
   onToggleDark,
   onClose,
   onDownloadVideo,
@@ -219,7 +225,9 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
             {/* 1. 视频列表 */}
             {(activeTab === 'all' || activeTab === 'video') &&
               data.videos.map((v, idx) => {
-                const isProcessing = activeActionKey === `video_${v.id}_${v.codecName}`;
+                const isProcessing =
+                  (tasks && tasks.some((t) => t.id === `video_${v.id}_${v.codecName}` && t.status !== 'completed' && t.status !== 'error')) ||
+                  activeActionKey === `video_${v.id}_${v.codecName}`;
                 return (
                   <SpotlightCard
                     key={`${v.id}_${v.codecName}`}
@@ -313,7 +321,9 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
             {/* 2. 音频列表 */}
             {(activeTab === 'all' || activeTab === 'audio') &&
               data.audios.map((a, idx) => {
-                const isProcessing = activeActionKey === `audio_${a.id}`;
+                const isProcessing =
+                  (tasks && tasks.some((t) => t.id === `audio_${a.id}` && t.status !== 'completed' && t.status !== 'error')) ||
+                  activeActionKey === `audio_${a.id}`;
                 return (
                   <SpotlightCard
                     key={a.id}
@@ -575,10 +585,17 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
           </div>
         </div>
 
-        {/* 底部进度条 */}
-        <div className="px-6 pb-5 bg-muted/30 border-t border-border/70">
-          <ProgressBar progress={progress} />
-        </div>
+        {/* 底部进度条与多任务并发管理面板 */}
+        {((tasks && tasks.length > 0) || (progress && progress.status !== 'idle')) && (
+          <div className="px-6 pb-4 bg-muted/30 border-t border-border/70">
+            <ProgressBar
+              tasks={tasks}
+              onRemoveTask={onRemoveTask}
+              onClearCompleted={onClearCompleted}
+              progress={progress}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -4,7 +4,7 @@ import { DownloadModal } from './components/DownloadModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { fetchCurrentMediaData } from './api/bilibili';
 import { downloadAndMuxMp4, downloadAudio } from './media/downloader';
-import type { MediaResourceData, VideoStreamItem, AudioStreamItem, DownloadProgress } from './types';
+import type { MediaResourceData, VideoStreamItem, AudioStreamItem, DownloadTask } from './types';
 
 export const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -12,6 +12,7 @@ export const App: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [mediaData, setMediaData] = useState<MediaResourceData | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [tasks, setTasks] = useState<DownloadTask[]>([]);
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('bili_dl_theme');
@@ -24,11 +25,6 @@ export const App: React.FC = () => {
     } catch {
       return false;
     }
-  });
-
-  const [progress, setProgress] = useState<DownloadProgress>({
-    status: 'idle',
-    progress: 0,
   });
 
   // 监听 B 站或系统的深色模式变化
@@ -64,11 +60,36 @@ export const App: React.FC = () => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
+  const upsertTask = (task: DownloadTask) => {
+    setTasks((prev) => {
+      const idx = prev.findIndex((t) => t.id === task.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = task;
+        return next;
+      }
+      return [task, ...prev];
+    });
+  };
+
+  const updateTaskProgress = (id: string, partial: Partial<DownloadTask>) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, ...partial } : t))
+    );
+  };
+
+  const handleRemoveTask = (id: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const handleClearCompletedTasks = () => {
+    setTasks((prev) => prev.filter((t) => t.status !== 'completed'));
+  };
+
   const handleOpenModal = async (targetCid?: number) => {
     setLoading(true);
     if (targetCid) {
       setLoadingCid(targetCid);
-      setProgress({ status: 'idle', progress: 0 });
     }
     try {
       const data = await fetchCurrentMediaData(targetCid);
@@ -92,26 +113,70 @@ export const App: React.FC = () => {
 
   const handleDownloadVideo = async (video: VideoStreamItem, audio?: AudioStreamItem) => {
     if (!mediaData) return;
+    const taskId = `video_${video.id}_${video.codecName}`;
+    const taskTitle = `${video.qualityName} (${video.codecName})`;
+
+    upsertTask({
+      id: taskId,
+      type: 'video',
+      title: taskTitle,
+      status: 'downloading_video',
+      progress: 0,
+      message: '正在准备视频流...',
+      timestamp: Date.now(),
+    });
+
     try {
       await downloadAndMuxMp4(mediaData.title, video, audio, (prog) => {
-        setProgress(prog);
+        updateTaskProgress(taskId, {
+          status: prog.status,
+          progress: prog.progress,
+          speed: prog.speed,
+          message: prog.message,
+        });
       });
-      showToast('MP4 无损封装完成，已保存到本地', 'success');
+      showToast(`MP4 无损封装完成 (${taskTitle})`, 'success');
     } catch (err: any) {
+      updateTaskProgress(taskId, {
+        status: 'error',
+        message: `下载失败: ${err.message}`,
+      });
       showToast(`下载失败: ${err.message}`, 'error');
     }
   };
 
   const handleDownloadAudio = async (audio: AudioStreamItem) => {
     if (!mediaData) return;
+    const taskId = `audio_${audio.id}`;
+    const taskTitle = audio.name;
+
+    upsertTask({
+      id: taskId,
+      type: 'audio',
+      title: taskTitle,
+      status: 'downloading_audio',
+      progress: 0,
+      message: '正在准备音频流...',
+      timestamp: Date.now(),
+    });
+
     try {
       await downloadAudio(mediaData.title, audio, (prog) => {
-        setProgress(prog);
+        updateTaskProgress(taskId, {
+          status: prog.status,
+          progress: prog.progress,
+          speed: prog.speed,
+          message: prog.message,
+        });
       });
       const isFlac = audio.codec?.toLowerCase().includes('flac') || audio.qualityDesc?.includes('FLAC');
       const ext = isFlac ? 'flac' : 'm4a';
-      showToast(`音频已保存为 .${ext} 文件`, 'success');
+      showToast(`音频已保存为 .${ext} 文件 (${taskTitle})`, 'success');
     } catch (err: any) {
+      updateTaskProgress(taskId, {
+        status: 'error',
+        message: `下载失败: ${err.message}`,
+      });
       showToast(`音频下载失败: ${err.message}`, 'error');
     }
   };
@@ -125,16 +190,17 @@ export const App: React.FC = () => {
           data={mediaData}
           isDark={isDark}
           loadingCid={loadingCid}
+          tasks={tasks}
+          onRemoveTask={handleRemoveTask}
+          onClearCompleted={handleClearCompletedTasks}
           onToggleDark={handleToggleDark}
           onClose={() => {
             setIsModalOpen(false);
-            setProgress({ status: 'idle', progress: 0 });
           }}
           onDownloadVideo={handleDownloadVideo}
           onDownloadAudio={handleDownloadAudio}
           onSelectEpisode={handleSelectEpisode}
           onShowToast={showToast}
-          progress={progress}
         />
       )}
     </div>
