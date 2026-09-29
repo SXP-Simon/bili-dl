@@ -54,48 +54,48 @@ export async function requestBuffer(
 }
 
 /**
- * 探测媒体资源总字节大小（通过轻量 Range 探测）
+ * 探测媒体资源总字节大小（通过轻量 Range 探测，支持多 CDN 备用节点）
  */
-async function probeContentLength(url: string): Promise<number> {
-  return new Promise((resolve) => {
-    GM_xmlhttpRequest({
-      method: 'GET',
-      url,
-      headers: {
-        'Referer': 'https://www.bilibili.com/',
-        'User-Agent': navigator.userAgent,
-        'Range': 'bytes=0-0',
-      },
-      onload: (res: any) => {
-        const headers = res.responseHeaders || '';
-        const contentRange = headers.match(/content-range:\s*bytes\s+\d+-\d+\/(\d+)/i);
-        if (contentRange && contentRange[1]) {
-          const total = parseInt(contentRange[1], 10);
-          if (total > 0) {
-            resolve(total);
-            return;
+async function probeContentLength(urls: string[]): Promise<number> {
+  for (const url of urls) {
+    const size = await new Promise<number>((resolve) => {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url,
+        timeout: 8000,
+        headers: {
+          'Referer': 'https://www.bilibili.com/',
+          'User-Agent': navigator.userAgent,
+          'Range': 'bytes=0-0',
+        },
+        onload: (res: any) => {
+          const headers = res.responseHeaders || '';
+          const contentRange = headers.match(/content-range:\s*bytes\s+\d+-\d+\/(\d+)/i);
+          if (contentRange && contentRange[1]) {
+            const total = parseInt(contentRange[1], 10);
+            if (total > 0) return resolve(total);
           }
-        }
-        const len = headers.match(/content-length:\s*(\d+)/i);
-        if (len && len[1]) {
-          const total = parseInt(len[1], 10);
-          if (total > 0) {
-            resolve(total);
-            return;
+          const len = headers.match(/content-length:\s*(\d+)/i);
+          if (len && len[1]) {
+            const total = parseInt(len[1], 10);
+            if (total > 0) return resolve(total);
           }
-        }
-        resolve(0);
-      },
-      onerror: () => resolve(0),
+          resolve(0);
+        },
+        onerror: () => resolve(0),
+        ontimeout: () => resolve(0),
+      });
     });
-  });
+    if (size > 0) return size;
+  }
+  return 0;
 }
 
 /**
- * 单分片下载 Promise（带超时与自动重试机制）
+ * 单分片下载 Promise（带多 CDN 节点轮转与自动重试机制）
  */
 async function fetchChunkWithRetry(
-  url: string,
+  urls: string[],
   start: number,
   end: number,
   onChunkProgress: (loaded: number) => void,
@@ -104,15 +104,16 @@ async function fetchChunkWithRetry(
   let lastError: any = null;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
+    const targetUrl = urls[(attempt - 1) % urls.length];
     try {
       const result = await new Promise<Uint8Array>((resolve, reject) => {
         let hasFinished = false;
 
         const req = GM_xmlhttpRequest({
           method: 'GET',
-          url,
+          url: targetUrl,
           responseType: 'arraybuffer',
-          timeout: 25000,
+          timeout: 15000,
           headers: {
             'Referer': 'https://www.bilibili.com/',
             'User-Agent': navigator.userAgent,
@@ -135,7 +136,7 @@ async function fetchChunkWithRetry(
           },
           ontimeout: () => {
             hasFinished = true;
-            reject(new Error(`Chunk ${start}-${end} timeout (25s)`));
+            reject(new Error(`Chunk ${start}-${end} timeout (15s)`));
           },
           onerror: (err: any) => {
             hasFinished = true;
@@ -143,7 +144,7 @@ async function fetchChunkWithRetry(
           },
         });
 
-        // 兜底超时清理
+        // 兜底看门狗
         setTimeout(() => {
           if (!hasFinished) {
             try {
@@ -151,16 +152,15 @@ async function fetchChunkWithRetry(
             } catch {}
             reject(new Error(`Chunk ${start}-${end} watchdog timeout`));
           }
-        }, 30000);
+        }, 18000);
       });
 
       return result;
     } catch (err: any) {
       lastError = err;
-      logger.warn('Range', `分片 [${start}-${end}] 第 ${attempt}/${retries} 次尝试失败: ${err.message}`);
+      logger.warn('Range', `分片 [${start}-${end}] 第 ${attempt}/${retries} 次尝试失败，正在切换备用节点: ${err.message}`);
       if (attempt < retries) {
-        // 退避 800ms 重试
-        await new Promise((r) => setTimeout(r, 800 * attempt));
+        await new Promise((r) => setTimeout(r, 600 * attempt));
       }
     }
   }
@@ -169,28 +169,31 @@ async function fetchChunkWithRetry(
 }
 
 /**
- * 分块多连接高速并发下载器（支持 4~6 线程 Range 并发，主动心跳测速与停滞检测）
+ * 分块多连接高速并发下载器（支持 3~4 线程 Range 并发，多 CDN 自动故障转移）
  */
 export async function requestChunkedBuffer(
-  url: string,
+  urls: string | string[],
   onProgress?: RequestProgressCallback,
-  concurrency = 5
+  concurrency = 3
 ): Promise<ArrayBuffer> {
+  const urlList = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
+  if (urlList.length === 0) throw new Error('No valid URL provided');
+
   // 1. 探测资源总大小
-  const totalBytes = await probeContentLength(url);
+  const totalBytes = await probeContentLength(urlList);
 
   // 如果未能探测到大小或文件较小（< 3MB），使用标准单流下载
   if (!totalBytes || totalBytes < 3 * 1024 * 1024) {
-    logger.info('Network', '文件较小或不支持 Range 探测，降级为单流下载', { totalBytes });
-    return requestBuffer(url, onProgress);
+    logger.info('Network', '文件较小或不支持 Range 探测，使用标准流下载', { totalBytes });
+    return requestBuffer(urlList[0], onProgress);
   }
 
-  // 2. 切分分片（按 4~6 个并发连接均分）
-  const chunkCount = Math.min(concurrency, Math.max(2, Math.ceil(totalBytes / (6 * 1024 * 1024))));
+  // 2. 切分分片（按 3~4 个并发连接均分，避免单 IP 过载被 B 站 CDN 丢包）
+  const chunkCount = Math.min(concurrency, Math.max(2, Math.ceil(totalBytes / (8 * 1024 * 1024))));
   const chunkSize = Math.ceil(totalBytes / chunkCount);
   const chunks: Array<{ start: number; end: number; index: number }> = [];
 
-  logger.info('Range', `启动多分片并发加速: ${(totalBytes / 1024 / 1024).toFixed(1)} MB (${chunkCount} 线程并发)`);
+  logger.info('Range', `启动多分片并发加速: ${(totalBytes / 1024 / 1024).toFixed(1)} MB (${chunkCount} 线程并发，${urlList.length} 个 CDN 节点备用)`);
 
   for (let i = 0; i < chunkCount; i++) {
     const start = i * chunkSize;
@@ -246,7 +249,7 @@ export async function requestChunkedBuffer(
     // 3. 并发执行各分片下载
     await Promise.all(
       chunks.map(async (chunk) => {
-        const u8 = await fetchChunkWithRetry(url, chunk.start, chunk.end, (loaded) => {
+        const u8 = await fetchChunkWithRetry(urlList, chunk.start, chunk.end, (loaded) => {
           loadedPerChunk[chunk.index] = loaded;
           lastDataTime = Date.now();
         });

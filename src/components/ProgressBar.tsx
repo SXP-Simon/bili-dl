@@ -110,7 +110,12 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
                         失败
                       </span>
                     )}
-                    {isActive && (
+                    {task.status === 'pending' && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-md border border-border/60">
+                        排队中
+                      </span>
+                    )}
+                    {isActive && task.status !== 'pending' && (
                       <div className="flex items-center gap-1.5">
                         <Loader2 className="w-3 h-3 text-primary animate-spin" strokeWidth={2.4} />
                         <span className="font-mono font-bold text-xs text-primary">{task.progress}%</span>

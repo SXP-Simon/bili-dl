@@ -78,16 +78,18 @@ export async function downloadAndMuxMp4(
       message: `正在建立多连接下载: ${video.qualityName} (${video.codecName})`,
     });
 
-    // 1. 双轨多连接并行拉取（Zero-Wait Parallelism）
-    const videoPromise = requestChunkedBuffer(video.baseUrl, (loaded, total, speed) => {
+    // 1. 双轨多连接并行拉取（带备用 CDN 故障转移）
+    const videoUrls = [video.baseUrl, ...(video.backupUrl || [])].filter(Boolean);
+    const videoPromise = requestChunkedBuffer(videoUrls, (loaded, total, speed) => {
       videoLoaded = loaded;
       videoTotal = total;
       if (speed !== undefined) currentSpeed = speed;
       updateCombinedProgress();
     });
 
-    const audioPromise = audio
-      ? requestChunkedBuffer(audio.baseUrl, (loaded, total, speed) => {
+    const audioUrls = audio ? [audio.baseUrl, ...(audio.backupUrl || [])].filter(Boolean) : [];
+    const audioPromise = audioUrls.length > 0
+      ? requestChunkedBuffer(audioUrls, (loaded, total, speed) => {
           audioLoaded = loaded;
           audioTotal = total;
           if (speed !== undefined) currentSpeed = speed;
@@ -154,6 +156,7 @@ export async function downloadAudio(
   const ext = isFlac ? 'flac' : 'm4a';
   const mimeType = isFlac ? 'audio/flac' : 'audio/mp4';
   const filename = `${title}_${audio.name}.${ext}`;
+  const audioUrls = [audio.baseUrl, ...(audio.backupUrl || [])].filter(Boolean);
 
   logger.info('Downloader', `开始下载音频轨: ${filename}`);
 
@@ -164,7 +167,7 @@ export async function downloadAudio(
       message: `正在建立多连接下载: ${audio.name}`,
     });
 
-    const audioBuffer = await requestChunkedBuffer(audio.baseUrl, (loaded, total, speed) => {
+    const audioBuffer = await requestChunkedBuffer(audioUrls, (loaded, total, speed) => {
       const pct = Math.min(99, Math.floor((loaded / total) * 100));
       onProgress({
         status: 'downloading_audio',
