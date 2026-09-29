@@ -1,4 +1,5 @@
 import { requestJson } from '../api/http';
+import { logger } from '../utils/logger';
 
 export interface BiliSubtitleBody {
   from: number;
@@ -12,7 +13,11 @@ export interface BiliSubtitleBody {
  */
 export async function fetchSubtitleSrt(subtitleUrl: string): Promise<Blob> {
   const finalUrl = subtitleUrl.startsWith('//') ? `https:${subtitleUrl}` : subtitleUrl;
+  logger.info('Subtitle', `开始请求外挂字幕源: ${finalUrl.slice(0, 70)}...`);
   const data = await requestJson<{ body: BiliSubtitleBody[] }>(finalUrl);
+
+  const list = data?.body || [];
+  logger.info('Subtitle', `成功获取 ${list.length} 条字幕文本，正在封装 SRT...`);
 
   let srt = '';
   const formatSrtTime = (seconds: number) => {
@@ -23,11 +28,13 @@ export async function fetchSubtitleSrt(subtitleUrl: string): Promise<Blob> {
     return `${h}:${m}:${s},${ms}`;
   };
 
-  (data?.body || []).forEach((item, index) => {
+  list.forEach((item, index) => {
     srt += `${index + 1}\n`;
     srt += `${formatSrtTime(item.from)} --> ${formatSrtTime(item.to)}\n`;
     srt += `${item.content}\n\n`;
   });
 
-  return new Blob([srt], { type: 'text/plain;charset=utf-8' });
+  const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });
+  logger.success('Subtitle', `SRT 字幕生成完成: 共 ${list.length} 行 (${(blob.size / 1024).toFixed(1)} KB)`);
+  return blob;
 }

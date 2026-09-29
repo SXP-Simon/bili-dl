@@ -4,7 +4,7 @@ type LogListener = (logs: LogEntry[]) => void;
 
 class Logger {
   private logs: LogEntry[] = [];
-  private maxLogs = 250;
+  private maxLogs = 500;
   private listeners: Set<LogListener> = new Set();
 
   public log(level: LogLevel, tag: string, message: string, details?: any): void {

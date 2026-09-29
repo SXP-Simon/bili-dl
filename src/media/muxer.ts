@@ -31,13 +31,15 @@ export async function muxMp4(
             outMp4.flush();
             const buffer = outMp4.getBuffer();
             if (buffer && buffer.byteLength > 0) {
+              logger.success('Muxer', `MP4 封装合成成功: ${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB`);
               onProgress?.(100);
               resolve(new Blob([buffer], { type: 'video/mp4' }));
             } else {
-              // 若导出为空则兜底原视频流
+              logger.warn('Muxer', '封装输出为空，降级回退原始视频流');
               resolve(new Blob([videoBuffer], { type: 'video/mp4' }));
             }
           } catch (e: any) {
+            logger.error('Muxer', `MP4 导出异常: ${e.message}`, e);
             reject(new Error(`MP4 导出异常: ${e.message}`));
           }
         }
@@ -50,6 +52,8 @@ export async function muxMp4(
           const inTrak = (inVideo as any).getTrackById(track.id) || (inVideo as any).moov?.traks?.[0];
           const entry = inTrak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
           const entryType = entry?.type || (track.codec ? track.codec.substring(0, 4) : 'avc1');
+
+          logger.info('Muxer', `提取视频轨: ${entryType} (${track.track_width}x${track.track_height}), 样本数: ${track.nb_samples}`);
 
           videoOutTrackId = outMp4.addTrack({
             type: entryType,
@@ -92,7 +96,7 @@ export async function muxMp4(
       };
 
       inVideo.onError = (err) => {
-        console.warn('Video parse error:', err);
+        logger.warn('Muxer', `视频样本解析警告: ${err}`);
       };
 
       // 2. 音频轨解析与样本抽取（如果存在）
@@ -103,6 +107,8 @@ export async function muxMp4(
             const inTrak = (inAudio as any).getTrackById(track.id) || (inAudio as any).moov?.traks?.[0];
             const entry = inTrak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
             const entryType = entry?.type || (track.codec ? track.codec.substring(0, 4) : 'mp4a');
+
+            logger.info('Muxer', `提取音频轨: ${entryType}, 采样率: ${(track as any).audio?.sample_rate || 44100}Hz, 声道: ${(track as any).audio?.channel_count || 2}`);
 
             audioOutTrackId = outMp4.addTrack({
               type: entryType,
@@ -141,7 +147,7 @@ export async function muxMp4(
         };
 
         inAudio.onError = (err) => {
-          console.warn('Audio parse error:', err);
+          logger.warn('Muxer', `音频样本解析警告: ${err}`);
         };
       }
 

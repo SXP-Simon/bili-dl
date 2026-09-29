@@ -1,9 +1,11 @@
 import { requestBuffer } from '../api/http';
+import { logger } from '../utils/logger';
 
 /**
  * 将 B 站 XML 格式弹幕转换为标准 ASS 字幕文件
  */
 export async function fetchDanmakuAss(cid: number, title: string): Promise<Blob> {
+  logger.info('Danmaku', `开始拉取弹幕流 (CID: ${cid})`);
   const url = `https://api.bilibili.com/x/v1/dm/list.so?oid=${cid}`;
   const buffer = await requestBuffer(url);
   const decoder = new TextDecoder('utf-8');
@@ -12,6 +14,7 @@ export async function fetchDanmakuAss(cid: number, title: string): Promise<Blob>
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
   const dElements = Array.from(xmlDoc.getElementsByTagName('d'));
+  logger.info('Danmaku', `解析到 ${dElements.length} 条弹幕数据，正在生成 ASS...`);
 
   // 生成标准 ASS 头部
   let assContent = `[Script Info]
@@ -57,5 +60,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     assContent += `Dialogue: 0,${start},${end},Danmaku,,0,0,0,,{\\c&H${bgr}&}${text}\n`;
   });
 
-  return new Blob([assContent], { type: 'text/plain;charset=utf-8' });
+  const blob = new Blob([assContent], { type: 'text/plain;charset=utf-8' });
+  logger.success('Danmaku', `弹幕转换完成: 共 ${dElements.length} 条，输出 ASS ${(blob.size / 1024).toFixed(1)} KB`);
+  return blob;
 }
