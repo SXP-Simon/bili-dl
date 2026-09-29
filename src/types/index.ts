@@ -85,5 +85,17 @@ export interface LogEntry {
   details?: any;
 }
 
+export interface QuickActionItem {
+  id: string;
+  icon: React.ReactNode;
+  label: string;
+  description?: string;
+  badge?: string;
+  danger?: boolean;
+  disabled?: boolean;
+  loading?: boolean;
+  onClick: () => Promise<void> | void;
+}
+
 
 

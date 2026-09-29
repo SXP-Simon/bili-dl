@@ -4,9 +4,10 @@ import { Download, Loader2, GripVertical } from 'lucide-react';
 interface FloatButtonProps {
   loading: boolean;
   onClick: () => void;
+  onContextMenu?: (e: React.MouseEvent, pos: { x: number; y: number }) => void;
 }
 
-export const FloatButton: React.FC<FloatButtonProps> = ({ loading, onClick }) => {
+export const FloatButton: React.FC<FloatButtonProps> = ({ loading, onClick, onContextMenu }) => {
   const [position, setPosition] = useState<{ x?: number; y?: number }>({});
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number }>({
@@ -68,6 +69,19 @@ export const FloatButton: React.FC<FloatButtonProps> = ({ loading, onClick }) =>
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onContextMenu) {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      const pos = {
+        x: rect ? rect.left : e.clientX,
+        y: rect ? rect.top : e.clientY,
+      };
+      onContextMenu(e, pos);
+    }
+  };
+
   const isCustomPos = position.x !== undefined && position.y !== undefined;
 
   return (
@@ -75,7 +89,8 @@ export const FloatButton: React.FC<FloatButtonProps> = ({ loading, onClick }) =>
       ref={buttonRef}
       onMouseDown={handleMouseDown}
       onClick={handleClick}
-      title="Bili-DL 视频下载 (可拖拽移动)"
+      onContextMenu={handleContextMenu}
+      title="Bili-DL 媒体下载 (左键打开面板 · 右键快捷下载 · 可拖拽移动)"
       style={
         isCustomPos
           ? { left: `${position.x}px`, top: `${position.y}px`, right: 'auto', bottom: 'auto' }

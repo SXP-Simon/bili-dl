@@ -1,16 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Video, Music, FolderArchive } from 'lucide-react';
 import { FloatButton } from './components/FloatButton';
 import { DownloadModal } from './components/DownloadModal';
+import { QuickActionMenu } from './components/QuickActionMenu';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { fetchCurrentMediaData, getVideoTitle } from './api/bilibili';
-import { downloadAndMuxMp4, downloadAudio } from './media/downloader';
+import { downloadAndMuxMp4, downloadAudio, saveBlobAsFile } from './media/downloader';
+import { fetchSubtitleSrt } from './media/subtitle';
 import { batchDetectAndDownloadSubtitles } from './media/batchSubtitle';
-import type { MediaResourceData, VideoStreamItem, AudioStreamItem, DownloadTask } from './types';
+import { batchDownloadAllLowestAudios, batchDownloadAllHighestVideos } from './media/batchDownloader';
+import type { MediaResourceData, VideoStreamItem, AudioStreamItem, DownloadTask, QuickActionItem } from './types';
 
 export const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loadingCid, setLoadingCid] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
+  const [quickMenuPos, setQuickMenuPos] = useState<{ x: number; y: number } | undefined>(undefined);
   const [mediaData, setMediaData] = useState<MediaResourceData | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
@@ -318,10 +324,200 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleDownloadBatchAudiosLowest = async (customData?: MediaResourceData) => {
+    let data = customData || mediaData;
+    if (!data) {
+      setLoading(true);
+      try {
+        data = await fetchCurrentMediaData();
+        if (data) setMediaData(data);
+      } finally {
+        setLoading(false);
+      }
+    }
+    if (!data) {
+      showToast('未能解析到视频资源', 'error');
+      return;
+    }
+
+    if (data.pages.length <= 1) {
+      // 单 P 视频：直接下载最低音质
+      const lowestAudio = [...data.audios].sort((a, b) => a.bandwidth - b.bandwidth)[0] || data.audios[data.audios.length - 1];
+      if (lowestAudio) {
+        await handleDownloadAudio(lowestAudio);
+      } else {
+        showToast('未能获取到音频流', 'error');
+      }
+      return;
+    }
+
+    const controller = new AbortController();
+    const taskId = `batch_audios_${data.bvid}`;
+    activeControllers.current.set(taskId, controller);
+
+    showToast(`已将 ${data.pages.length} 集最低音质音频加入下载队列`, 'info');
+
+    try {
+      await batchDownloadAllLowestAudios(
+        data.bvid,
+        data.pages,
+        upsertTask,
+        updateTaskProgress,
+        `全集音频-${data.bvid}`,
+        controller.signal
+      );
+      if (!controller.signal.aborted) {
+        showToast(`全集 ${data.pages.length} P 音频批量下载任务已就绪`, 'success');
+      }
+    } catch (err: any) {
+      if (controller.signal.aborted || err?.name === 'AbortError') {
+        showToast('全集音频下载任务已取消', 'info');
+      } else {
+        showToast(`批量音频下载失败: ${err.message}`, 'error');
+      }
+    } finally {
+      activeControllers.current.delete(taskId);
+    }
+  };
+
+  const handleDownloadBatchVideosHighest = async (customData?: MediaResourceData) => {
+    let data = customData || mediaData;
+    if (!data) {
+      setLoading(true);
+      try {
+        data = await fetchCurrentMediaData();
+        if (data) setMediaData(data);
+      } finally {
+        setLoading(false);
+      }
+    }
+    if (!data) {
+      showToast('未能解析到视频资源', 'error');
+      return;
+    }
+
+    if (data.pages.length <= 1) {
+      // 单 P 视频：直接下载最高画质视频 + 最佳音频
+      const highestVideo = data.videos[0];
+      const bestAudio = data.audios[0];
+      if (highestVideo) {
+        await handleDownloadVideo(highestVideo, bestAudio);
+      } else {
+        showToast('未能获取到视频流', 'error');
+      }
+      return;
+    }
+
+    const controller = new AbortController();
+    const taskId = `batch_videos_${data.bvid}`;
+    activeControllers.current.set(taskId, controller);
+
+    showToast(`已将 ${data.pages.length} 集最高画质 MP4 加入合成队列`, 'info');
+
+    try {
+      await batchDownloadAllHighestVideos(
+        data.bvid,
+        data.pages,
+        upsertTask,
+        updateTaskProgress,
+        `全集视频-${data.bvid}`,
+        controller.signal
+      );
+      if (!controller.signal.aborted) {
+        showToast(`全集 ${data.pages.length} P 视频批量合成任务已就绪`, 'success');
+      }
+    } catch (err: any) {
+      if (controller.signal.aborted || err?.name === 'AbortError') {
+        showToast('全集视频下载任务已取消', 'info');
+      } else {
+        showToast(`批量视频合成失败: ${err.message}`, 'error');
+      }
+    } finally {
+      activeControllers.current.delete(taskId);
+    }
+  };
+
+  const handleFloatButtonContextMenu = (e: React.MouseEvent, pos: { x: number; y: number }) => {
+    setQuickMenuPos(pos);
+    setIsQuickMenuOpen(true);
+  };
+
+  // 抽象与配置右键快捷操作列表 (支持任意未来快捷项灵活追加)
+  const quickActions: QuickActionItem[] = [
+    {
+      id: 'quick_batch_subtitles',
+      icon: <FolderArchive className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+      label: '一键下载全部字幕',
+      description: mediaData && mediaData.pages.length > 1
+        ? `批量探测全集 ${mediaData.pages.length} P 字幕并打包 ZIP 文件夹`
+        : '提取当前视频官方/AI双语字幕 (.srt)',
+      badge: 'SRT',
+      onClick: async () => {
+        let targetData = mediaData;
+        if (!targetData) {
+          setLoading(true);
+          try {
+            targetData = await fetchCurrentMediaData();
+            if (targetData) setMediaData(targetData);
+          } finally {
+            setLoading(false);
+          }
+        }
+        if (targetData) {
+          if (targetData.pages.length > 1) {
+            await handleDownloadBatchSubtitles();
+          } else if (targetData.subtitles.length > 0) {
+            const sub = targetData.subtitles[0];
+            const blob = await fetchSubtitleSrt(sub.subtitle_url, '快捷字幕');
+            saveBlobAsFile(blob, `${targetData.title}-${sub.lan_doc}字幕.srt`);
+            showToast(`${sub.lan_doc}字幕已保存`, 'success');
+          } else {
+            showToast('当前视频未探测到外挂字幕', 'info');
+          }
+        }
+      },
+    },
+    {
+      id: 'quick_batch_audios_lowest',
+      icon: <Music className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+      label: '一键下载全部最低质量音频',
+      description: mediaData && mediaData.pages.length > 1
+        ? `批量提取全集 ${mediaData.pages.length} P 最低码率音频 (省流)`
+        : '提取当前视频最低码率独立音轨 (.m4a)',
+      badge: '64K',
+      onClick: async () => {
+        await handleDownloadBatchAudiosLowest();
+      },
+    },
+    {
+      id: 'quick_batch_videos_highest',
+      icon: <Video className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+      label: '一键下载全部最高质量视频',
+      description: mediaData && mediaData.pages.length > 1
+        ? `批量下载全集 ${mediaData.pages.length} P 并无损封装含音频 MP4`
+        : '下载最高画质视频并合成含音频 MP4',
+      badge: 'MP4',
+      onClick: async () => {
+        await handleDownloadBatchVideosHighest();
+      },
+    },
+  ];
+
   return (
     <div className={isDark ? 'dark' : ''}>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-      <FloatButton loading={loading} onClick={() => handleOpenModal()} />
+      <FloatButton
+        loading={loading}
+        onClick={() => handleOpenModal()}
+        onContextMenu={handleFloatButtonContextMenu}
+      />
+      <QuickActionMenu
+        isOpen={isQuickMenuOpen}
+        onClose={() => setIsQuickMenuOpen(false)}
+        actions={quickActions}
+        anchorPosition={quickMenuPos}
+        title="快捷下载选项"
+      />
       {isModalOpen && mediaData && (
         <DownloadModal
           data={mediaData}
