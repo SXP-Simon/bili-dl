@@ -40,7 +40,7 @@
 
 ### 方式一：直接安装脚本（推荐）
 1. 在浏览器安装 [Tampermonkey（篡改猴）](https://www.tampermonkey.net/) 或 [ScriptCat（脚本猫）](https://scriptcat.org/) 扩展；
-2. 下载本仓库中的编译产物 [`dist/bili-dl.user.js`](./dist/bili-dl.user.js) 并粘贴导入到扩展中保存；
+2. 点击 **[⚡ 一键安装最新版脚本 (bili-dl.user.js)](https://github.com/SXP-Simon/bili-dl/releases/latest/download/bili-dl.user.js)** 或前往 **[GitHub Releases](https://github.com/SXP-Simon/bili-dl/releases)** 下载发布包；
 3. 打开任意 B 站视频播放页面（`https://www.bilibili.com/video/BV...`），即可在右侧看到悬浮下载胶囊，点击即可唤起面板。
 
 ### 方式二：本地开发模式（支持 HMR 热更新）
