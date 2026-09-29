@@ -9,6 +9,7 @@ import { downloadAndMuxMp4, downloadAudio, saveBlobAsFile } from './media/downlo
 import { fetchSubtitleSrt } from './media/subtitle';
 import { batchDetectAndDownloadSubtitles } from './media/batchSubtitle';
 import { batchDownloadAllLowestAudios, batchDownloadAllHighestVideos } from './media/batchDownloader';
+import { logger } from './utils/logger';
 import type { MediaResourceData, VideoStreamItem, AudioStreamItem, DownloadTask, QuickActionItem } from './types';
 
 export const App: React.FC = () => {
@@ -490,6 +491,7 @@ export const App: React.FC = () => {
         : '提取当前视频官方/AI双语字幕 (.srt)',
       badge: 'SRT',
       onClick: async () => {
+        logger.info('QuickAction', '触发快捷下载: 一键下载全部字幕');
         await handleDownloadBatchSubtitles();
       },
     },
@@ -503,6 +505,7 @@ export const App: React.FC = () => {
         : '提取当前视频最低码率独立音轨 (.m4a)',
       badge: '64K',
       onClick: async () => {
+        logger.info('QuickAction', '触发快捷下载: 一键下载全部最低质量音频');
         await handleDownloadBatchAudiosLowest();
       },
     },
@@ -516,6 +519,7 @@ export const App: React.FC = () => {
         : '下载最高画质视频并合成含音频 MP4',
       badge: 'MP4',
       onClick: async () => {
+        logger.info('QuickAction', '触发快捷下载: 一键下载全部最高质量视频');
         await handleDownloadBatchVideosHighest();
       },
     },

@@ -12,7 +12,7 @@ interface QuickActionMenuProps {
 
 /**
  * 抽象的高可复用快捷功能上下文菜单组件 (TweakCN Light Green + OKLCH 风格)
- * 方便后续随心扩展和注入各类批量与全局快捷功能
+ * 采用全屏透明遮罩捕获外部点击与右键，彻底兼容 Shadow DOM 事件穿透
  */
 export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
   isOpen,
@@ -32,21 +32,9 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
       }
     };
 
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-
     window.addEventListener('keydown', handleKeyDown);
-    const timer = setTimeout(() => {
-      window.addEventListener('mousedown', handleClickOutside);
-    }, 20);
-
     return () => {
-      clearTimeout(timer);
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isOpen, onClose]);
 
@@ -64,11 +52,25 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
   top = Math.max(16, Math.min(window.innerHeight - menuHeight - 16, top));
 
   return (
-    <div className="fixed inset-0 z-[10000000] pointer-events-none">
+    <div
+      className="fixed inset-0 z-[10000000] bg-transparent"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      onContextMenu={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault();
+          onClose();
+        }
+      }}
+    >
       <div
         ref={menuRef}
         style={{ left: `${left}px`, top: `${top}px` }}
-        className="pointer-events-auto absolute w-[280px] rounded-2xl bg-card/95 backdrop-blur-md border border-border/85 shadow-2xl overflow-hidden animate-modal-in select-none text-card-foreground"
+        onClick={(e) => e.stopPropagation()}
+        className="absolute w-[280px] rounded-2xl bg-card/95 backdrop-blur-md border border-border/85 shadow-2xl overflow-hidden animate-modal-in select-none text-card-foreground"
       >
         {/* 顶部标题栏 */}
         <div className="flex items-center justify-between px-3.5 py-2.5 bg-muted/40 border-b border-border/70">
@@ -89,6 +91,7 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
             return (
               <button
                 key={action.id}
+                type="button"
                 disabled={isDisabled}
                 onClick={async (e) => {
                   e.preventDefault();
