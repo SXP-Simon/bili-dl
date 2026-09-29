@@ -112,7 +112,53 @@ async function probeContentLength(urls: string[]): Promise<number> {
 }
 
 /**
- * 单分片下载 Promise（带多 CDN 节点轮转与自动重试机制）
+ * 全局并发连接数调度器（限制全页面最大同时活跃 Range 连接，防止多任务并发打爆 B 站单 IP 阈值）
+ */
+class GlobalConcurrencyLimiter {
+  private maxConcurrent = 4; // B 站 CDN 单 IP 最优安全并发连接数
+  private activeCount = 0;
+  private queue: Array<() => void> = [];
+
+  public async acquire(): Promise<() => void> {
+    if (this.activeCount < this.maxConcurrent) {
+      this.activeCount++;
+      let released = false;
+      return () => {
+        if (!released) {
+          released = true;
+          this.activeCount--;
+          this.next();
+        }
+      };
+    }
+
+    return new Promise<() => void>((resolve) => {
+      this.queue.push(() => {
+        this.activeCount++;
+        let released = false;
+        resolve(() => {
+          if (!released) {
+            released = true;
+            this.activeCount--;
+            this.next();
+          }
+        });
+      });
+    });
+  }
+
+  private next() {
+    if (this.activeCount < this.maxConcurrent && this.queue.length > 0) {
+      const nextFn = this.queue.shift();
+      nextFn?.();
+    }
+  }
+}
+
+const globalLimiter = new GlobalConcurrencyLimiter();
+
+/**
+ * 单分片下载 Promise（带全局并发控制、多 CDN 节点轮转与防雷鸣抖动重试）
  */
 async function fetchChunkWithRetry(
   urls: string[],
@@ -126,6 +172,10 @@ async function fetchChunkWithRetry(
   for (let attempt = 1; attempt <= retries; attempt++) {
     const targetUrl = urls[(attempt - 1) % urls.length];
     const currentNodeLabel = getCdnNodeLabel(targetUrl);
+
+    // 申请全局并发配额槽位（排队保证不超出 IP 阈值）
+    const release = await globalLimiter.acquire();
+
     try {
       const result = await new Promise<Uint8Array>((resolve, reject) => {
         let hasFinished = false;
@@ -176,8 +226,10 @@ async function fetchChunkWithRetry(
         }, 18000);
       });
 
+      release();
       return result;
     } catch (err: any) {
+      release();
       lastError = err;
       const nextTargetUrl = urls[attempt % urls.length];
       const nextNodeLabel = getCdnNodeLabel(nextTargetUrl);
@@ -186,7 +238,9 @@ async function fetchChunkWithRetry(
         `分片 [${start}-${end}] 在节点【${currentNodeLabel}】第 ${attempt}/${retries} 次尝试失败，正在无缝切换至备用节点【${nextNodeLabel}】: ${err.message}`
       );
       if (attempt < retries) {
-        await new Promise((r) => setTimeout(r, 500 * attempt));
+        // 加入 300ms~800ms 随机退避抖动，防止重试群体风暴 (Thundering Herd)
+        const jitter = Math.floor(Math.random() * 500) + 300;
+        await new Promise((r) => setTimeout(r, jitter * attempt));
       }
     }
   }
