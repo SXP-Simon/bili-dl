@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Sparkles,
@@ -62,25 +62,6 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   const [copiedSummary, setCopiedSummary] = useState(false);
   const [activeActionKey, setActiveActionKey] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
-  const innerListRef = useRef<HTMLDivElement>(null);
-  const [listHeight, setListHeight] = useState<number | undefined>(undefined);
-
-  useEffect(() => {
-    const updateHeight = () => {
-      if (innerListRef.current) {
-        const height = innerListRef.current.offsetHeight;
-        const maxHeight = typeof window !== 'undefined' ? window.innerHeight * 0.44 : 360;
-        setListHeight(Math.min(height, maxHeight));
-      }
-    };
-    updateHeight();
-    const rafId = requestAnimationFrame(updateHeight);
-    const timer = setTimeout(updateHeight, 50);
-    return () => {
-      cancelAnimationFrame(rafId);
-      clearTimeout(timer);
-    };
-  }, [activeTab, data]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -138,24 +119,24 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative w-full max-w-xl max-h-[85vh] flex flex-col rounded-3xl bg-background text-foreground border border-border/80 shadow-2xl overflow-hidden animate-modal-in">
-        {/* 顶部 Header：温润米灰过渡 */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-3.5 border-b border-border/70 bg-muted/40">
+      <div className="relative w-full max-w-xl max-h-[90vh] flex flex-col rounded-3xl bg-background text-foreground border border-border/80 shadow-2xl overflow-hidden animate-modal-in">
+        {/* 顶部 Header：温润米灰过渡 (固定不被挤压) */}
+        <div className="flex-shrink-0 flex items-center justify-between px-6 pt-4 pb-3 border-b border-border/70 bg-muted/40">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/20 text-emerald-900 dark:text-emerald-200 border border-primary/40 shadow-2xs font-bold">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/20 text-emerald-900 dark:text-emerald-200 border border-primary/40 shadow-2xs font-bold shrink-0">
               <Sparkles className="w-4 h-4 text-emerald-700 dark:text-emerald-300" strokeWidth={2.4} />
             </div>
             <div>
-              <h2 className="text-sm font-semibold tracking-tight text-foreground">
+              <h2 className="text-sm font-semibold tracking-tight text-foreground whitespace-nowrap">
                 Bili-DL 媒体资源下载
               </h2>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground whitespace-nowrap">
                 无损混流封装 · 独立音轨 · 弹幕与字幕导出
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => setShowLogs(!showLogs)}
               title={showLogs ? '收起诊断日志' : '查看运行日志与诊断信息'}
@@ -187,8 +168,8 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
           </div>
         </div>
 
-        {/* 视频信息预览 */}
-        <div className="px-6 py-3">
+        {/* 视频信息预览 (固定) */}
+        <div className="flex-shrink-0 px-6 pt-3 pb-2">
           <div className="flex gap-3.5 p-3 rounded-2xl bg-card border border-border/80 items-center shadow-2xs">
             {data.cover && (
               <img
@@ -215,8 +196,8 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
           </div>
         </div>
 
-        {/* 分 P 选择器 */}
-        <div className="px-6">
+        {/* 分 P 选择器 (固定) */}
+        <div className="flex-shrink-0 px-6">
           <EpisodePicker
             pages={data.pages}
             currentCid={data.cid}
@@ -225,20 +206,14 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
           />
         </div>
 
-        {/* Tab 控制条 */}
-        <div className="px-6 py-1">
+        {/* Tab 控制条 (固定) */}
+        <div className="flex-shrink-0 px-6 py-1">
           <TabPill tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
         </div>
 
-        {/* 资源列表区：平滑高度自适应与优雅层叠渐入（彻底告别闪烁感） */}
-        <div
-          style={{
-            height: listHeight !== undefined ? `${listHeight}px` : 'auto',
-            transition: 'height 0.38s cubic-bezier(0.25, 1, 0.5, 1)',
-          }}
-          className="overflow-y-auto pl-6 pr-4 scrollbar-clean will-change-[height]"
-        >
-          <div ref={innerListRef} className="space-y-2 py-2">
+        {/* 资源列表区：弹性自适应滚动，弹窗内容多时自动收缩滚动而不破坏 Header */}
+        <div className="flex-1 min-h-[120px] max-h-[360px] overflow-y-auto pl-6 pr-4 scrollbar-clean">
+          <div className="space-y-2 py-2">
             {/* 1. 视频列表 */}
             {(activeTab === 'all' || activeTab === 'video') &&
               data.videos.map((v, idx) => {
@@ -602,9 +577,9 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
           </div>
         </div>
 
-        {/* 底部进度条与多任务并发管理面板 */}
+        {/* 底部进度条与多任务并发管理面板 (固定高度内部滚动) */}
         {((tasks && tasks.length > 0) || (progress && progress.status !== 'idle')) && (
-          <div className="px-6 pb-4 bg-muted/30 border-t border-border/70">
+          <div className="flex-shrink-0 max-h-44 overflow-y-auto px-6 pb-3 bg-muted/30 border-t border-border/70 scrollbar-clean">
             <ProgressBar
               tasks={tasks}
               onRemoveTask={onRemoveTask}
@@ -614,9 +589,9 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
           </div>
         )}
 
-        {/* 底部运行日志与诊断控制台 */}
+        {/* 底部运行日志与诊断控制台 (固定高度内部滚动) */}
         {showLogs && (
-          <div className="max-h-64 border-t border-border/70">
+          <div className="flex-shrink-0 max-h-56 border-t border-border/70 flex flex-col overflow-hidden">
             <LogViewer onClose={() => setShowLogs(false)} />
           </div>
         )}
