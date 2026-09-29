@@ -52,7 +52,7 @@ export interface MediaResourceData {
   aiSummaryMarkdown?: string;
 }
 
-export type TaskType = 'video' | 'audio' | 'danmaku' | 'subtitle' | 'cover';
+export type TaskType = 'video' | 'audio' | 'danmaku' | 'subtitle' | 'cover' | 'batch_subtitle';
 
 export interface DownloadTask {
   id: string;

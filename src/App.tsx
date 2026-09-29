@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FloatButton } from './components/FloatButton';
 import { DownloadModal } from './components/DownloadModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
-import { fetchCurrentMediaData } from './api/bilibili';
+import { fetchCurrentMediaData, getVideoTitle } from './api/bilibili';
 import { downloadAndMuxMp4, downloadAudio } from './media/downloader';
+import { batchDetectAndDownloadSubtitles } from './media/batchSubtitle';
 import type { MediaResourceData, VideoStreamItem, AudioStreamItem, DownloadTask } from './types';
 
 export const App: React.FC = () => {
@@ -254,6 +255,69 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleDownloadBatchSubtitles = async () => {
+    if (!mediaData || mediaData.pages.length <= 1) return;
+    const taskId = `batch_subtitles_${mediaData.bvid}`;
+    const mainTitle = getVideoTitle();
+    const taskTitle = `全集字幕打包 (${mediaData.pages.length}P)`;
+    const traceId = `全集字幕-${mediaData.bvid}`;
+
+    const controller = new AbortController();
+    activeControllers.current.set(taskId, controller);
+
+    upsertTask({
+      id: taskId,
+      type: 'batch_subtitle',
+      title: taskTitle,
+      status: 'pending',
+      progress: 0,
+      message: `开始探测 ${mediaData.pages.length} 集字幕...`,
+      timestamp: Date.now(),
+    });
+
+    try {
+      const res = await batchDetectAndDownloadSubtitles(
+        mediaData.bvid,
+        mainTitle,
+        mediaData.pages,
+        (prog) => {
+          const percent = prog.total > 0 ? Math.round((prog.current / prog.total) * 100) : 0;
+          updateTaskProgress(taskId, {
+            status: 'downloading_video',
+            progress: percent,
+            message: prog.message,
+          });
+        },
+        traceId,
+        controller.signal
+      );
+      if (!controller.signal.aborted) {
+        updateTaskProgress(taskId, {
+          status: 'completed',
+          progress: 100,
+          message: `打包完成: 提取到 ${res.found} 集字幕 (${res.fileName})`,
+        });
+        showToast(`全集字幕已成功打包并保存 (${res.found}/${res.total} 集)`, 'success');
+      }
+    } catch (err: any) {
+      if (controller.signal.aborted || err?.name === 'AbortError') {
+        updateTaskProgress(taskId, {
+          status: 'cancelled',
+          message: '已手动取消字幕打包',
+        });
+        showToast('全集字幕打包任务已取消', 'info');
+      } else {
+        updateTaskProgress(taskId, {
+          status: 'error',
+          message: `打包失败: ${err.message}`,
+        });
+        showToast(`全集字幕打包失败: ${err.message}`, 'error');
+      }
+    } finally {
+      activeControllers.current.delete(taskId);
+    }
+  };
+
   return (
     <div className={isDark ? 'dark' : ''}>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
@@ -272,6 +336,7 @@ export const App: React.FC = () => {
           }}
           onDownloadVideo={handleDownloadVideo}
           onDownloadAudio={handleDownloadAudio}
+          onDownloadBatchSubtitles={handleDownloadBatchSubtitles}
           onSelectEpisode={handleSelectEpisode}
           onShowToast={showToast}
         />

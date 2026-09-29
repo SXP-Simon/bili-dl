@@ -15,6 +15,7 @@ import {
   Sun,
   Moon,
   Loader2,
+  FolderArchive,
 } from 'lucide-react';
 import { SpotlightCard } from './SpotlightCard';
 import { TabPill } from './TabPill';
@@ -38,6 +39,7 @@ interface DownloadModalProps {
   onClose: () => void;
   onDownloadVideo: (video: VideoStreamItem, audio?: AudioStreamItem) => void;
   onDownloadAudio: (audio: AudioStreamItem) => void;
+  onDownloadBatchSubtitles?: () => Promise<void>;
   onSelectEpisode: (cid: number) => void;
   onShowToast: (content: string, type?: 'success' | 'error' | 'info') => void;
   progress?: DownloadProgress;
@@ -54,6 +56,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   onClose,
   onDownloadVideo,
   onDownloadAudio,
+  onDownloadBatchSubtitles,
   onSelectEpisode,
   onShowToast,
   progress,
@@ -203,6 +206,22 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
             currentCid={data.cid}
             loadingCid={loadingCid}
             onSelectEpisode={onSelectEpisode}
+            onDownloadBatchSubtitles={
+              onDownloadBatchSubtitles
+                ? async () => {
+                    setActiveActionKey('batch_subtitles');
+                    try {
+                      await onDownloadBatchSubtitles();
+                    } finally {
+                      setActiveActionKey(null);
+                    }
+                  }
+                : undefined
+            }
+            isBatchSubtitleActive={
+              (tasks && tasks.some((t) => t.id === `batch_subtitles_${data.bvid}` && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled')) ||
+              activeActionKey === 'batch_subtitles'
+            }
           />
         </div>
 
@@ -482,6 +501,71 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                     )}
                   </button>
                 </SpotlightCard>
+
+                {/* 多 P 剧集全量字幕一键打包导出入口 */}
+                {data.pages.length > 1 && onDownloadBatchSubtitles && (
+                  <SpotlightCard
+                    style={{
+                      animation: 'staggerIn 0.35s cubic-bezier(0.2, 0.9, 0.3, 1) both',
+                      animationDelay: `${(activeTab === 'all' ? data.videos.length + data.audios.length + 2 : 1) * 28}ms`,
+                    }}
+                    className="flex items-center justify-between border-primary/40 bg-primary/5 hover:border-primary/60 transition-all duration-200"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/20 text-emerald-800 dark:text-emerald-300 border border-primary/40 shadow-2xs group-hover:bg-primary/30 group-hover:scale-105 transition-all duration-200">
+                        <FolderArchive className="w-4 h-4" strokeWidth={2.2} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-foreground tracking-tight block">
+                            全集字幕一键打包导出
+                          </span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md bg-secondary/35 text-secondary-foreground border border-secondary/50 font-bold">
+                            共 {data.pages.length} P
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-muted-foreground mt-0.5 block">
+                          自动探测全集字幕，打包为【{data.title.split('_P')[0]}】文件夹 ZIP 压缩包
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={async () => {
+                        setActiveActionKey('batch_subtitles');
+                        try {
+                          await onDownloadBatchSubtitles();
+                        } finally {
+                          setActiveActionKey(null);
+                        }
+                      }}
+                      disabled={
+                        (tasks && tasks.some((t) => t.id === `batch_subtitles_${data.bvid}` && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled')) ||
+                        activeActionKey === 'batch_subtitles'
+                      }
+                      title="一键探测所有分 P 视频存在的字幕并打包为 ZIP 文件夹下载"
+                      className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer ${
+                        (tasks && tasks.some((t) => t.id === `batch_subtitles_${data.bvid}` && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled')) ||
+                        activeActionKey === 'batch_subtitles'
+                          ? 'bg-primary/40 text-emerald-950 dark:text-emerald-100 border-primary/60 cursor-wait'
+                          : 'bg-primary/20 hover:bg-primary text-emerald-950 dark:text-emerald-100 hover:text-primary-foreground border-primary/40 hover:border-primary hover:shadow-xs'
+                      }`}
+                    >
+                      {(tasks && tasks.some((t) => t.id === `batch_subtitles_${data.bvid}` && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled')) ||
+                      activeActionKey === 'batch_subtitles' ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-800 dark:text-emerald-200" strokeWidth={2.4} />
+                          <span>探测打包中...</span>
+                        </>
+                      ) : (
+                        <>
+                          <FolderArchive className="w-3.5 h-3.5" strokeWidth={2.2} />
+                          <span>一键打包全集</span>
+                        </>
+                      )}
+                    </button>
+                  </SpotlightCard>
+                )}
 
                 {data.subtitles.map((sub, sIdx) => {
                   const isSubActive = activeActionKey === `subtitle_${sub.id}`;

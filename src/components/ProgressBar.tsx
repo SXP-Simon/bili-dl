@@ -8,6 +8,7 @@ import {
   MessageSquare,
   FileText,
   Image as ImageIcon,
+  FolderArchive,
   X,
   Sparkles,
 } from 'lucide-react';
@@ -31,6 +32,8 @@ function getTaskIcon(type: TaskType) {
       return <MessageSquare className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />;
     case 'subtitle':
       return <FileText className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />;
+    case 'batch_subtitle':
+      return <FolderArchive className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />;
     case 'cover':
       return <ImageIcon className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />;
     default:
