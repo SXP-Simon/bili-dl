@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
-import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
 
 export interface ToastMessage {
   id: string;
-  type: 'success' | 'error' | 'info';
+  type: 'success' | 'error' | 'warning' | 'info';
   content: string;
 }
 
@@ -33,8 +33,9 @@ const ToastItem: React.FC<{ toast: ToastMessage; onRemove: () => void }> = ({ to
   return (
     <div className="pointer-events-auto flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-popover text-popover-foreground text-xs font-medium shadow-lg border border-border/80 animate-toast-in">
       {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />}
-      {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />}
-      {toast.type === 'info' && <Info className="w-4 h-4 text-primary flex-shrink-0" />}
+      {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0" />}
+      {toast.type === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-500 dark:text-amber-400 flex-shrink-0" />}
+      {toast.type === 'info' && <Info className="w-4 h-4 text-sky-500 dark:text-sky-400 flex-shrink-0" />}
       <span className="leading-snug">{toast.content}</span>
       <button
         onClick={onRemove}

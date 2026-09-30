@@ -43,7 +43,7 @@ interface DownloadModalProps {
   onDownloadAudio: (audio: AudioStreamItem) => void;
   onDownloadBatchSubtitles?: () => Promise<void>;
   onSelectEpisode: (cid: number) => void;
-  onShowToast: (content: string, type?: 'success' | 'error' | 'info') => void;
+  onShowToast: (content: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
   progress?: DownloadProgress;
 }
 

@@ -25,7 +25,7 @@ import {
 
 interface SettingsPanelProps {
   onClose: () => void;
-  onShowToast: (content: string, type?: 'success' | 'error' | 'info') => void;
+  onShowToast: (content: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToast }) => {
@@ -92,10 +92,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
 
   const handleCopySubfolderPath = () => {
     const sub = settings.subfolder.trim() || 'bili-dl';
-    const shellPath = `shell:Downloads\\${sub}`;
+    const pathText = `Downloads\\${sub}`;
     try {
-      navigator.clipboard.writeText(shellPath);
-      onShowToast(`已复制 Shell 路径「${shellPath}」，在资源管理器 (Win+E) 地址栏或运行 (Win+R) 中粘贴回车即可直达`, 'success');
+      navigator.clipboard.writeText(pathText);
+      onShowToast(`已复制默认下载路径「${pathText}」`, 'success');
     } catch {
       onShowToast(`复制路径失败`, 'error');
     }
@@ -103,17 +103,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
 
   const handleCopyDirectPath = () => {
     const fullPath = settings.localFullPath?.trim();
-    if (!fullPath) {
-      onShowToast(`请先在输入框中填写该文件夹在电脑中的完整路径 (如 D:\\Videos\\${settings.localDirName || 'bili-dl'})`, 'info');
-      const inputEl = document.getElementById('bili-dl-direct-path-input') as HTMLInputElement;
-      inputEl?.focus();
-      return;
-    }
-    try {
-      navigator.clipboard.writeText(fullPath);
-      onShowToast(`已复制本地绝对路径「${fullPath}」，可直接粘贴至资源管理器 (Win+E) 地址栏打开`, 'success');
-    } catch {
-      onShowToast(`复制路径失败: ${fullPath}`, 'error');
+    if (fullPath) {
+      try {
+        navigator.clipboard.writeText(fullPath);
+        onShowToast(`已复制本地绝对路径「${fullPath}」`, 'success');
+      } catch {
+        onShowToast(`复制路径失败: ${fullPath}`, 'error');
+      }
+    } else if (settings.localDirName) {
+      try {
+        navigator.clipboard.writeText(settings.localDirName);
+        onShowToast(`已复制文件夹名称「${settings.localDirName}」（若需完整盘符路径可在下方输入框记录）`, 'info');
+      } catch {
+        onShowToast(`复制路径失败`, 'error');
+      }
     }
   };
 
@@ -164,16 +167,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
             </div>
             <button
               onClick={handleCopySubfolderPath}
-              title="复制 Windows 专属 shell:Downloads 直达路径，可在资源管理器 (Win + E) 或运行 (Win + R) 中直接回车打开"
+              title="复制下载相对路径到剪贴板"
               className="px-2.5 py-1.5 rounded-xl bg-card hover:bg-muted text-foreground border border-border/80 text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95 shadow-2xs shrink-0 cursor-pointer"
             >
               <FolderOpen className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
-              <span>复制直达路径</span>
+              <span>复制路径</span>
             </button>
           </div>
           <p className="text-[11px] text-muted-foreground leading-relaxed flex items-center gap-1">
             <HelpCircle className="w-3 h-3 shrink-0 text-muted-foreground/70" />
-            复制路径为 <code>shell:Downloads\{settings.subfolder.trim() || 'bili-dl'}</code>，在资源管理器 (Win+E) 地址栏直接粘贴回车即可秒开。
+            Tampermonkey / 浏览器下载管理器将自动在系统默认「下载 (Downloads)」目录中创建该子文件夹。
           </p>
         </div>
 

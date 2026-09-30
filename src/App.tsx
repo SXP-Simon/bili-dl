@@ -86,7 +86,7 @@ export const App: React.FC = () => {
     localStorage.setItem('bili_dl_theme', next ? 'dark' : 'light');
   };
 
-  const showToast = (content: string, type: 'success' | 'error' | 'info' = 'info') => {
+  const showToast = (content: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
     const id = Date.now().toString() + Math.random().toString(36).substring(2, 6);
     setToasts((prev) => [...prev, { id, content, type }]);
   };
