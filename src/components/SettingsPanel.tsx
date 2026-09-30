@@ -133,10 +133,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
               className="w-full px-3 py-1.5 rounded-xl bg-background border border-border/80 text-foreground font-mono text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
             />
           </div>
-          <p className="text-[11px] text-muted-foreground leading-relaxed flex items-center gap-1">
-            <HelpCircle className="w-3 h-3 shrink-0 text-muted-foreground/70" />
-            浏览器下载器将自动在系统默认「下载 (Downloads)」目录中创建该子文件夹。按 <code>Ctrl + J</code> 在浏览器下载页中点击「在文件夹中显示」可直接直达。
-          </p>
+          <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground leading-relaxed">
+            <HelpCircle className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70 mt-0.5" />
+            <span>
+              浏览器下载器将自动在系统默认「下载 (Downloads)」目录中创建该子文件夹。按 <kbd className="px-1.5 py-0.5 rounded-md bg-muted text-foreground font-mono text-[10px] font-semibold border border-border/70 shadow-2xs">Ctrl + J</kbd> 在浏览器下载列表中点击「在文件夹中显示」即可直达。
+            </span>
+          </div>
         </div>
 
         {/* 2. 自动按视频标题分文件夹 */}
