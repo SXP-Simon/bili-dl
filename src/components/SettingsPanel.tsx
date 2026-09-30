@@ -144,17 +144,22 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
               />
             </div>
             <button
-              onClick={() => handleCopyPath(`Downloads\\${settings.subfolder.trim() || 'bili-dl'}`, '默认下载路径')}
-              title="复制路径并在文件资源管理器 (Win + E) 中快速定位"
+              onClick={() =>
+                handleCopyPath(
+                  `%USERPROFILE%\\Downloads\\${settings.subfolder.trim() || 'bili-dl'}`,
+                  'Windows 完整下载绝对路径'
+                )
+              }
+              title="复制完整路径并在文件资源管理器 (Win + E) 地址栏直接粘贴回车打开"
               className="px-2.5 py-1.5 rounded-xl bg-card hover:bg-muted text-foreground border border-border/80 text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95 shadow-2xs shrink-0 cursor-pointer"
             >
               <FolderOpen className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
-              <span>复制路径</span>
+              <span>复制完整路径</span>
             </button>
           </div>
           <p className="text-[11px] text-muted-foreground leading-relaxed flex items-center gap-1">
             <HelpCircle className="w-3 h-3 shrink-0 text-muted-foreground/70" />
-            Tampermonkey / 浏览器下载管理器将自动在系统默认下载目录中创建该子文件夹。
+            复制路径为 <code>%USERPROFILE%\Downloads\...</code>，在文件资源管理器 (Win+E) 地址栏粘贴即可秒开。
           </p>
         </div>
 
@@ -229,39 +234,57 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
           </div>
 
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            直接授权浏览器读写电脑上的指定本地文件夹（如 <code>D:\Videos\Anime</code>），文件将直接落盘写入目标目录，无需经过浏览器下载弹窗。
+            直接授权浏览器读写电脑上的指定本地文件夹，文件将直接落盘写入目标目录，无需经过浏览器下载弹窗。
           </p>
 
-          <div className="flex items-center gap-2 pt-1">
+          <div className="space-y-2 pt-1">
             {hasDirHandle && settings.localDirName ? (
-              <div className="flex-1 flex items-center justify-between p-2 rounded-xl bg-card border border-emerald-500/40">
-                <div className="flex items-center gap-2 truncate">
-                  <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span className="font-mono text-xs font-semibold text-foreground truncate">
-                    已授权: {settings.localDirName}
-                  </span>
+              <div className="p-2.5 rounded-xl bg-card border border-emerald-500/40 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 truncate">
+                    <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="font-mono text-xs font-semibold text-foreground truncate">
+                      已授权目录: {settings.localDirName}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={handlePickDirectory}
+                      className="px-2 py-1 rounded-lg bg-primary/20 text-emerald-950 dark:text-emerald-100 border border-primary/40 text-[11px] font-medium hover:bg-primary/30 transition-colors cursor-pointer"
+                    >
+                      更换
+                    </button>
+                    <button
+                      onClick={handleClearDirectory}
+                      title="重置为默认下载器"
+                      className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
+
+                {/* 完整本地物理路径输入与一键复制 */}
+                <div className="flex items-center gap-1.5 pt-0.5">
+                  <input
+                    type="text"
+                    value={settings.localFullPath || ''}
+                    onChange={(e) => updateSetting('localFullPath', e.target.value)}
+                    placeholder={`输入完整物理路径 (例如 D:\\Videos\\${settings.localDirName})`}
+                    className="flex-1 px-2.5 py-1 rounded-lg bg-background border border-border/80 text-foreground font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                  />
                   <button
-                    onClick={() => handleCopyPath(settings.localDirName || '', '已授权目录名')}
-                    title="复制目录名并在文件资源管理器 (Win + E) 中快速定位"
-                    className="px-2 py-1 rounded-lg bg-card hover:bg-muted text-foreground border border-border/70 text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                    onClick={() =>
+                      handleCopyPath(
+                        settings.localFullPath?.trim() || settings.localDirName || '',
+                        '本地磁盘完整路径'
+                      )
+                    }
+                    title="复制完整路径并在文件资源管理器 (Win + E) 中快速定位"
+                    className="px-2.5 py-1 rounded-lg bg-card hover:bg-muted text-foreground border border-border/70 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
                   >
                     <FolderOpen className="w-3 h-3 text-emerald-700 dark:text-emerald-300" />
-                    <span>复制定位</span>
-                  </button>
-                  <button
-                    onClick={handlePickDirectory}
-                    className="px-2 py-1 rounded-lg bg-primary/20 text-emerald-950 dark:text-emerald-100 border border-primary/40 text-[11px] font-medium hover:bg-primary/30 transition-colors cursor-pointer"
-                  >
-                    更换
-                  </button>
-                  <button
-                    onClick={handleClearDirectory}
-                    title="重置为默认下载器"
-                    className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>复制完整路径</span>
                   </button>
                 </div>
               </div>
