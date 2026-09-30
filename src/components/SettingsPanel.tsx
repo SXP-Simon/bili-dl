@@ -9,10 +9,12 @@ import {
   HelpCircle,
   FolderCheck,
   RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 import {
   getDownloadSettings,
   saveDownloadSettings,
+  resetDownloadSettings,
   pickLocalDirectory,
   getCachedDirectoryHandle,
   clearCachedDirectoryHandle,
@@ -66,6 +68,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
     onShowToast('已重置为默认下载器落盘模式', 'info');
   };
 
+  const handleResetAll = () => {
+    const defaults = resetDownloadSettings();
+    setSettings(defaults);
+    setHasDirHandle(false);
+    onShowToast('已恢复全部默认下载设置', 'info');
+  };
+
   return (
     <div className="flex flex-col h-full bg-card text-card-foreground animate-toast-in select-none">
       {/* 顶部标题栏 */}
@@ -89,8 +98,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
         </button>
       </div>
 
-      {/* 设置项主体区 */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 scrollbar-clean text-xs">
+      {/* 设置项主体区 (带充足舒适的底部呼吸边距) */}
+      <div className="flex-1 overflow-y-auto px-6 py-4 pb-6 space-y-3.5 scrollbar-clean text-xs">
         {/* 1. 默认子目录配置 */}
         <div className="p-3.5 rounded-2xl bg-muted/30 border border-border/70 space-y-2">
           <div className="flex items-center justify-between">
@@ -228,6 +237,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
             )}
           </div>
         </div>
+      </div>
+
+      {/* 底部状态提示栏 (提供舒适的留白与重置控制) */}
+      <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 bg-muted/30 border-t border-border/70 text-[11px]">
+        <span className="flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300 font-medium">
+          <Sparkles className="w-3.5 h-3.5" strokeWidth={2.2} />
+          <span>配置实时保存并自动生效</span>
+        </span>
+        <button
+          onClick={handleResetAll}
+          className="text-muted-foreground hover:text-foreground hover:underline cursor-pointer transition-colors"
+        >
+          恢复默认设置
+        </button>
       </div>
     </div>
   );

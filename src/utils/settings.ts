@@ -12,7 +12,7 @@ export interface DownloadSettings {
   localDirName?: string; // 已授权的本地目录展示名
 }
 
-const DEFAULT_SETTINGS: DownloadSettings = {
+export const DEFAULT_SETTINGS: DownloadSettings = {
   subfolder: 'bili-dl',
   autoTitleFolder: true,
   alwaysAskSaveAs: false,
@@ -23,6 +23,12 @@ const SETTINGS_KEY = 'bili_dl_download_settings';
 
 // 内存中缓存的本地目录句柄 (File System Access API)
 let cachedDirHandle: FileSystemDirectoryHandle | null = null;
+
+export function resetDownloadSettings(): DownloadSettings {
+  clearCachedDirectoryHandle();
+  saveDownloadSettings(DEFAULT_SETTINGS);
+  return { ...DEFAULT_SETTINGS };
+}
 
 export function getDownloadSettings(): DownloadSettings {
   try {

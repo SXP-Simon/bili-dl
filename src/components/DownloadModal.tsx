@@ -196,7 +196,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
         </div>
 
         {showSettings ? (
-          <div className="flex-1 min-h-[340px] max-h-[480px] flex flex-col overflow-hidden bg-card">
+          <div className="flex-1 min-h-[380px] max-h-[520px] flex flex-col overflow-hidden bg-card">
             <SettingsPanel
               onClose={() => setShowSettings(false)}
               onShowToast={onShowToast}
@@ -264,8 +264,8 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
         </div>
 
         {/* 资源列表区：弹性自适应滚动，弹窗内容多时自动收缩滚动而不破坏 Header */}
-        <div className="flex-1 min-h-[120px] max-h-[360px] overflow-y-auto pl-6 pr-4 scrollbar-clean">
-          <div className="space-y-2 py-2">
+        <div className="flex-1 min-h-[140px] max-h-[400px] overflow-y-auto pl-6 pr-4 pb-4 scrollbar-clean">
+          <div className="space-y-2 py-2 pb-2">
             {/* 1. 视频列表 */}
             {(activeTab === 'all' || activeTab === 'video') &&
               data.videos.map((v, idx) => {
