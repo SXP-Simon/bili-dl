@@ -10,6 +10,7 @@ import {
   FolderCheck,
   RotateCcw,
   Sparkles,
+  FolderOpen,
 } from 'lucide-react';
 import {
   getDownloadSettings,
@@ -88,6 +89,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
     onShowToast('已恢复全部默认下载设置', 'info');
   };
 
+  const handleCopyPath = (pathText: string, label: string) => {
+    try {
+      navigator.clipboard.writeText(pathText);
+      onShowToast(`已复制${label}「${pathText}」，可在资源管理器 (Win+E) 地址栏粘贴快速打开`, 'success');
+    } catch {
+      onShowToast(`复制路径失败: ${pathText}`, 'error');
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-card text-card-foreground animate-toast-in select-none">
       {/* 顶部标题栏 */}
@@ -133,6 +143,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
                 className="w-full px-3 py-1.5 rounded-xl bg-background border border-border/80 text-foreground font-mono text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
               />
             </div>
+            <button
+              onClick={() => handleCopyPath(`Downloads\\${settings.subfolder.trim() || 'bili-dl'}`, '默认下载路径')}
+              title="复制路径并在文件资源管理器 (Win + E) 中快速定位"
+              className="px-2.5 py-1.5 rounded-xl bg-card hover:bg-muted text-foreground border border-border/80 text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95 shadow-2xs shrink-0 cursor-pointer"
+            >
+              <FolderOpen className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
+              <span>复制路径</span>
+            </button>
           </div>
           <p className="text-[11px] text-muted-foreground leading-relaxed flex items-center gap-1">
             <HelpCircle className="w-3 h-3 shrink-0 text-muted-foreground/70" />
@@ -224,6 +242,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={() => handleCopyPath(settings.localDirName || '', '已授权目录名')}
+                    title="复制目录名并在文件资源管理器 (Win + E) 中快速定位"
+                    className="px-2 py-1 rounded-lg bg-card hover:bg-muted text-foreground border border-border/70 text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <FolderOpen className="w-3 h-3 text-emerald-700 dark:text-emerald-300" />
+                    <span>复制定位</span>
+                  </button>
                   <button
                     onClick={handlePickDirectory}
                     className="px-2 py-1 rounded-lg bg-primary/20 text-emerald-950 dark:text-emerald-100 border border-primary/40 text-[11px] font-medium hover:bg-primary/30 transition-colors cursor-pointer"
