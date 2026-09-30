@@ -10,7 +10,6 @@ import {
   FolderCheck,
   RotateCcw,
   Sparkles,
-  FolderOpen,
 } from 'lucide-react';
 import {
   getDownloadSettings,
@@ -90,17 +89,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
     onShowToast('已恢复全部默认下载设置', 'info');
   };
 
-  const handleCopySubfolderPath = () => {
-    const sub = settings.subfolder.trim() || 'bili-dl';
-    const pathText = `Downloads\\${sub}`;
-    try {
-      navigator.clipboard.writeText(pathText);
-      onShowToast(`已复制默认下载路径「${pathText}」`, 'success');
-    } catch {
-      onShowToast(`复制路径失败`, 'error');
-    }
-  };
-
   return (
     <div className="flex flex-col h-full bg-card text-card-foreground animate-toast-in select-none">
       {/* 顶部标题栏 */}
@@ -136,28 +124,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
             <span className="text-[10px] font-mono text-muted-foreground">基于浏览器默认下载目录</span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <input
-                type="text"
-                value={settings.subfolder}
-                onChange={(e) => updateSetting('subfolder', e.target.value)}
-                placeholder="例如: bili-dl 或 Videos/Bili"
-                className="w-full px-3 py-1.5 rounded-xl bg-background border border-border/80 text-foreground font-mono text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
-              />
-            </div>
-            <button
-              onClick={handleCopySubfolderPath}
-              title="复制下载相对路径到剪贴板"
-              className="px-2.5 py-1.5 rounded-xl bg-card hover:bg-muted text-foreground border border-border/80 text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95 shadow-2xs shrink-0 cursor-pointer"
-            >
-              <FolderOpen className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
-              <span>复制路径</span>
-            </button>
+          <div className="relative">
+            <input
+              type="text"
+              value={settings.subfolder}
+              onChange={(e) => updateSetting('subfolder', e.target.value)}
+              placeholder="例如: bili-dl 或 Videos/Bili"
+              className="w-full px-3 py-1.5 rounded-xl bg-background border border-border/80 text-foreground font-mono text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+            />
           </div>
           <p className="text-[11px] text-muted-foreground leading-relaxed flex items-center gap-1">
             <HelpCircle className="w-3 h-3 shrink-0 text-muted-foreground/70" />
-            Tampermonkey / 浏览器下载管理器将自动在系统默认「下载 (Downloads)」目录中创建该子文件夹。
+            浏览器下载器将自动在系统默认「下载 (Downloads)」目录中创建该子文件夹。按 <code>Ctrl + J</code> 在浏览器下载页中点击「在文件夹中显示」可直接直达。
           </p>
         </div>
 
