@@ -17,20 +17,39 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
 }) => {
   const [position, setPosition] = useState<{ x?: number; y?: number }>({});
   const [isDragging, setIsDragging] = useState(false);
+  const [tiltAngle, setTiltAngle] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
-  const dragStartRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number }>({
+
+  const dragStartRef = useRef<{
+    startX: number;
+    startY: number;
+    initialX: number;
+    initialY: number;
+  }>({
     startX: 0,
     startY: 0,
     initialX: 0,
     initialY: 0,
   });
+
+  const lastPosRef = useRef<{ x: number; y: number; time: number }>({ x: 0, y: 0, time: 0 });
+  const velocityRef = useRef<{ vx: number; vy: number }>({ vx: 0, vy: 0 });
+  const currentPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const buttonRef = useRef<HTMLDivElement>(null);
+  const wasDraggedRef = useRef(false);
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem('bili_dl_btn_pos');
       if (saved) {
-        setPosition(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
+          // Clamp within viewport in case window size changed
+          const clampedX = Math.max(12, Math.min(window.innerWidth - 160, parsed.x));
+          const clampedY = Math.max(12, Math.min(window.innerHeight - 50, parsed.y));
+          setPosition({ x: clampedX, y: clampedY });
+          currentPosRef.current = { x: clampedX, y: clampedY };
+        }
       }
     } catch {}
   }, []);
@@ -46,32 +65,98 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
       initialX: rect.left,
       initialY: rect.top,
     };
-    setIsDragging(false);
+    currentPosRef.current = { x: rect.left, y: rect.top };
+    lastPosRef.current = { x: e.clientX, y: e.clientY, time: performance.now() };
+    velocityRef.current = { vx: 0, vy: 0 };
+    wasDraggedRef.current = false;
 
-    let moved = false;
+    let hasExceededThreshold = false;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const dx = moveEvent.clientX - dragStartRef.current.startX;
       const dy = moveEvent.clientY - dragStartRef.current.startY;
-      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
-        moved = true;
+
+      // 超过微小阈值判定为正式拖拽
+      if (!hasExceededThreshold && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+        hasExceededThreshold = true;
+        wasDraggedRef.current = true;
         setIsDragging(true);
-        const newX = Math.max(12, Math.min(window.innerWidth - 180, dragStartRef.current.initialX + dx));
-        const newY = Math.max(12, Math.min(window.innerHeight - 56, dragStartRef.current.initialY + dy));
+      }
+
+      if (hasExceededThreshold) {
+        const now = performance.now();
+        const dt = Math.max(1, now - lastPosRef.current.time);
+        const instVx = (moveEvent.clientX - lastPosRef.current.x) / dt;
+        const instVy = (moveEvent.clientY - lastPosRef.current.y) / dt;
+
+        // 指数平滑滤波计算瞬时手速
+        velocityRef.current = {
+          vx: velocityRef.current.vx * 0.35 + instVx * 0.65,
+          vy: velocityRef.current.vy * 0.35 + instVy * 0.65,
+        };
+        lastPosRef.current = { x: moveEvent.clientX, y: moveEvent.clientY, time: now };
+
+        // 真实跟手坐标计算 (实时 1:1 响应无延迟)
+        const btnWidth = rect.width || 180;
+        const btnHeight = rect.height || 40;
+        const newX = Math.max(8, Math.min(window.innerWidth - btnWidth - 8, dragStartRef.current.initialX + dx));
+        const newY = Math.max(8, Math.min(window.innerHeight - btnHeight - 8, dragStartRef.current.initialY + dy));
+
+        currentPosRef.current = { x: newX, y: newY };
         setPosition({ x: newX, y: newY });
+
+        // 根据水平速度产生自然侧倾角度 (-4° ~ 4°)
+        const targetTilt = Math.max(-4, Math.min(4, velocityRef.current.vx * 3));
+        setTiltAngle(targetTilt);
       }
     };
 
     const handleMouseUp = () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
-      if (moved) {
-        setTimeout(() => setIsDragging(false), 80);
-        if (position.x !== undefined && position.y !== undefined) {
-          localStorage.setItem('bili_dl_btn_pos', JSON.stringify(position));
-        }
+
+      if (hasExceededThreshold) {
+        const now = performance.now();
+        const dt = now - lastPosRef.current.time;
+
+        // 如果在松手前静止了超过 90ms，则不施加惯性冲量
+        let vx = dt > 90 ? 0 : velocityRef.current.vx;
+        let vy = dt > 90 ? 0 : velocityRef.current.vy;
+
+        // 限制最大惯性初速度，防止飞出或过冲
+        vx = Math.max(-2.2, Math.min(2.2, vx));
+        vy = Math.max(-2.2, Math.min(2.2, vy));
+
+        // 物理惯性滑行距离 (以毫秒速度投射 ~140ms 动量衰减)
+        const throwDistX = vx * 140;
+        const throwDistY = vy * 140;
+
+        const btnWidth = rect.width || 180;
+        const btnHeight = rect.height || 40;
+
+        const targetX = Math.round(
+          Math.max(12, Math.min(window.innerWidth - btnWidth - 12, currentPosRef.current.x + throwDistX))
+        );
+        const targetY = Math.round(
+          Math.max(12, Math.min(window.innerHeight - btnHeight - 12, currentPosRef.current.y + throwDistY))
+        );
+
+        setPosition({ x: targetX, y: targetY });
+        currentPosRef.current = { x: targetX, y: targetY };
+        setTiltAngle(0);
+        setIsDragging(false);
+
+        try {
+          localStorage.setItem('bili_dl_btn_pos', JSON.stringify({ x: targetX, y: targetY }));
+        } catch {}
+
+        // 延迟清除 wasDragged 状态，避免触发 onClick
+        setTimeout(() => {
+          wasDraggedRef.current = false;
+        }, 100);
       } else {
         setIsDragging(false);
+        setTiltAngle(0);
       }
     };
 
@@ -81,7 +166,7 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (!isDragging && !loading) {
+    if (!wasDraggedRef.current && !isDragging && !loading) {
       onClick();
     }
   };
@@ -89,7 +174,7 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (onContextMenu) {
+    if (onContextMenu && !wasDraggedRef.current) {
       const rect = buttonRef.current?.getBoundingClientRect();
       const pos = {
         x: e.clientX,
@@ -135,16 +220,32 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       title="Bili-DL 媒体下载 (左键打开面板 · 右键快捷下载 · 可拖拽移动)"
-      style={
-        isCustomPos
+      style={{
+        ...(isCustomPos
           ? { left: `${position.x}px`, top: `${position.y}px`, right: 'auto', bottom: 'auto' }
-          : undefined
-      }
+          : {}),
+        transform: isDragging
+          ? `scale(1.035) rotate(${tiltAngle}deg)`
+          : isHovered
+          ? 'translateY(-2px)'
+          : 'scale(1) rotate(0deg)',
+        transition: isDragging
+          ? 'transform 0.08s ease-out'
+          : 'left 0.45s cubic-bezier(0.16, 1, 0.3, 1), top 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease',
+      }}
       className={`fixed ${
         !isCustomPos ? 'right-8 bottom-28' : ''
-      } z-[99999999] group flex items-center gap-2 pl-2.5 pr-3.5 py-1.5 rounded-full bg-card/95 backdrop-blur-md text-card-foreground text-xs font-semibold shadow-lg border border-border/80 transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 hover:border-primary/50 active:scale-[0.98] cursor-pointer select-none overflow-hidden`}
+      } z-[99999999] group flex items-center gap-2 pl-2.5 pr-3.5 py-1.5 rounded-full bg-card/95 backdrop-blur-md text-card-foreground text-xs font-semibold shadow-lg border border-border/80 ${
+        isDragging
+          ? 'cursor-grabbing shadow-2xl ring-2 ring-primary/30 border-primary/60'
+          : 'cursor-pointer hover:shadow-xl hover:border-primary/50'
+      } select-none overflow-hidden`}
     >
-      <GripVertical className="w-3.5 h-3.5 text-muted-foreground/60 group-hover:text-foreground -mr-0.5 cursor-grab active:cursor-grabbing transition-colors shrink-0" />
+      <GripVertical
+        className={`w-3.5 h-3.5 -mr-0.5 shrink-0 transition-colors ${
+          isDragging ? 'text-primary' : 'text-muted-foreground/60 group-hover:text-foreground'
+        }`}
+      />
 
       {/* 清新翠绿徽章指示器 (下载状态自适应变幻) */}
       <div
