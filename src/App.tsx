@@ -17,7 +17,14 @@ export const App: React.FC = () => {
   const [loadingCid, setLoadingCid] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
-  const [quickMenuPos, setQuickMenuPos] = useState<{ x: number; y: number } | undefined>(undefined);
+  const [quickMenuPos, setQuickMenuPos] = useState<
+    | {
+        x: number;
+        y: number;
+        buttonRect?: { left: number; top: number; right: number; bottom: number; width: number; height: number };
+      }
+    | undefined
+  >(undefined);
   const [mediaData, setMediaData] = useState<MediaResourceData | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
@@ -464,7 +471,14 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleFloatButtonContextMenu = (e: React.MouseEvent, pos: { x: number; y: number }) => {
+  const handleFloatButtonContextMenu = (
+    e: React.MouseEvent,
+    pos: {
+      x: number;
+      y: number;
+      buttonRect?: { left: number; top: number; right: number; bottom: number; width: number; height: number };
+    }
+  ) => {
     setQuickMenuPos(pos);
     setIsQuickMenuOpen(true);
   };
@@ -539,7 +553,6 @@ export const App: React.FC = () => {
         onClose={() => setIsQuickMenuOpen(false)}
         actions={quickActions}
         anchorPosition={quickMenuPos}
-        title="快捷下载选项"
       />
       {isModalOpen && mediaData && (
         <DownloadModal

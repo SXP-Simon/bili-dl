@@ -92,8 +92,18 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
     if (onContextMenu) {
       const rect = buttonRef.current?.getBoundingClientRect();
       const pos = {
-        x: rect ? rect.left : e.clientX,
-        y: rect ? rect.top : e.clientY,
+        x: e.clientX,
+        y: e.clientY,
+        buttonRect: rect
+          ? {
+              left: rect.left,
+              top: rect.top,
+              right: rect.right,
+              bottom: rect.bottom,
+              width: rect.width,
+              height: rect.height,
+            }
+          : undefined,
       };
       onContextMenu(e, pos);
     }

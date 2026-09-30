@@ -1,25 +1,26 @@
 import React, { useEffect, useRef } from 'react';
-import { Sparkles, Loader2, ChevronRight } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import type { QuickActionItem } from '../types';
 
 interface QuickActionMenuProps {
   isOpen: boolean;
   onClose: () => void;
   actions: QuickActionItem[];
-  anchorPosition?: { x?: number; y?: number };
-  title?: string;
+  anchorPosition?: {
+    x?: number;
+    y?: number;
+    buttonRect?: { left: number; top: number; right: number; bottom: number; width: number; height: number };
+  };
 }
 
 /**
- * 抽象的高可复用快捷功能上下文菜单组件 (TweakCN Light Green + OKLCH 风格)
- * 采用全屏透明遮罩捕获外部点击与右键，彻底兼容 Shadow DOM 事件穿透
+ * 极简原生感快捷右键菜单 (紧凑轻量、紧贴悬浮球、零多余占位)
  */
 export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
   isOpen,
   onClose,
   actions,
   anchorPosition,
-  title = '快捷下载菜单',
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -40,16 +41,37 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
 
   if (!isOpen || actions.length === 0) return null;
 
-  // 智能计算定位，确保菜单不会被屏幕边缘截断
-  const menuWidth = 280;
-  const menuHeight = actions.length * 68 + 60;
+  // 极简紧凑尺寸：单项约 34px，整体 3 项仅 ~110px 高度，宽度 200px
+  const itemHeight = 34;
+  const menuPadding = 8;
+  const menuWidth = 204;
+  const menuHeight = actions.length * itemHeight + menuPadding;
 
-  let left = anchorPosition?.x !== undefined ? anchorPosition.x : window.innerWidth - menuWidth - 32;
-  let top = anchorPosition?.y !== undefined ? anchorPosition.y - menuHeight : window.innerHeight - menuHeight - 110;
+  let left = 0;
+  let top = 0;
 
-  // 视口边界碰撞检测与矫正
-  left = Math.max(16, Math.min(window.innerWidth - menuWidth - 16, left));
-  top = Math.max(16, Math.min(window.innerHeight - menuHeight - 16, top));
+  if (anchorPosition?.buttonRect) {
+    const { buttonRect } = anchorPosition;
+    // 悬浮球若在屏幕下半部分，贴在悬浮球正上方（间隙 4px）
+    if (buttonRect.top > menuHeight + 16) {
+      top = buttonRect.top - menuHeight - 4;
+    } else {
+      // 否则贴在悬浮球下方
+      top = buttonRect.bottom + 4;
+    }
+    // 左侧对齐悬浮球，若超出屏幕右侧则右对齐
+    left = Math.max(8, Math.min(window.innerWidth - menuWidth - 12, buttonRect.left));
+  } else if (anchorPosition?.x !== undefined && anchorPosition?.y !== undefined) {
+    if (anchorPosition.y > menuHeight + 16) {
+      top = anchorPosition.y - menuHeight - 4;
+    } else {
+      top = anchorPosition.y + 4;
+    }
+    left = Math.max(8, Math.min(window.innerWidth - menuWidth - 12, anchorPosition.x));
+  } else {
+    top = window.innerHeight - menuHeight - 80;
+    left = window.innerWidth - menuWidth - 24;
+  }
 
   return (
     <div
@@ -70,21 +92,9 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
         ref={menuRef}
         style={{ left: `${left}px`, top: `${top}px` }}
         onClick={(e) => e.stopPropagation()}
-        className="absolute w-[280px] rounded-2xl bg-card/95 backdrop-blur-md border border-border/85 shadow-2xl overflow-hidden animate-modal-in select-none text-card-foreground"
+        className="absolute w-[204px] p-1 rounded-xl bg-card/95 dark:bg-neutral-900/95 backdrop-blur-md border border-border/80 shadow-xl select-none text-card-foreground animate-modal-in"
       >
-        {/* 顶部标题栏 */}
-        <div className="flex items-center justify-between px-3.5 py-2.5 bg-muted/40 border-b border-border/70">
-          <div className="flex items-center gap-2">
-            <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-primary/20 text-emerald-800 dark:text-emerald-300 border border-primary/40 shadow-2xs font-bold">
-              <Sparkles className="w-3 h-3 text-emerald-700 dark:text-emerald-300" strokeWidth={2.4} />
-            </div>
-            <span className="text-xs font-bold tracking-tight text-foreground">{title}</span>
-          </div>
-          <span className="text-[10px] text-muted-foreground font-mono">右键快捷入口</span>
-        </div>
-
-        {/* 快捷动作列表 */}
-        <div className="p-1.5 space-y-1">
+        <div className="space-y-0.5">
           {actions.map((action) => {
             const isDisabled = action.disabled || action.loading;
 
@@ -104,49 +114,31 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
                     console.error('[QuickAction] 执行异常:', err);
                   }
                 }}
-                className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-all duration-150 group cursor-pointer ${
+                className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left text-xs font-medium transition-colors duration-100 group cursor-pointer ${
                   action.danger
-                    ? 'hover:bg-destructive/10 text-destructive'
+                    ? 'hover:bg-destructive/15 text-destructive'
                     : isDisabled
-                    ? 'opacity-50 cursor-not-allowed'
-                    : 'hover:bg-primary/15 active:scale-[0.98]'
+                    ? 'opacity-50 cursor-not-allowed text-muted-foreground'
+                    : 'text-foreground hover:bg-primary/15 dark:hover:bg-primary/20 active:scale-[0.99]'
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <div
-                    className={`flex h-8 w-8 items-center justify-center rounded-xl shrink-0 transition-transform duration-200 group-hover:scale-105 ${
-                      action.danger
-                        ? 'bg-destructive/15 text-destructive border border-destructive/30'
-                        : 'bg-primary/20 text-emerald-900 dark:text-emerald-200 border border-primary/40 shadow-2xs group-hover:bg-primary/30'
-                    }`}
-                  >
-                    {action.loading ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-primary" strokeWidth={2.4} />
-                    ) : (
-                      action.icon
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold text-foreground tracking-tight truncate">
-                        {action.label}
-                      </span>
-                      {action.badge && (
-                        <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-secondary/40 text-secondary-foreground border border-secondary/50 shrink-0">
-                          {action.badge}
-                        </span>
-                      )}
-                    </div>
-                    {action.description && (
-                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                        {action.description}
-                      </p>
-                    )}
-                  </div>
+                <div className="flex h-4 w-4 items-center justify-center shrink-0 text-emerald-600 dark:text-emerald-400">
+                  {action.loading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" strokeWidth={2.4} />
+                  ) : (
+                    action.icon
+                  )}
                 </div>
 
-                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0 ml-1" />
+                <span className="flex-1 truncate tracking-tight text-[12.5px]">
+                  {action.label}
+                </span>
+
+                {action.badge && (
+                  <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-muted text-muted-foreground border border-border/60 group-hover:bg-primary/20 group-hover:text-primary transition-colors shrink-0">
+                    {action.badge}
+                  </span>
+                )}
               </button>
             );
           })}
