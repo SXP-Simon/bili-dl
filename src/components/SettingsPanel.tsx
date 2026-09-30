@@ -74,7 +74,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
       ...settings,
       useLocalDirHandle: false,
       localDirName: undefined,
-      localFullPath: undefined,
     };
     setSettings(next);
     saveDownloadSettings(next);
@@ -217,50 +216,35 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
 
           <div className="pt-1">
             {hasDirHandle && settings.localDirName ? (
-              <div className="p-3 rounded-2xl bg-card border border-emerald-500/40 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 truncate min-w-0">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
-                      <Check className="w-3.5 h-3.5" strokeWidth={2.4} />
-                    </div>
-                    <div className="truncate min-w-0">
-                      <span className="font-mono text-xs font-bold text-foreground truncate block">
-                        已授权: {settings.localFullPath ? settings.localFullPath : settings.localDirName}
-                      </span>
-                      <span className="text-[10px] text-emerald-700 dark:text-emerald-400 block truncate">
-                        已持久化保存至 IndexedDB · 刷新/重启自动直连落盘
-                      </span>
-                    </div>
+              <div className="p-3 rounded-2xl bg-card border border-emerald-500/40 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 truncate min-w-0">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
+                    <Check className="w-4 h-4" strokeWidth={2.4} />
                   </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      onClick={handlePickDirectory}
-                      className="px-2.5 py-1 rounded-lg bg-primary/20 text-emerald-950 dark:text-emerald-100 border border-primary/40 text-[11px] font-semibold hover:bg-primary/30 transition-colors cursor-pointer"
-                    >
-                      更换目录
-                    </button>
-                    <button
-                      onClick={handleClearDirectory}
-                      title="重置为浏览器默认下载路径"
-                      className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                    </button>
+                  <div className="truncate min-w-0">
+                    <span className="font-mono text-xs font-bold text-foreground truncate block">
+                      已授权磁盘目录: {settings.localDirName}
+                    </span>
+                    <span className="text-[10px] text-emerald-700 dark:text-emerald-400 block truncate">
+                      已持久化保存至 IndexedDB · 刷新/重启自动直连落盘
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-1 border-t border-border/50">
-                  <span className="text-[10px] text-muted-foreground shrink-0 font-medium">
-                    完整路径:
-                  </span>
-                  <input
-                    type="text"
-                    value={settings.localFullPath || ''}
-                    onChange={(e) => updateSetting('localFullPath', e.target.value)}
-                    placeholder={`例如: D:\\Videos\\${settings.localDirName}`}
-                    className="flex-1 px-2.5 py-1 rounded-lg bg-background border border-border/70 text-foreground font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-primary transition-all"
-                  />
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={handlePickDirectory}
+                    className="px-2.5 py-1.5 rounded-xl bg-primary/20 text-emerald-950 dark:text-emerald-100 border border-primary/40 text-xs font-semibold hover:bg-primary/30 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    更换目录
+                  </button>
+                  <button
+                    onClick={handleClearDirectory}
+                    title="重置为浏览器默认下载路径"
+                    className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted border border-border/60 transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             ) : (

@@ -10,7 +10,6 @@ export interface DownloadSettings {
   alwaysAskSaveAs: boolean; // 每次下载是否弹出另存为对话框 (默认 false)
   useLocalDirHandle: boolean; // 是否启用本地磁盘目录直连写入 (默认 false)
   localDirName?: string; // 已授权的本地目录展示名
-  localFullPath?: string; // 用户记录/指定的本地绝对物理路径 (如 D:\Videos\Anime)
 }
 
 export const DEFAULT_SETTINGS: DownloadSettings = {
