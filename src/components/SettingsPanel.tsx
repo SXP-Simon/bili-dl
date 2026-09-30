@@ -75,11 +75,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
       ...settings,
       useLocalDirHandle: false,
       localDirName: undefined,
+      localFullPath: undefined,
     };
     setSettings(next);
     saveDownloadSettings(next);
     setHasDirHandle(false);
-    onShowToast('已重置为默认下载器落盘模式', 'info');
+    onShowToast('已重置为浏览器默认下载路径', 'info');
   };
 
   const handleResetAll = () => {
@@ -256,7 +257,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
                     </button>
                     <button
                       onClick={handleClearDirectory}
-                      title="重置为默认下载器"
+                      title="重置为浏览器默认下载路径"
                       className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
