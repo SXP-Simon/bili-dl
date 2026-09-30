@@ -51,15 +51,17 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
     new Set(logs.map((l) => l.traceId).filter((t): t is string => Boolean(t)))
   );
 
-  // 任务 TraceID 标签栏支持鼠标滚轮横向滑动 (依赖 availableTraces.length 动态绑定)
+  // 任务 TraceID 标签栏支持鼠标滚轮横向滑动 (低灵敏度阻尼，支持精细逐像素/逐标签细粒度平滑浏览)
   useEffect(() => {
     const el = traceScrollRef.current;
     if (!el) return;
 
     const handleWheel = (e: WheelEvent) => {
-      if (e.deltaY !== 0) {
+      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (delta !== 0) {
         e.preventDefault();
-        el.scrollLeft += e.deltaY;
+        // 降低滚轮灵敏度系数至 0.22x，使单格滚轮位移降至 ~22px 细粒度微调
+        el.scrollLeft += delta * 0.22;
       }
     };
 
@@ -78,7 +80,8 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
   const handleTraceMouseMove = (e: React.MouseEvent) => {
     if (!isDraggingTrace.current || !traceScrollRef.current) return;
     const x = e.pageX - traceScrollRef.current.offsetLeft;
-    const walk = (x - traceStartX.current) * 1.2;
+    // 1:1 稳健细粒度跟手拖拽，避免超调
+    const walk = x - traceStartX.current;
     if (Math.abs(walk) > 3) {
       hasDraggedTrace.current = true;
     }
@@ -178,7 +181,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
               onMouseMove={handleTraceMouseMove}
               onMouseUp={handleTraceMouseUpOrLeave}
               onMouseLeave={handleTraceMouseUpOrLeave}
-              className="flex items-center bg-background rounded-lg p-0.5 border border-border/70 text-[10px] font-mono max-w-[200px] sm:max-w-[280px] overflow-x-auto scrollbar-clean cursor-grab active:cursor-grabbing select-none"
+              className="flex items-center bg-background rounded-lg p-0.5 border border-border/70 text-[10px] font-mono max-w-[220px] sm:max-w-[320px] overflow-x-auto scrollbar-clean cursor-grab active:cursor-grabbing select-none"
             >
               <button
                 onClick={() => {
