@@ -196,7 +196,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
         </div>
 
         {showSettings ? (
-          <div className="flex-1 min-h-[380px] max-h-[520px] flex flex-col overflow-hidden bg-card">
+          <div className="flex-1 min-h-[420px] max-h-[560px] flex flex-col overflow-hidden bg-card">
             <SettingsPanel
               onClose={() => setShowSettings(false)}
               onShowToast={onShowToast}

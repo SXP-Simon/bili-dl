@@ -101,25 +101,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
     }
   };
 
-  const handleCopyDirectPath = () => {
-    const fullPath = settings.localFullPath?.trim();
-    if (fullPath) {
-      try {
-        navigator.clipboard.writeText(fullPath);
-        onShowToast(`已复制本地绝对路径「${fullPath}」`, 'success');
-      } catch {
-        onShowToast(`复制路径失败: ${fullPath}`, 'error');
-      }
-    } else if (settings.localDirName) {
-      try {
-        navigator.clipboard.writeText(settings.localDirName);
-        onShowToast(`已复制文件夹名称「${settings.localDirName}」（若需完整盘符路径可在下方输入框记录）`, 'info');
-      } catch {
-        onShowToast(`复制路径失败`, 'error');
-      }
-    }
-  };
-
   return (
     <div className="flex flex-col h-full bg-card text-card-foreground animate-toast-in select-none">
       {/* 顶部标题栏 */}
@@ -251,59 +232,40 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
           </div>
 
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            直接授权浏览器读写电脑上的指定本地文件夹，文件将直接落盘写入目标目录，无需经过浏览器下载弹窗。
+            直接授权浏览器读写电脑上的指定本地文件夹，下载的文件将直接写入该目录，无需经过浏览器下载弹窗。
           </p>
 
-          <div className="space-y-2 pt-1">
+          <div className="pt-1">
             {hasDirHandle && settings.localDirName ? (
-              <div className="p-2.5 rounded-xl bg-card border border-emerald-500/40 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 truncate">
-                    <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span className="font-mono text-xs font-semibold text-foreground truncate">
-                      已授权目录: {settings.localDirName}
-                    </span>
+              <div className="p-3 rounded-xl bg-card border border-emerald-500/40 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 truncate min-w-0">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
+                    <Check className="w-3.5 h-3.5" strokeWidth={2.4} />
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      onClick={handlePickDirectory}
-                      className="px-2 py-1 rounded-lg bg-primary/20 text-emerald-950 dark:text-emerald-100 border border-primary/40 text-[11px] font-medium hover:bg-primary/30 transition-colors cursor-pointer"
-                    >
-                      更换
-                    </button>
-                    <button
-                      onClick={handleClearDirectory}
-                      title="重置为浏览器默认下载路径"
-                      className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                    </button>
+                  <div className="truncate min-w-0">
+                    <span className="font-mono text-xs font-semibold text-foreground truncate block">
+                      已授权磁盘目录: {settings.localDirName}
+                    </span>
+                    <span className="text-[10px] text-emerald-700 dark:text-emerald-400 block truncate">
+                      已持久化保存至 IndexedDB · 刷新/重启自动生效
+                    </span>
                   </div>
                 </div>
 
-                {/* 完整本地物理路径输入与一键复制 */}
-                <div className="space-y-1 pt-0.5">
-                  <div className="text-[10px] text-muted-foreground">
-                    完整磁盘绝对路径 (填写以便一键复制秒开):
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      id="bili-dl-direct-path-input"
-                      type="text"
-                      value={settings.localFullPath || ''}
-                      onChange={(e) => updateSetting('localFullPath', e.target.value)}
-                      placeholder={`例如: D:\\Videos\\${settings.localDirName || 'bili-dl'}`}
-                      className="flex-1 px-2.5 py-1.5 rounded-lg bg-background border border-border/80 text-foreground font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-primary transition-all"
-                    />
-                    <button
-                      onClick={handleCopyDirectPath}
-                      title="复制完整物理绝对路径并在文件资源管理器 (Win + E) 中快速定位"
-                      className="px-2.5 py-1.5 rounded-lg bg-card hover:bg-muted text-foreground border border-border/70 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-                    >
-                      <FolderOpen className="w-3 h-3 text-emerald-700 dark:text-emerald-300" />
-                      <span>复制绝对路径</span>
-                    </button>
-                  </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={handlePickDirectory}
+                    className="px-2.5 py-1 rounded-lg bg-primary/20 text-emerald-950 dark:text-emerald-100 border border-primary/40 text-[11px] font-semibold hover:bg-primary/30 transition-colors cursor-pointer"
+                  >
+                    更换目录
+                  </button>
+                  <button
+                    onClick={handleClearDirectory}
+                    title="重置为浏览器默认下载路径"
+                    className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             ) : (
