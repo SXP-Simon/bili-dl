@@ -15,7 +15,7 @@ export default defineConfig({
         namespace: 'https://github.com/SXP-Simon/bili-dl',
         version: pkg.version,
         description: '现代化 B 站资源下载器：支持 4K/1080P 音画无损合成 MP4、纯音频/封面提取、弹幕转 ASS、多 P 批量导出',
-        author: 'Simon',
+        author: 'SXP-Simon',
         license: 'MIT',
         match: [
           'https://www.bilibili.com/video/*',
