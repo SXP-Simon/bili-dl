@@ -2,11 +2,26 @@
 
 <div align="center">
 
-![TypeScript](https://img.shields.io/badge/TypeScript-7.0+-3178C6?style=flat-square&logo=typescript&logoColor=white)
-![React](https://img.shields.io/badge/React-19.0+-61DAFB?style=flat-square&logo=react&logoColor=black)
-![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4.0+-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white)
-![Vite](https://img.shields.io/badge/Vite-6.0+-646CFF?style=flat-square&logo=vite&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
+<p align="center">
+  <a href="https://github.com/SXP-Simon/bili-dl" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.shields.io/badge/GitHub-SXP--Simon%2Fbili--dl-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub Repo">
+  </a>
+  <a href="https://www.typescriptlang.org/" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.shields.io/badge/TypeScript-7.0+-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
+  </a>
+  <a href="https://react.dev/" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.shields.io/badge/React-19.0+-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React">
+  </a>
+  <a href="https://tailwindcss.com/" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.shields.io/badge/TailwindCSS-v4.0+-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white" alt="TailwindCSS">
+  </a>
+  <a href="https://vite.dev/" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.shields.io/badge/Vite-6.0+-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite">
+  </a>
+  <a href="https://github.com/SXP-Simon/bili-dl/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License">
+  </a>
+</p>
 
 <p align="center">
   <img src="https://cdn.jsdelivr.net/gh/SXP-Simon/bili-dl@master/image.png" alt="bilidl-demo">
