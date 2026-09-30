@@ -177,7 +177,7 @@ export async function batchDetectAndDownloadSubtitles(
   const zipBlob = createZipArchive(zipFiles);
   const outFileName = `${cleanTitle}_全集字幕(${foundCount}P).zip`;
 
-  saveBlobAsFile(zipBlob, outFileName);
+  saveBlobAsFile(zipBlob, outFileName, cleanTitle);
 
   logger.success(
     'BatchSubtitle',

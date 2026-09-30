@@ -2,13 +2,10 @@ import { GM_download } from '$';
 import { requestChunkedBuffer } from '../api/http';
 import { muxMp4 } from './muxer';
 import { logger } from '../utils/logger';
+import { getDownloadSettings, getCachedDirectoryHandle, resolveDownloadRelativePath } from '../utils/settings';
 import type { VideoStreamItem, AudioStreamItem, DownloadProgress } from '../types';
 
-/**
- * 触发本地文件保存
- */
-export function saveBlobAsFile(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
+function fallbackAnchorDownload(url: string, filename: string): void {
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
@@ -19,14 +16,82 @@ export function saveBlobAsFile(blob: Blob, filename: string): void {
 }
 
 /**
- * 直接下载文件（支持 GM_download 防盗链快速静默下载）
+ * 触发本地文件保存 (支持 File System Access API 本地磁盘直连、GM_download 自定义子目录与另存为对话框)
  */
-export function directDownload(url: string, filename: string): void {
+export async function saveBlobAsFile(blob: Blob, filename: string, videoTitle?: string): Promise<void> {
+  const settings = getDownloadSettings();
+  const dirHandle = getCachedDirectoryHandle();
+
+  // 1. 如果用户启用了 File System Access API 本地磁盘直连，直接写入目标本地目录
+  if (settings.useLocalDirHandle && dirHandle) {
+    try {
+      let targetDir = dirHandle;
+      const sub = settings.subfolder.trim().replace(/^[/\\]+|[/\\]+$/g, '');
+      if (sub) {
+        for (const segment of sub.split(/[/\\]+/)) {
+          if (segment) {
+            targetDir = await targetDir.getDirectoryHandle(segment, { create: true });
+          }
+        }
+      }
+      if (settings.autoTitleFolder && videoTitle) {
+        const cleanTitle = videoTitle.split('_P')[0].replace(/[\\/:*?"<>|]/g, '_').trim();
+        if (cleanTitle) {
+          targetDir = await targetDir.getDirectoryHandle(cleanTitle, { create: true });
+        }
+      }
+
+      const fileHandle = await targetDir.getFileHandle(filename, { create: true });
+      const writable = await (fileHandle as any).createWritable();
+      await writable.write(blob);
+      await writable.close();
+      logger.info('Downloader', `文件已直接写入本地磁盘: ${dirHandle.name}/${filename}`);
+      return;
+    } catch (fsErr: any) {
+      logger.warn('Downloader', '本地目录直接写入失败，降级到下载器保存', { error: fsErr?.message });
+    }
+  }
+
+  // 2. 使用 GM_download（支持传递子目录路径与 saveAs 另存为对话框）
+  const relativePath = resolveDownloadRelativePath(filename, videoTitle);
+  const blobUrl = URL.createObjectURL(blob);
+
+  if (typeof GM_download !== 'undefined') {
+    try {
+      GM_download({
+        url: blobUrl,
+        name: relativePath,
+        saveAs: settings.alwaysAskSaveAs,
+        headers: {
+          'Referer': 'https://www.bilibili.com/',
+        },
+        onload: () => {
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+        },
+        onerror: () => {
+          fallbackAnchorDownload(blobUrl, filename);
+        },
+      });
+      return;
+    } catch {}
+  }
+
+  // 3. 原生 <a> 标签兜底下载
+  fallbackAnchorDownload(blobUrl, filename);
+}
+
+/**
+ * 直接下载文件（支持 GM_download 防盗链快速静默下载与自定义子路径）
+ */
+export function directDownload(url: string, filename: string, videoTitle?: string): void {
+  const settings = getDownloadSettings();
+  const relativePath = resolveDownloadRelativePath(filename, videoTitle);
+
   if (typeof GM_download !== 'undefined') {
     GM_download({
       url,
-      name: filename,
-      saveAs: false,
+      name: relativePath,
+      saveAs: settings.alwaysAskSaveAs,
       headers: {
         'Referer': 'https://www.bilibili.com/',
       },

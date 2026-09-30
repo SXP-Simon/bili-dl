@@ -16,12 +16,14 @@ import {
   Moon,
   Loader2,
   FolderArchive,
+  Settings,
 } from 'lucide-react';
 import { SpotlightCard } from './SpotlightCard';
 import { TabPill } from './TabPill';
 import { ProgressBar } from './ProgressBar';
 import { EpisodePicker } from './EpisodePicker';
 import { LogViewer } from './LogViewer';
+import { SettingsPanel } from './SettingsPanel';
 import { exportAria2Command } from '../media/aria2';
 import { fetchDanmakuAss } from '../media/danmaku';
 import { fetchSubtitleSrt } from '../media/subtitle';
@@ -65,6 +67,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   const [copiedSummary, setCopiedSummary] = useState(false);
   const [activeActionKey, setActiveActionKey] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -95,7 +98,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
     try {
       const traceId = '弹幕-ASS';
       const blob = await fetchDanmakuAss(data.cid, data.title, traceId);
-      saveBlobAsFile(blob, `${data.title}-弹幕.ass`);
+      saveBlobAsFile(blob, `${data.title}-弹幕.ass`, data.title);
       onShowToast('弹幕文件已转换完成并保存', 'success');
     } catch (err: any) {
       onShowToast(`弹幕导出失败: ${err.message}`, 'error');
@@ -106,7 +109,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
     try {
       const traceId = `字幕-${lanDoc}`;
       const blob = await fetchSubtitleSrt(subUrl, traceId);
-      saveBlobAsFile(blob, `${data.title}-${lanDoc}字幕.srt`);
+      saveBlobAsFile(blob, `${data.title}-${lanDoc}字幕.srt`, data.title);
       onShowToast(`${lanDoc}字幕已保存为 SRT 格式`, 'success');
     } catch (err: any) {
       onShowToast(`字幕导出失败: ${err.message}`, 'error');
@@ -140,8 +143,29 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* 设置按钮 */}
             <button
-              onClick={() => setShowLogs(!showLogs)}
+              onClick={() => {
+                setShowSettings(!showSettings);
+                if (showLogs) setShowLogs(false);
+              }}
+              title={showSettings ? '返回资源下载列表' : '配置下载落盘路径与保存偏好'}
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all duration-150 active:scale-95 cursor-pointer shadow-2xs ${
+                showSettings
+                  ? 'bg-primary/25 text-emerald-950 dark:text-emerald-100 border-primary/50 font-bold'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted border-border/60'
+              }`}
+            >
+              <Settings className="w-3.5 h-3.5" strokeWidth={2.2} />
+              <span className="text-[11px] font-medium">设置</span>
+            </button>
+
+            {/* 日志按钮 */}
+            <button
+              onClick={() => {
+                setShowLogs(!showLogs);
+                if (showSettings) setShowSettings(false);
+              }}
               title={showLogs ? '收起诊断日志' : '查看运行日志与诊断信息'}
               className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all duration-150 active:scale-95 cursor-pointer shadow-2xs ${
                 showLogs
@@ -171,8 +195,17 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
           </div>
         </div>
 
-        {/* 视频信息预览 (固定) */}
-        <div className="flex-shrink-0 px-6 pt-3 pb-2">
+        {showSettings ? (
+          <div className="flex-1 min-h-[340px] max-h-[480px] flex flex-col overflow-hidden bg-card">
+            <SettingsPanel
+              onClose={() => setShowSettings(false)}
+              onShowToast={onShowToast}
+            />
+          </div>
+        ) : (
+          <>
+            {/* 视频信息预览 (固定) */}
+            <div className="flex-shrink-0 px-6 pt-3 pb-2">
           <div className="flex gap-3.5 p-3 rounded-2xl bg-card border border-border/80 items-center shadow-2xs">
             {data.cover && (
               <img
@@ -660,6 +693,8 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
             )}
           </div>
         </div>
+      </>
+    )}
 
         {/* 底部进度条与多任务并发管理面板 (固定高度内部滚动) */}
         {((tasks && tasks.length > 0) || (progress && progress.status !== 'idle')) && (
