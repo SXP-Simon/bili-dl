@@ -90,12 +90,30 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
     onShowToast('已恢复全部默认下载设置', 'info');
   };
 
-  const handleCopyPath = (pathText: string, label: string) => {
+  const handleCopySubfolderPath = () => {
+    const sub = settings.subfolder.trim() || 'bili-dl';
+    const shellPath = `shell:Downloads\\${sub}`;
     try {
-      navigator.clipboard.writeText(pathText);
-      onShowToast(`已复制${label}「${pathText}」，可在资源管理器 (Win+E) 地址栏粘贴快速打开`, 'success');
+      navigator.clipboard.writeText(shellPath);
+      onShowToast(`已复制 Shell 路径「${shellPath}」，在资源管理器 (Win+E) 地址栏或运行 (Win+R) 中粘贴回车即可直达`, 'success');
     } catch {
-      onShowToast(`复制路径失败: ${pathText}`, 'error');
+      onShowToast(`复制路径失败`, 'error');
+    }
+  };
+
+  const handleCopyDirectPath = () => {
+    const fullPath = settings.localFullPath?.trim();
+    if (!fullPath) {
+      onShowToast(`请先在输入框中填写该文件夹在电脑中的完整路径 (如 D:\\Videos\\${settings.localDirName || 'bili-dl'})`, 'info');
+      const inputEl = document.getElementById('bili-dl-direct-path-input') as HTMLInputElement;
+      inputEl?.focus();
+      return;
+    }
+    try {
+      navigator.clipboard.writeText(fullPath);
+      onShowToast(`已复制本地绝对路径「${fullPath}」，可直接粘贴至资源管理器 (Win+E) 地址栏打开`, 'success');
+    } catch {
+      onShowToast(`复制路径失败: ${fullPath}`, 'error');
     }
   };
 
@@ -145,22 +163,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
               />
             </div>
             <button
-              onClick={() =>
-                handleCopyPath(
-                  `%USERPROFILE%\\Downloads\\${settings.subfolder.trim() || 'bili-dl'}`,
-                  'Windows 完整下载绝对路径'
-                )
-              }
-              title="复制完整路径并在文件资源管理器 (Win + E) 地址栏直接粘贴回车打开"
+              onClick={handleCopySubfolderPath}
+              title="复制 Windows 专属 shell:Downloads 直达路径，可在资源管理器 (Win + E) 或运行 (Win + R) 中直接回车打开"
               className="px-2.5 py-1.5 rounded-xl bg-card hover:bg-muted text-foreground border border-border/80 text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95 shadow-2xs shrink-0 cursor-pointer"
             >
               <FolderOpen className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
-              <span>复制完整路径</span>
+              <span>复制直达路径</span>
             </button>
           </div>
           <p className="text-[11px] text-muted-foreground leading-relaxed flex items-center gap-1">
             <HelpCircle className="w-3 h-3 shrink-0 text-muted-foreground/70" />
-            复制路径为 <code>%USERPROFILE%\Downloads\...</code>，在文件资源管理器 (Win+E) 地址栏粘贴即可秒开。
+            复制路径为 <code>shell:Downloads\{settings.subfolder.trim() || 'bili-dl'}</code>，在资源管理器 (Win+E) 地址栏直接粘贴回车即可秒开。
           </p>
         </div>
 
@@ -266,27 +279,28 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
                 </div>
 
                 {/* 完整本地物理路径输入与一键复制 */}
-                <div className="flex items-center gap-1.5 pt-0.5">
-                  <input
-                    type="text"
-                    value={settings.localFullPath || ''}
-                    onChange={(e) => updateSetting('localFullPath', e.target.value)}
-                    placeholder={`输入完整物理路径 (例如 D:\\Videos\\${settings.localDirName})`}
-                    className="flex-1 px-2.5 py-1 rounded-lg bg-background border border-border/80 text-foreground font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-primary transition-all"
-                  />
-                  <button
-                    onClick={() =>
-                      handleCopyPath(
-                        settings.localFullPath?.trim() || settings.localDirName || '',
-                        '本地磁盘完整路径'
-                      )
-                    }
-                    title="复制完整路径并在文件资源管理器 (Win + E) 中快速定位"
-                    className="px-2.5 py-1 rounded-lg bg-card hover:bg-muted text-foreground border border-border/70 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-                  >
-                    <FolderOpen className="w-3 h-3 text-emerald-700 dark:text-emerald-300" />
-                    <span>复制完整路径</span>
-                  </button>
+                <div className="space-y-1 pt-0.5">
+                  <div className="text-[10px] text-muted-foreground">
+                    完整磁盘绝对路径 (填写以便一键复制秒开):
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      id="bili-dl-direct-path-input"
+                      type="text"
+                      value={settings.localFullPath || ''}
+                      onChange={(e) => updateSetting('localFullPath', e.target.value)}
+                      placeholder={`例如: D:\\Videos\\${settings.localDirName || 'bili-dl'}`}
+                      className="flex-1 px-2.5 py-1.5 rounded-lg bg-background border border-border/80 text-foreground font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                    />
+                    <button
+                      onClick={handleCopyDirectPath}
+                      title="复制完整物理绝对路径并在文件资源管理器 (Win + E) 中快速定位"
+                      className="px-2.5 py-1.5 rounded-lg bg-card hover:bg-muted text-foreground border border-border/70 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                    >
+                      <FolderOpen className="w-3 h-3 text-emerald-700 dark:text-emerald-300" />
+                      <span>复制绝对路径</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (
