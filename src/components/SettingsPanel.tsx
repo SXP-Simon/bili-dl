@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Folder,
   FolderTree,
@@ -17,6 +17,7 @@ import {
   resetDownloadSettings,
   pickLocalDirectory,
   getCachedDirectoryHandle,
+  getOrRestoreDirectoryHandle,
   clearCachedDirectoryHandle,
   type DownloadSettings,
 } from '../utils/settings';
@@ -28,7 +29,19 @@ interface SettingsPanelProps {
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToast }) => {
   const [settings, setSettings] = useState<DownloadSettings>(() => getDownloadSettings());
-  const [hasDirHandle, setHasDirHandle] = useState<boolean>(() => !!getCachedDirectoryHandle());
+  const [hasDirHandle, setHasDirHandle] = useState<boolean>(
+    () => !!getCachedDirectoryHandle() || (getDownloadSettings().useLocalDirHandle && !!getDownloadSettings().localDirName)
+  );
+
+  useEffect(() => {
+    getOrRestoreDirectoryHandle().then((handle) => {
+      if (handle) {
+        setHasDirHandle(true);
+      } else if (!settings.localDirName) {
+        setHasDirHandle(false);
+      }
+    });
+  }, [settings.localDirName]);
 
   const updateSetting = <K extends keyof DownloadSettings>(key: K, value: DownloadSettings[K]) => {
     const next = { ...settings, [key]: value };

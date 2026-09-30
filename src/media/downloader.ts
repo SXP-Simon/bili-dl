@@ -2,7 +2,11 @@ import { GM_download } from '$';
 import { requestChunkedBuffer } from '../api/http';
 import { muxMp4 } from './muxer';
 import { logger } from '../utils/logger';
-import { getDownloadSettings, getCachedDirectoryHandle, resolveDownloadRelativePath } from '../utils/settings';
+import {
+  getDownloadSettings,
+  getOrRestoreDirectoryHandle,
+  resolveDownloadRelativePath,
+} from '../utils/settings';
 import type { VideoStreamItem, AudioStreamItem, DownloadProgress } from '../types';
 
 function fallbackAnchorDownload(url: string, filename: string): void {
@@ -20,7 +24,7 @@ function fallbackAnchorDownload(url: string, filename: string): void {
  */
 export async function saveBlobAsFile(blob: Blob, filename: string, videoTitle?: string): Promise<void> {
   const settings = getDownloadSettings();
-  const dirHandle = getCachedDirectoryHandle();
+  const dirHandle = await getOrRestoreDirectoryHandle(true);
 
   // 1. 如果用户启用了 File System Access API 本地磁盘直连，直接写入目标本地目录
   if (settings.useLocalDirHandle && dirHandle) {
