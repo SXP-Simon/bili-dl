@@ -42,7 +42,16 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
     }
   }, [logs]);
 
-  // 任务 TraceID 标签栏支持鼠标滚轮横向滑动
+  const isDraggingTrace = useRef(false);
+  const traceStartX = useRef(0);
+  const traceScrollLeft = useRef(0);
+  const hasDraggedTrace = useRef(false);
+
+  const availableTraces = Array.from(
+    new Set(logs.map((l) => l.traceId).filter((t): t is string => Boolean(t)))
+  );
+
+  // 任务 TraceID 标签栏支持鼠标滚轮横向滑动 (依赖 availableTraces.length 动态绑定)
   useEffect(() => {
     const el = traceScrollRef.current;
     if (!el) return;
@@ -56,11 +65,29 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
 
     el.addEventListener('wheel', handleWheel, { passive: false });
     return () => el.removeEventListener('wheel', handleWheel);
-  }, []);
+  }, [availableTraces.length]);
 
-  const availableTraces = Array.from(
-    new Set(logs.map((l) => l.traceId).filter((t): t is string => Boolean(t)))
-  );
+  const handleTraceMouseDown = (e: React.MouseEvent) => {
+    if (!traceScrollRef.current) return;
+    isDraggingTrace.current = true;
+    hasDraggedTrace.current = false;
+    traceStartX.current = e.pageX - traceScrollRef.current.offsetLeft;
+    traceScrollLeft.current = traceScrollRef.current.scrollLeft;
+  };
+
+  const handleTraceMouseMove = (e: React.MouseEvent) => {
+    if (!isDraggingTrace.current || !traceScrollRef.current) return;
+    const x = e.pageX - traceScrollRef.current.offsetLeft;
+    const walk = (x - traceStartX.current) * 1.2;
+    if (Math.abs(walk) > 3) {
+      hasDraggedTrace.current = true;
+    }
+    traceScrollRef.current.scrollLeft = traceScrollLeft.current - walk;
+  };
+
+  const handleTraceMouseUpOrLeave = () => {
+    isDraggingTrace.current = false;
+  };
 
   const filteredLogs = logs.filter((log) => {
     if (filterLevel !== 'all' && log.level !== filterLevel) return false;
@@ -143,14 +170,20 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-          {/* 任务 TraceID 快速筛选 (支持滚轮横向滑动) */}
+          {/* 任务 TraceID 快速筛选 (支持滚轮横向滑动与鼠标拖拽) */}
           {availableTraces.length > 0 && (
             <div
               ref={traceScrollRef}
-              className="flex items-center bg-background rounded-lg p-0.5 border border-border/70 text-[10px] font-mono max-w-[170px] overflow-x-auto scrollbar-clean select-none"
+              onMouseDown={handleTraceMouseDown}
+              onMouseMove={handleTraceMouseMove}
+              onMouseUp={handleTraceMouseUpOrLeave}
+              onMouseLeave={handleTraceMouseUpOrLeave}
+              className="flex items-center bg-background rounded-lg p-0.5 border border-border/70 text-[10px] font-mono max-w-[200px] sm:max-w-[280px] overflow-x-auto scrollbar-clean cursor-grab active:cursor-grabbing select-none"
             >
               <button
-                onClick={() => setFilterTrace('all')}
+                onClick={() => {
+                  if (!hasDraggedTrace.current) setFilterTrace('all');
+                }}
                 className={`px-1.5 py-0.5 rounded shrink-0 transition-colors cursor-pointer ${
                   filterTrace === 'all'
                     ? 'bg-primary/20 text-emerald-950 dark:text-emerald-100 font-bold'
@@ -162,7 +195,11 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
               {availableTraces.map((tr) => (
                 <button
                   key={tr}
-                  onClick={() => setFilterTrace(filterTrace === tr ? 'all' : tr)}
+                  onClick={() => {
+                    if (!hasDraggedTrace.current) {
+                      setFilterTrace(filterTrace === tr ? 'all' : tr);
+                    }
+                  }}
                   title={`仅查看任务 [#${tr}] 的穿透日志`}
                   className={`px-1.5 py-0.5 rounded shrink-0 transition-colors cursor-pointer ${
                     filterTrace === tr
