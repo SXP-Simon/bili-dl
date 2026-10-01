@@ -54,7 +54,8 @@ export async function fetchSubtitleSrt(subtitleUrl: string, traceId?: string): P
     }
   });
 
-  const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });
+  // 使用 application/x-subrip 专有字幕 MIME 并降级支持 octet-stream，避免浏览器嗅探为 text/plain 强行追加 .txt
+  const blob = new Blob([srt], { type: 'application/x-subrip;charset=utf-8' });
   logger.success('Subtitle', `SRT 字幕生成完成: 共 ${validIndex - 1} 行 (${(blob.size / 1024).toFixed(1)} KB)`, null, traceId);
   return blob;
 }

@@ -63,7 +63,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     assContent += `Dialogue: 0,${start},${end},Danmaku,,0,0,0,,{\\c&H${bgr}&}${text}\n`;
   });
 
-  const blob = new Blob([assContent], { type: 'text/plain;charset=utf-8' });
+  const blob = new Blob([assContent], { type: 'text/x-ssa;charset=utf-8' });
   logger.success('Danmaku', `弹幕转换完成: 共 ${dElements.length} 条，输出 ASS ${(blob.size / 1024).toFixed(1)} KB`, null, traceId);
   return blob;
 }

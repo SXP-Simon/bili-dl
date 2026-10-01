@@ -57,10 +57,16 @@ export async function saveBlobAsFile(blob: Blob, filename: string, videoTitle?: 
   }
 
   // 2. 使用 GM_download（支持传递子目录路径与 saveAs 另存为对话框）
+  // 针对小文本文件（.srt 与 .ass）：若未配置自定义子目录且未启用另存为弹窗，优先走原生 <a> 标签下载，
+  // 彻底绕开油猴（Tampermonkey）默认的扩展名白名单拦截（防止被强制篡改或追加为 .txt）
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const isSubtitleOrDanmaku = ext === 'srt' || ext === 'ass';
+  const hasCustomSubpath = Boolean(settings.subfolder.trim() || (settings.autoTitleFolder && videoTitle));
+
   const relativePath = resolveDownloadRelativePath(filename, videoTitle);
   const blobUrl = URL.createObjectURL(blob);
 
-  if (typeof GM_download !== 'undefined') {
+  if (typeof GM_download !== 'undefined' && (!isSubtitleOrDanmaku || hasCustomSubpath || settings.alwaysAskSaveAs)) {
     try {
       GM_download({
         url: blobUrl,
@@ -80,7 +86,7 @@ export async function saveBlobAsFile(blob: Blob, filename: string, videoTitle?: 
     } catch {}
   }
 
-  // 3. 原生 <a> 标签兜底下载
+  // 3. 原生 <a> 标签兜底下载（浏览器原生严格遵循 a.download 的文件名与后缀）
   fallbackAnchorDownload(blobUrl, filename);
 }
 
@@ -337,5 +343,3 @@ export async function downloadAudio(
     throw err;
   }
 }
-
-
