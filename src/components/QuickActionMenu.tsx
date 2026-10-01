@@ -46,7 +46,7 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
   const itemHeight = 34;
   const menuPadding = 8;
   const headerHeight = headerInfo ? 36 : 0;
-  const menuWidth = 250;
+  const menuWidth = 295;
   const menuHeight = actions.length * itemHeight + menuPadding + headerHeight;
 
   let left = 0;
@@ -94,7 +94,7 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
         ref={menuRef}
         style={{ left: `${left}px`, top: `${top}px` }}
         onClick={(e) => e.stopPropagation()}
-        className="absolute w-[250px] p-1 rounded-xl bg-card/95 dark:bg-neutral-900/95 backdrop-blur-md border border-border/80 shadow-xl select-none text-card-foreground animate-modal-in overflow-hidden"
+        className="absolute w-[295px] p-1 rounded-xl bg-card/95 dark:bg-neutral-900/95 backdrop-blur-md border border-border/80 shadow-xl select-none text-card-foreground animate-modal-in overflow-hidden"
       >
         {/* 顶部目标信息上下文头：标明操作对象，消除切换盲区 */}
         {headerInfo && (
