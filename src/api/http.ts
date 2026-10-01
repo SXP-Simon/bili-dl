@@ -197,6 +197,8 @@ async function fetchChunkWithRetry(
   let lastError: any = null;
   const streamPrefix = streamLabel ? `[${streamLabel}] ` : '';
 
+  const chunkSize = end - start + 1;
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     if (signal?.aborted) {
       throw new DOMException('Download aborted by user', 'AbortError');
@@ -216,12 +218,24 @@ async function fetchChunkWithRetry(
     try {
       const result = await new Promise<Uint8Array>((resolve, reject) => {
         let hasFinished = false;
+        let lastActivityTime = Date.now();
+        let stallCheckInterval: ReturnType<typeof setInterval> | null = null;
+
+        // 计算自适应最大超时（以保底 30KB/s 速率计算，最少 90s，最多 300s）
+        const dynamicTimeout = Math.min(300000, Math.max(90000, Math.ceil(chunkSize / (30 * 1024)) * 1000));
+
+        const cleanup = () => {
+          if (stallCheckInterval) {
+            clearInterval(stallCheckInterval);
+            stallCheckInterval = null;
+          }
+        };
 
         const req = GM_xmlhttpRequest({
           method: 'GET',
           url: targetUrl,
           responseType: 'arraybuffer',
-          timeout: 15000,
+          timeout: dynamicTimeout,
           headers: {
             'Referer': 'https://www.bilibili.com/',
             'User-Agent': navigator.userAgent,
@@ -229,11 +243,14 @@ async function fetchChunkWithRetry(
           },
           onprogress: (event: any) => {
             if (!hasFinished) {
+              lastActivityTime = Date.now();
               onChunkProgress(event.loaded || 0);
             }
           },
           onload: (response: any) => {
+            if (hasFinished) return;
             hasFinished = true;
+            cleanup();
             if (response.status >= 200 && response.status < 300) {
               const u8 = new Uint8Array(response.response as ArrayBuffer);
               onChunkProgress(u8.length);
@@ -243,11 +260,15 @@ async function fetchChunkWithRetry(
             }
           },
           ontimeout: () => {
+            if (hasFinished) return;
             hasFinished = true;
-            reject(new Error(`分片 ${start}-${end} 响应超时 (15s)`));
+            cleanup();
+            reject(new Error(`分片 ${start}-${end} 传输耗时超出保护阈值 (${(dynamicTimeout / 1000).toFixed(0)}s)`));
           },
           onerror: (err: any) => {
+            if (hasFinished) return;
             hasFinished = true;
+            cleanup();
             reject(new Error(err.error || `分片 ${start}-${end} 网络中断`));
           },
         });
@@ -259,6 +280,7 @@ async function fetchChunkWithRetry(
             () => {
               if (!hasFinished) {
                 hasFinished = true;
+                cleanup();
                 try {
                   (req as any)?.abort?.();
                 } catch {}
@@ -269,15 +291,23 @@ async function fetchChunkWithRetry(
           );
         }
 
-        // 兜底看门狗（18s）防死锁
-        setTimeout(() => {
-          if (!hasFinished) {
+        // 动态数据传输停滞看门狗：每 2 秒检测一次。
+        // 只要持续有数据流动 (onprogress 触发) 绝不会误杀；仅当超过 20 秒完全没有任何新数据到达时，才判定为网络假死/断流并进行重试
+        stallCheckInterval = setInterval(() => {
+          if (hasFinished) {
+            cleanup();
+            return;
+          }
+          const idleTime = Date.now() - lastActivityTime;
+          if (idleTime >= 20000) {
+            hasFinished = true;
+            cleanup();
             try {
               (req as any)?.abort?.();
             } catch {}
-            reject(new Error(`分片 ${start}-${end} 连接挂起 (18s 看门狗强关)`));
+            reject(new Error(`分片 ${start}-${end} 数据传输停滞卡死 (20s 无新数据响应)`));
           }
-        }, 18000);
+        }, 2000);
       });
 
       release();
