@@ -10,10 +10,11 @@ import { fetchSubtitleSrt } from './media/subtitle';
 import { batchDetectAndDownloadSubtitles } from './media/batchSubtitle';
 import { batchDownloadAllLowestAudios, batchDownloadAllHighestVideos } from './media/batchDownloader';
 import { logger } from './utils/logger';
-import type { MediaResourceData, VideoStreamItem, AudioStreamItem, DownloadTask, QuickActionItem } from './types';
+import type { MediaResourceData, VideoStreamItem, AudioStreamItem, DownloadTask, QuickActionItem, QuickMenuHeaderInfo } from './types';
 
 export const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
   const [loadingCid, setLoadingCid] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
@@ -29,6 +30,9 @@ export const App: React.FC = () => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
   const activeControllers = useRef<Map<string, AbortController>>(new Map());
+
+  // 记录导航序列号，防止快速切集时的竞态乱序覆盖
+  const navEpochRef = useRef(0);
 
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
@@ -93,13 +97,30 @@ export const App: React.FC = () => {
       const currentUrl = location.href;
       if (currentUrl !== lastUrl) {
         lastUrl = currentUrl;
+        const epoch = ++navEpochRef.current;
         logger.info('Navigation', `检测到页面路由切换: ${currentUrl}`);
-        // 清除上一视频缓存，确保浮动按键与快捷操作对准新视频
+
+        // 切换中途状态：开启切换过渡视觉动效，清除陈旧视频缓存
+        setIsSwitching(true);
         setMediaData(null);
 
         // 若当前面板处于打开状态，自动为新视频重新解析
         if (isModalOpenRef.current) {
           handleOpenModal();
+        } else {
+          // 预拉取新页面视频数据并校验 epoch 避免竞态
+          fetchCurrentMediaData()
+            .then((fresh) => {
+              if (epoch === navEpochRef.current && fresh) {
+                setMediaData(fresh);
+              }
+            })
+            .catch(() => {})
+            .finally(() => {
+              if (epoch === navEpochRef.current) {
+                setIsSwitching(false);
+              }
+            });
         }
       }
     };
@@ -193,6 +214,7 @@ export const App: React.FC = () => {
     } finally {
       setLoading(false);
       setLoadingCid(null);
+      setIsSwitching(false);
     }
   };
 
@@ -341,6 +363,7 @@ export const App: React.FC = () => {
     }
 
     setLoading(true);
+    setIsSwitching(true);
     try {
       const fresh = await fetchCurrentMediaData();
       if (fresh) {
@@ -349,6 +372,7 @@ export const App: React.FC = () => {
       return fresh;
     } finally {
       setLoading(false);
+      setIsSwitching(false);
     }
   };
 
@@ -541,9 +565,15 @@ export const App: React.FC = () => {
     // 展开快捷操作菜单时，若未加载或当前数据与页面 URL 不一致，后台无感预拉取最新视频数据
     const currentBvid = getBvidFromUrl();
     if (!mediaData || mediaData.bvid !== currentBvid) {
-      fetchCurrentMediaData().then((fresh) => {
-        if (fresh) setMediaData(fresh);
-      }).catch(() => {});
+      setIsSwitching(true);
+      fetchCurrentMediaData()
+        .then((fresh) => {
+          if (fresh) setMediaData(fresh);
+        })
+        .catch(() => {})
+        .finally(() => {
+          setIsSwitching(false);
+        });
     }
   };
 
@@ -556,6 +586,21 @@ export const App: React.FC = () => {
   const isBatchVideosRunning = tasks.some(
     (t) => (t.id.startsWith('batch_videos_') || t.id.startsWith('batch_video_')) && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled'
   );
+
+  // 计算当前右键菜单的目标上下文头信息
+  const currentBvid = getBvidFromUrl();
+  const currentP = new URLSearchParams(location.search).get('p');
+  const targetPageIndex = currentP ? parseInt(currentP, 10) - 1 : 0;
+  const isMediaDataMatched =
+    Boolean(mediaData && currentBvid && mediaData.bvid === currentBvid &&
+    (mediaData.pages.length <= 1 || !currentP || mediaData.cid === mediaData.pages[targetPageIndex]?.cid));
+
+  const quickMenuHeader: QuickMenuHeaderInfo = {
+    bvid: currentBvid || mediaData?.bvid || undefined,
+    pageText: currentP ? `P${currentP}` : undefined,
+    title: isMediaDataMatched ? mediaData?.title : undefined,
+    isReady: isMediaDataMatched && !isSwitching,
+  };
 
   // 抽象与配置右键快捷操作列表 (支持任意未来快捷项灵活追加)
   const quickActions: QuickActionItem[] = [
@@ -608,6 +653,7 @@ export const App: React.FC = () => {
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       <FloatButton
         loading={loading}
+        isSwitching={isSwitching}
         tasks={tasks}
         onClick={() => handleOpenModal()}
         onContextMenu={handleFloatButtonContextMenu}
@@ -616,6 +662,7 @@ export const App: React.FC = () => {
         isOpen={isQuickMenuOpen}
         onClose={() => setIsQuickMenuOpen(false)}
         actions={quickActions}
+        headerInfo={quickMenuHeader}
         anchorPosition={quickMenuPos}
       />
       {isModalOpen && mediaData && (

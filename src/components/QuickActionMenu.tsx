@@ -1,11 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
-import type { QuickActionItem } from '../types';
+import type { QuickActionItem, QuickMenuHeaderInfo } from '../types';
 
 interface QuickActionMenuProps {
   isOpen: boolean;
   onClose: () => void;
   actions: QuickActionItem[];
+  headerInfo?: QuickMenuHeaderInfo;
   anchorPosition?: {
     x?: number;
     y?: number;
@@ -14,12 +15,13 @@ interface QuickActionMenuProps {
 }
 
 /**
- * 极简原生感快捷右键菜单 (紧凑轻量、紧贴悬浮球、零多余占位)
+ * 极简原生感快捷右键菜单 (紧凑轻量、紧贴悬浮球、零多余占位、带目标视频实时就绪指示头)
  */
 export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
   isOpen,
   onClose,
   actions,
+  headerInfo,
   anchorPosition,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -41,18 +43,18 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
 
   if (!isOpen || actions.length === 0) return null;
 
-  // 极简紧凑尺寸：单项约 34px，整体 3 项约 110px 高度，宽度 240px 确保中文完全展开
   const itemHeight = 34;
   const menuPadding = 8;
-  const menuWidth = 240;
-  const menuHeight = actions.length * itemHeight + menuPadding;
+  const headerHeight = headerInfo ? 36 : 0;
+  const menuWidth = 250;
+  const menuHeight = actions.length * itemHeight + menuPadding + headerHeight;
 
   let left = 0;
   let top = 0;
 
   if (anchorPosition?.buttonRect) {
     const { buttonRect } = anchorPosition;
-    // 悬浮球若在屏幕下半部分，贴在悬浮球正上方（间隙 4px）
+    // 悬浮球若在屏幕下半部分，贴在悬浮球正上方（间隔 4px）
     if (buttonRect.top > menuHeight + 16) {
       top = buttonRect.top - menuHeight - 4;
     } else {
@@ -92,8 +94,35 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
         ref={menuRef}
         style={{ left: `${left}px`, top: `${top}px` }}
         onClick={(e) => e.stopPropagation()}
-        className="absolute w-[240px] p-1 rounded-xl bg-card/95 dark:bg-neutral-900/95 backdrop-blur-md border border-border/80 shadow-xl select-none text-card-foreground animate-modal-in"
+        className="absolute w-[250px] p-1 rounded-xl bg-card/95 dark:bg-neutral-900/95 backdrop-blur-md border border-border/80 shadow-xl select-none text-card-foreground animate-modal-in overflow-hidden"
       >
+        {/* 顶部目标信息上下文头：标明操作对象，消除切换盲区 */}
+        {headerInfo && (
+          <div className="px-2.5 py-1.5 mb-1 rounded-lg bg-muted/60 border border-border/40 flex items-center justify-between gap-1.5 text-[11px]">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              {headerInfo.isReady ? (
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+              ) : (
+                <Loader2 className="w-2.5 h-2.5 shrink-0 text-primary animate-spin" />
+              )}
+              <span className="truncate font-medium text-foreground">
+                {headerInfo.isReady
+                  ? headerInfo.title || headerInfo.pageText || headerInfo.bvid || '视频已就绪'
+                  : '正在同步新视频数据...'}
+              </span>
+            </div>
+
+            {headerInfo.bvid && (
+              <span className="text-[10px] font-mono text-muted-foreground shrink-0 bg-background/80 px-1 py-0.2 rounded border border-border/40">
+                {headerInfo.bvid.slice(0, 8)}..
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="space-y-0.5">
           {actions.map((action) => {
             const isDisabled = action.disabled || action.loading;

@@ -4,6 +4,7 @@ import type { DownloadTask } from '../types';
 
 interface FloatButtonProps {
   loading: boolean;
+  isSwitching?: boolean;
   tasks?: DownloadTask[];
   onClick: () => void;
   onContextMenu?: (e: React.MouseEvent, pos: { x: number; y: number }) => void;
@@ -11,6 +12,7 @@ interface FloatButtonProps {
 
 export const FloatButton: React.FC<FloatButtonProps> = ({
   loading,
+  isSwitching = false,
   tasks = [],
   onClick,
   onContextMenu,
@@ -211,6 +213,8 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
       ? Math.round(tasks.reduce((sum, t) => sum + (t.progress || 0), 0) / tasks.length)
       : 0;
 
+  const showSpinLoader = isSwitching || loading || hasActiveTasks;
+
   return (
     <div
       ref={buttonRef}
@@ -235,7 +239,11 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
       }}
       className={`fixed ${
         !isCustomPos ? 'right-8 bottom-28' : ''
-      } z-[99999999] group flex items-center gap-2 pl-2.5 pr-3.5 py-1.5 rounded-full bg-card/95 backdrop-blur-md text-card-foreground text-xs font-semibold shadow-lg border border-border/80 ${
+      } z-[99999999] group flex items-center gap-2 pl-2.5 pr-3.5 py-1.5 rounded-full bg-card/95 backdrop-blur-md text-card-foreground text-xs font-semibold shadow-lg border ${
+        isSwitching
+          ? 'border-primary/60 ring-2 ring-primary/20'
+          : 'border-border/80'
+      } ${
         isDragging
           ? 'cursor-grabbing shadow-2xl ring-2 ring-primary/30 border-primary/60'
           : 'cursor-pointer hover:shadow-xl hover:border-primary/50'
@@ -247,10 +255,10 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
         }`}
       />
 
-      {/* 清新翠绿徽章指示器 (下载状态自适应变幻) */}
+      {/* 清新翠绿徽章指示器 (下载状态与切换状态自适应变幻) */}
       <div
         className={`flex h-5 w-5 items-center justify-center rounded-full font-bold shadow-2xs transition-all duration-300 shrink-0 ${
-          hasActiveTasks
+          hasActiveTasks || isSwitching
             ? 'bg-primary text-primary-foreground animate-pulse'
             : errorTasks.length > 0 && !hasActiveTasks
             ? 'bg-destructive text-destructive-foreground'
@@ -259,7 +267,7 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
             : 'bg-primary text-primary-foreground'
         }`}
       >
-        {loading || hasActiveTasks ? (
+        {showSpinLoader ? (
           <Loader2 className="w-3 h-3 animate-spin" />
         ) : errorTasks.length > 0 && !hasActiveTasks ? (
           <AlertCircle className="w-3 h-3" />
@@ -272,7 +280,9 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
 
       {/* 按钮文字状态区 */}
       <div className="flex items-center gap-1.5 min-w-0">
-        {loading ? (
+        {isSwitching ? (
+          <span className="tracking-tight font-medium text-primary animate-pulse">识别新视频...</span>
+        ) : loading ? (
           <span className="tracking-tight font-medium text-muted-foreground">正在解析...</span>
         ) : hasActiveTasks ? (
           <div className="flex items-center gap-1.5 whitespace-nowrap">

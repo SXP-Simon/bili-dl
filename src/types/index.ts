@@ -85,6 +85,13 @@ export interface LogEntry {
   details?: any;
 }
 
+export interface QuickMenuHeaderInfo {
+  bvid?: string;
+  pageText?: string;
+  title?: string;
+  isReady: boolean;
+}
+
 export interface QuickActionItem {
   id: string;
   icon: React.ReactNode;
@@ -96,6 +103,3 @@ export interface QuickActionItem {
   loading?: boolean;
   onClick: () => Promise<void> | void;
 }
-
-
-
