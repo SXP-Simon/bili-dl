@@ -1,4 +1,4 @@
-export type CategoryType = 'all' | 'video' | 'audio' | 'cover' | 'danmaku' | 'episodes';
+export type CategoryType = 'all' | 'video' | 'audio' | 'cover' | 'danmaku' | 'episodes' | 'season';
 
 export interface VideoStreamItem {
   id: number;
@@ -39,6 +39,31 @@ export interface VideoPageItem {
   duration: number;
 }
 
+/**
+ * 合集/系列单集条目信息
+ */
+export interface SeasonEpisodeItem {
+  id: number;
+  bvid: string;
+  cid?: number;
+  title: string;
+  cover?: string;
+  duration?: number;
+  pageIndex: number;
+}
+
+/**
+ * 合集/系列完整元信息
+ */
+export interface UgcSeasonData {
+  id: number;
+  mid: number;
+  title: string;
+  cover?: string;
+  epCount: number;
+  episodes: SeasonEpisodeItem[];
+}
+
 export interface MediaResourceData {
   bvid: string;
   cid: number;
@@ -50,9 +75,10 @@ export interface MediaResourceData {
   subtitles: SubtitleItem[];
   pages: VideoPageItem[];
   aiSummaryMarkdown?: string;
+  ugcSeason?: UgcSeasonData;
 }
 
-export type TaskType = 'video' | 'audio' | 'danmaku' | 'subtitle' | 'cover' | 'batch_subtitle';
+export type TaskType = 'video' | 'audio' | 'danmaku' | 'subtitle' | 'cover' | 'batch_subtitle' | 'batch_video' | 'batch_audio';
 
 export interface DownloadTask {
   id: string;

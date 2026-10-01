@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Video, Music, FolderArchive } from 'lucide-react';
+import { Video, Music, FolderArchive, Film } from 'lucide-react';
 import { FloatButton } from './components/FloatButton';
 import { DownloadModal } from './components/DownloadModal';
 import { QuickActionMenu } from './components/QuickActionMenu';
@@ -7,8 +7,8 @@ import { ToastContainer, ToastMessage } from './components/Toast';
 import { fetchCurrentMediaData, getVideoTitle, getBvidFromUrl } from './api/bilibili';
 import { downloadAndMuxMp4, downloadAudio, saveBlobAsFile } from './media/downloader';
 import { fetchSubtitleSrt } from './media/subtitle';
-import { batchDetectAndDownloadSubtitles } from './media/batchSubtitle';
-import { batchDownloadAllLowestAudios, batchDownloadAllHighestVideos } from './media/batchDownloader';
+import { batchDetectAndDownloadSubtitles, batchDownloadSeasonSubtitlesZip } from './media/batchSubtitle';
+import { batchDownloadAllLowestAudios, batchDownloadAllHighestVideos, batchDownloadSeasonHighestVideos, batchDownloadSeasonLowestAudios } from './media/batchDownloader';
 import { logger } from './utils/logger';
 import type { MediaResourceData, VideoStreamItem, AudioStreamItem, DownloadTask, QuickActionItem, QuickMenuHeaderInfo } from './types';
 
@@ -16,6 +16,7 @@ export const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
   const [loadingCid, setLoadingCid] = useState<number | null>(null);
+  const [loadingBvid, setLoadingBvid] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
   const [quickMenuPos, setQuickMenuPos] = useState<
@@ -196,13 +197,16 @@ export const App: React.FC = () => {
     setTasks((prev) => prev.filter((t) => t.status !== 'completed' && t.status !== 'cancelled'));
   };
 
-  const handleOpenModal = async (targetCid?: number) => {
+  const handleOpenModal = async (targetCid?: number, targetBvid?: string) => {
     setLoading(true);
     if (targetCid) {
       setLoadingCid(targetCid);
     }
+    if (targetBvid) {
+      setLoadingBvid(targetBvid);
+    }
     try {
-      const data = await fetchCurrentMediaData(targetCid);
+      const data = await fetchCurrentMediaData(targetCid, targetBvid);
       if (data) {
         setMediaData(data);
         setIsModalOpen(true);
@@ -214,12 +218,17 @@ export const App: React.FC = () => {
     } finally {
       setLoading(false);
       setLoadingCid(null);
+      setLoadingBvid(null);
       setIsSwitching(false);
     }
   };
 
-  const handleSelectEpisode = (cid: number) => {
-    handleOpenModal(cid);
+    const handleSelectEpisode = (cid: number) => {
+    handleOpenModal(cid, mediaData?.bvid);
+  };
+
+  const handleSelectSeasonEpisode = (bvid: string) => {
+    handleOpenModal(undefined, bvid);
   };
 
   const handleDownloadVideo = async (video: VideoStreamItem, audio?: AudioStreamItem, customTitle?: string) => {
@@ -456,6 +465,151 @@ export const App: React.FC = () => {
     }
   };
 
+  
+  // 一键下载合集/系列 (Season) 全部字幕并打包为 ZIP
+  const handleDownloadSeasonSubtitles = async (customData?: MediaResourceData) => {
+    const data = await getFreshMediaData(customData);
+    if (!data?.ugcSeason) {
+      showToast('未检测到当前视频属于合集/系列', 'warning');
+      return;
+    }
+
+    const season = data.ugcSeason;
+    const taskId = `season_subtitles_${season.id}`;
+    const taskTitle = `[合集字幕] ${season.title} (共 ${season.episodes.length} 集)`;
+    const traceId = `合集字幕-${season.id}`;
+
+    const controller = new AbortController();
+    activeControllers.current.set(taskId, controller);
+
+    upsertTask({
+      id: taskId,
+      type: 'batch_subtitle',
+      title: taskTitle,
+      status: 'pending',
+      progress: 0,
+      message: `开始探测合集 ${season.episodes.length} 集字幕...`,
+      timestamp: Date.now(),
+    });
+
+    try {
+      const res = await batchDownloadSeasonSubtitlesZip(
+        season.title,
+        season.episodes,
+        (prog) => {
+          const percent = prog.total > 0 ? Math.round((prog.current / prog.total) * 100) : 0;
+          updateTaskProgress(taskId, {
+            status: 'downloading_video',
+            progress: percent,
+            message: prog.message,
+          });
+        },
+        traceId,
+        controller.signal
+      );
+      if (!controller.signal.aborted) {
+        updateTaskProgress(taskId, {
+          status: 'completed',
+          progress: 100,
+          message: `合集字幕打包完成: 提取到 ${res.found} 集 (${res.fileName})`,
+        });
+        showToast(`合集字幕已成功打包并保存 (${res.found}/${res.total} 集)`, 'success');
+      }
+    } catch (err: any) {
+      if (controller.signal.aborted || err?.name === 'AbortError') {
+        updateTaskProgress(taskId, {
+          status: 'cancelled',
+          message: '已手动取消合集字幕打包',
+        });
+        showToast('合集字幕打包任务已取消', 'info');
+      } else {
+        updateTaskProgress(taskId, {
+          status: 'error',
+          message: `打包失败: ${err.message}`,
+        });
+        showToast(`合集字幕打包失败: ${err.message}`, 'error');
+      }
+    } finally {
+      activeControllers.current.delete(taskId);
+    }
+  };
+
+  // 一键下载合集/系列 (Season) 全部剧集最低质量音频
+  const handleDownloadSeasonAudiosLowest = async (customData?: MediaResourceData) => {
+    const data = await getFreshMediaData(customData);
+    if (!data?.ugcSeason) {
+      showToast('未检测到当前视频属于合集/系列', 'warning');
+      return;
+    }
+
+    const season = data.ugcSeason;
+    const controller = new AbortController();
+    const taskId = `season_audios_${season.id}`;
+    activeControllers.current.set(taskId, controller);
+
+    showToast(`已将合集全部 ${season.episodes.length} 集音频加入下载队列`, 'info');
+
+    try {
+      await batchDownloadSeasonLowestAudios(
+        season.title,
+        season.episodes,
+        upsertTask,
+        updateTaskProgress,
+        `合集音频-${season.id}`,
+        controller.signal
+      );
+      if (!controller.signal.aborted) {
+        showToast(`合集全部 ${season.episodes.length} 集音频下载已完成`, 'success');
+      }
+    } catch (err: any) {
+      if (controller.signal.aborted || err?.name === 'AbortError') {
+        showToast('合集音频下载任务已取消', 'info');
+      } else {
+        showToast(`合集音频下载失败: ${err.message}`, 'error');
+      }
+    } finally {
+      activeControllers.current.delete(taskId);
+    }
+  };
+
+  // 一键下载合集/系列 (Season) 全部剧集最高画质视频并合成 MP4
+  const handleDownloadSeasonVideosHighest = async (customData?: MediaResourceData) => {
+    const data = await getFreshMediaData(customData);
+    if (!data?.ugcSeason) {
+      showToast('未检测到当前视频属于合集/系列', 'warning');
+      return;
+    }
+
+    const season = data.ugcSeason;
+    const controller = new AbortController();
+    const taskId = `season_videos_${season.id}`;
+    activeControllers.current.set(taskId, controller);
+
+    showToast(`已将合集全部 ${season.episodes.length} 集最高画质加入合成队列`, 'info');
+
+    try {
+      await batchDownloadSeasonHighestVideos(
+        season.title,
+        season.episodes,
+        upsertTask,
+        updateTaskProgress,
+        `合集视频-${season.id}`,
+        controller.signal
+      );
+      if (!controller.signal.aborted) {
+        showToast(`合集全部 ${season.episodes.length} 集视频合成任务已完成`, 'success');
+      }
+    } catch (err: any) {
+      if (controller.signal.aborted || err?.name === 'AbortError') {
+        showToast('合集视频下载任务已取消', 'info');
+      } else {
+        showToast(`合集视频合成失败: ${err.message}`, 'error');
+      }
+    } finally {
+      activeControllers.current.delete(taskId);
+    }
+  };
+
   const handleDownloadBatchAudiosLowest = async (customData?: MediaResourceData) => {
     const data = await getFreshMediaData(customData);
     if (!data) {
@@ -578,13 +732,13 @@ export const App: React.FC = () => {
   };
 
   const isBatchSubtitlesRunning = tasks.some(
-    (t) => t.id.startsWith('batch_subtitles_') && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled'
+    (t) => (t.id.startsWith('batch_subtitles_') || t.id.startsWith('season_subtitles_')) && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled'
   );
   const isBatchAudiosRunning = tasks.some(
-    (t) => (t.id.startsWith('batch_audios_') || t.id.startsWith('batch_audio_')) && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled'
+    (t) => (t.id.startsWith('batch_audios_') || t.id.startsWith('batch_audio_') || t.id.startsWith('season_audio_') || t.id.startsWith('season_audios_')) && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled'
   );
   const isBatchVideosRunning = tasks.some(
-    (t) => (t.id.startsWith('batch_videos_') || t.id.startsWith('batch_video_')) && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled'
+    (t) => (t.id.startsWith('batch_videos_') || t.id.startsWith('batch_video_') || t.id.startsWith('season_video_') || t.id.startsWith('season_videos_')) && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled'
   );
 
   // 计算当前右键菜单的目标上下文头信息
@@ -597,56 +751,99 @@ export const App: React.FC = () => {
 
   const quickMenuHeader: QuickMenuHeaderInfo = {
     bvid: currentBvid || mediaData?.bvid || undefined,
-    pageText: currentP ? `P${currentP}` : undefined,
+    pageText: currentP ? `P${currentP}` : (mediaData?.ugcSeason ? `合集(${mediaData.ugcSeason.episodes.length}集)` : undefined),
     title: isMediaDataMatched ? mediaData?.title : undefined,
     isReady: isMediaDataMatched && !isSwitching,
   };
 
   // 抽象与配置右键快捷操作列表 (支持任意未来快捷项灵活追加)
-  const quickActions: QuickActionItem[] = [
-    {
-      id: 'quick_batch_subtitles',
-      icon: <FolderArchive className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
-      label: '一键下载全部字幕',
-      loading: isBatchSubtitlesRunning,
-      description: mediaData && mediaData.pages.length > 1
-        ? `批量探测全集 ${mediaData.pages.length} P 字幕并打包 ZIP 文件夹`
-        : '提取当前视频官方/AI双语字幕 (.srt)',
-      badge: 'SRT',
-      onClick: async () => {
-        logger.info('QuickAction', '触发快捷下载: 一键下载全部字幕');
-        await handleDownloadBatchSubtitles();
-      },
-    },
-    {
-      id: 'quick_batch_audios_lowest',
-      icon: <Music className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
-      label: '一键下载全部最低质量音频',
-      loading: isBatchAudiosRunning,
-      description: mediaData && mediaData.pages.length > 1
-        ? `批量提取全集 ${mediaData.pages.length} P 最低码率音频 (省流)`
-        : '提取当前视频最低码率独立音轨 (.m4a)',
-      badge: '64K',
-      onClick: async () => {
-        logger.info('QuickAction', '触发快捷下载: 一键下载全部最低质量音频');
-        await handleDownloadBatchAudiosLowest();
-      },
-    },
-    {
-      id: 'quick_batch_videos_highest',
-      icon: <Video className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
-      label: '一键下载全部最高质量视频',
-      loading: isBatchVideosRunning,
-      description: mediaData && mediaData.pages.length > 1
-        ? `批量下载全集 ${mediaData.pages.length} P 并无损封装含音频 MP4`
-        : '下载最高画质视频并合成含音频 MP4',
-      badge: 'MP4',
-      onClick: async () => {
-        logger.info('QuickAction', '触发快捷下载: 一键下载全部最高质量视频');
-        await handleDownloadBatchVideosHighest();
-      },
-    },
-  ];
+    const hasUgcSeason = Boolean(mediaData?.ugcSeason);
+  const seasonEpisodeCount = mediaData?.ugcSeason?.episodes.length || 0;
+
+  // 抽象与配置右键快捷操作列表 (根据是否为合集自动呈现最匹配的选项)
+  const quickActions: QuickActionItem[] = hasUgcSeason
+    ? [
+        {
+          id: 'quick_season_videos_highest',
+          icon: <Film className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+          label: `一键下载合集全部视频 (${seasonEpisodeCount}集)`,
+          loading: isBatchVideosRunning,
+          description: `批量下载合集《${mediaData?.ugcSeason?.title}》全部最高画质 MP4`,
+          badge: '合集全量',
+          onClick: async () => {
+            logger.info('QuickAction', '触发快捷下载: 一键下载合集全部最高画质');
+            await handleDownloadSeasonVideosHighest();
+          },
+        },
+        {
+          id: 'quick_season_audios_lowest',
+          icon: <Music className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+          label: `一键提取合集全部音频 (${seasonEpisodeCount}集)`,
+          loading: isBatchAudiosRunning,
+          description: `批量抽取合集《${mediaData?.ugcSeason?.title}》全集省流音频`,
+          badge: '合集音频',
+          onClick: async () => {
+            logger.info('QuickAction', '触发快捷下载: 一键提取合集全部音频');
+            await handleDownloadSeasonAudiosLowest();
+          },
+        },
+        {
+          id: 'quick_season_subtitles',
+          icon: <FolderArchive className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+          label: `一键打包合集全部字幕 (${seasonEpisodeCount}集)`,
+          loading: isBatchSubtitlesRunning,
+          description: `探测合集《${mediaData?.ugcSeason?.title}》全部字幕并打包 ZIP`,
+          badge: '合集ZIP',
+          onClick: async () => {
+            logger.info('QuickAction', '触发快捷下载: 一键打包合集全部字幕');
+            await handleDownloadSeasonSubtitles();
+          },
+        },
+      ]
+    : [
+        {
+          id: 'quick_batch_subtitles',
+          icon: <FolderArchive className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+          label: '一键下载全部字幕',
+          loading: isBatchSubtitlesRunning,
+          description: mediaData && mediaData.pages.length > 1
+            ? `批量探测全集 ${mediaData.pages.length} P 字幕并打包 ZIP 文件夹`
+            : '提取当前视频官方/AI双语字幕 (.srt)',
+          badge: 'SRT',
+          onClick: async () => {
+            logger.info('QuickAction', '触发快捷下载: 一键下载全部字幕');
+            await handleDownloadBatchSubtitles();
+          },
+        },
+        {
+          id: 'quick_batch_audios_lowest',
+          icon: <Music className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+          label: '一键下载全部最低质量音频',
+          loading: isBatchAudiosRunning,
+          description: mediaData && mediaData.pages.length > 1
+            ? `批量提取全集 ${mediaData.pages.length} P 最低码率音频 (省流)`
+            : '提取当前视频最低码率独立音轨 (.m4a)',
+          badge: '64K',
+          onClick: async () => {
+            logger.info('QuickAction', '触发快捷下载: 一键下载全部最低质量音频');
+            await handleDownloadBatchAudiosLowest();
+          },
+        },
+        {
+          id: 'quick_batch_videos_highest',
+          icon: <Video className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+          label: '一键下载全部最高质量视频',
+          loading: isBatchVideosRunning,
+          description: mediaData && mediaData.pages.length > 1
+            ? `批量下载全集 ${mediaData.pages.length} P 并无损封装含音频 MP4`
+            : '下载最高画质视频并合成含音频 MP4',
+          badge: 'MP4',
+          onClick: async () => {
+            logger.info('QuickAction', '触发快捷下载: 一键下载全部最高质量视频');
+            await handleDownloadBatchVideosHighest();
+          },
+        },
+      ];
 
   return (
     <div className={isDark ? 'dark' : ''}>
@@ -670,6 +867,7 @@ export const App: React.FC = () => {
           data={mediaData}
           isDark={isDark}
           loadingCid={loadingCid}
+          loadingBvid={loadingBvid}
           tasks={tasks}
           onRemoveTask={handleRemoveTask}
           onClearCompleted={handleClearCompletedTasks}
@@ -680,7 +878,11 @@ export const App: React.FC = () => {
           onDownloadVideo={handleDownloadVideo}
           onDownloadAudio={handleDownloadAudio}
           onDownloadBatchSubtitles={handleDownloadBatchSubtitles}
+          onDownloadSeasonVideos={handleDownloadSeasonVideosHighest}
+          onDownloadSeasonAudios={handleDownloadSeasonAudiosLowest}
+          onDownloadSeasonSubtitles={handleDownloadSeasonSubtitles}
           onSelectEpisode={handleSelectEpisode}
+          onSelectSeasonEpisode={handleSelectSeasonEpisode}
           onShowToast={showToast}
         />
       )}

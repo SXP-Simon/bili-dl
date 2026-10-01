@@ -1,7 +1,15 @@
 import { requestJson } from './http';
 import { logger } from '../utils/logger';
 import { signWbiQuery } from '../utils/wbi';
-import type { MediaResourceData, VideoStreamItem, AudioStreamItem, VideoPageItem, SubtitleItem } from '../types';
+import type {
+  MediaResourceData,
+  VideoStreamItem,
+  AudioStreamItem,
+  VideoPageItem,
+  SubtitleItem,
+  UgcSeasonData,
+  SeasonEpisodeItem,
+} from '../types';
 
 const QUALITY_MAP: Record<number, string> = {
   127: '8K 超高清',
@@ -93,8 +101,141 @@ export async function fetchAiSummary(bvid: string, cid: number): Promise<string 
   return undefined;
 }
 
-export async function fetchCurrentMediaData(targetCid?: number): Promise<MediaResourceData | null> {
-  const bvid = getBvidFromUrl();
+/**
+ * 智能探测与获取合集 (Season / Series) 数据
+ * 具有多层高健壮性防线，不受 BewlyBewly 等前端插件修改 DOM 的影响：
+ * 1. window.__INITIAL_STATE__.videoData.ugc_season（页面直出全局变量，防线级别最高）
+ * 2. 页面中合集跳转链接 (href 匹配 /collectiondetail?sid= 或 /lists/{sid}?type=season)
+ * 3. 当前 URL 匹配 (若直接处于 space 列表页)
+ * 4. DOM 泛选择器兜底 (.video-pod__list)
+ */
+export async function fetchUgcSeasonData(_currentBvid?: string): Promise<UgcSeasonData | undefined> {
+  const anyWindow = window as any;
+  let seasonId: number | null = null;
+  let mid: number | null = null;
+  const initialUgcSeason = anyWindow.__INITIAL_STATE__?.videoData?.ugc_season;
+
+  // 1. 从 __INITIAL_STATE__ 中提取
+  if (initialUgcSeason?.id) {
+    seasonId = Number(initialUgcSeason.id);
+    mid = Number(initialUgcSeason.mid || anyWindow.__INITIAL_STATE__?.videoData?.owner?.mid);
+  }
+
+  // 2. 从页面 DOM 链接提取 (即使 class 被 BewlyBewly 等插件修改，通过 href 关键路径即可精准抓取)
+  if (!seasonId) {
+    const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href*="lists/"], a[href*="collectiondetail"]'));
+    for (const a of links) {
+      const href = a.href || '';
+      const listMatch = href.match(/space\.bilibili\.com\/(\d+)\/lists\/(\d+)/);
+      if (listMatch) {
+        mid = Number(listMatch[1]);
+        seasonId = Number(listMatch[2]);
+        break;
+      }
+      const sidMatch = href.match(/sid=(\d+)/);
+      if (sidMatch) {
+        seasonId = Number(sidMatch[1]);
+        const midMatch = href.match(/mid=(\d+)/);
+        if (midMatch) mid = Number(midMatch[1]);
+        break;
+      }
+    }
+  }
+
+  // 3. 从当前 URL 提取
+  if (!seasonId) {
+    const listMatch = location.href.match(/space\.bilibili\.com\/(\d+)\/lists\/(\d+)/);
+    if (listMatch) {
+      mid = Number(listMatch[1]);
+      seasonId = Number(listMatch[2]);
+    }
+  }
+
+  // 4. 若成功获得了 seasonId 与 mid，调用 B 站官方合集接口（一次性拉取全部集数，突破 DOM 虚拟列表限制）
+  if (seasonId && mid) {
+    try {
+      const url = `https://api.bilibili.com/x/polymer/web-space/seasons_archives_list?mid=${mid}&season_id=${seasonId}&page_num=1&page_size=100`;
+      const res = await requestJson<any>(url);
+      if (res?.code === 0 && res?.data) {
+        const archives = res.data.archives || [];
+        const meta = res.data.meta || {};
+        const episodes: SeasonEpisodeItem[] = archives.map((item: any, idx: number) => ({
+          id: item.aid || idx + 1,
+          bvid: item.bvid,
+          cid: item.cid,
+          title: item.title,
+          cover: item.pic,
+          duration: item.duration,
+          pageIndex: idx + 1,
+        }));
+
+        logger.info('API', `成功通过官方接口解析合集: ${meta.name || '合集'} (共 ${episodes.length} 集)`);
+        return {
+          id: seasonId,
+          mid,
+          title: meta.name || initialUgcSeason?.title || '合集视频',
+          cover: meta.cover || initialUgcSeason?.cover,
+          epCount: meta.total || episodes.length,
+          episodes,
+        };
+      }
+    } catch (e: any) {
+      logger.warn('API', `合集 API 请求失败: ${e.message}，尝试使用首屏数据兜底`);
+    }
+  }
+
+  // 5. 若 API 失败或无法获取 mid，但 initialUgcSeason 中已有 sections[0].episodes，直接解析
+  if (initialUgcSeason?.sections?.[0]?.episodes) {
+    const eps = initialUgcSeason.sections[0].episodes;
+    const episodes: SeasonEpisodeItem[] = eps.map((item: any, idx: number) => ({
+      id: item.id || idx + 1,
+      bvid: item.bvid,
+      cid: item.cid,
+      title: item.title,
+      cover: item.arc?.pic,
+      duration: item.arc?.duration,
+      pageIndex: idx + 1,
+    }));
+    return {
+      id: Number(initialUgcSeason.id),
+      mid: Number(initialUgcSeason.mid || 0),
+      title: initialUgcSeason.title || '合集视频',
+      cover: initialUgcSeason.cover,
+      epCount: episodes.length,
+      episodes,
+    };
+  }
+
+  // 6. 最终 DOM 兜底：从右侧 .video-pod__list 中提取当前合集
+  const podItems = Array.from(document.querySelectorAll('.video-pod__list .video-pod__item[data-key^="BV"]'));
+  if (podItems.length > 0) {
+    const episodes: SeasonEpisodeItem[] = podItems.map((item, idx) => {
+      const bvid = item.getAttribute('data-key') || '';
+      const titleEl = item.querySelector('.title-txt') || item.querySelector('.title');
+      const title = (titleEl as HTMLElement)?.innerText?.trim() || `第 ${idx + 1} 集`;
+      return {
+        id: idx + 1,
+        bvid,
+        title,
+        pageIndex: idx + 1,
+      };
+    });
+
+    const headerTitle = document.querySelector('.video-pod__header .title-txt')?.textContent?.trim();
+    return {
+      id: seasonId || 0,
+      mid: mid || 0,
+      title: headerTitle || '合集列表',
+      epCount: episodes.length,
+      episodes,
+    };
+  }
+
+  return undefined;
+}
+
+export async function fetchCurrentMediaData(targetCid?: number, customBvid?: string): Promise<MediaResourceData | null> {
+  const bvid = customBvid || getBvidFromUrl();
   if (!bvid) return null;
 
   const pages = await fetchVideoPages(bvid);
@@ -107,7 +248,7 @@ export async function fetchCurrentMediaData(targetCid?: number): Promise<MediaRe
   const baseTitle = getVideoTitle();
   const cover = getVideoCover();
 
-  // 若存在多 P 剧集，精准拼接分 P 标题与序号，防止多 P 下载时文件名相同产生冲突
+  // 若存在多分 P 剧集，精准拼接分 P 标题与序号，防止多 P 下载时文件名相同产生冲突
   let title = baseTitle;
   const currentPage = pages.find((p) => p.cid === cid) || pages[pageIndex] || pages[0];
   if (pages.length > 1 && currentPage) {
@@ -251,6 +392,9 @@ export async function fetchCurrentMediaData(targetCid?: number): Promise<MediaRe
   // 6. AI 总结
   const aiSummary = await fetchAiSummary(bvid, cid);
 
+  // 7. 智能探测合集/系列 (Season/Series)
+  const ugcSeason = await fetchUgcSeasonData(bvid);
+
   logger.success('API', `成功解析媒体资源: ${title}`, {
     bvid,
     cid,
@@ -258,6 +402,7 @@ export async function fetchCurrentMediaData(targetCid?: number): Promise<MediaRe
     audios: audios.length,
     subtitles: subtitles.length,
     duration: `${duration}s`,
+    hasSeason: Boolean(ugcSeason),
   });
 
   return {
@@ -271,5 +416,6 @@ export async function fetchCurrentMediaData(targetCid?: number): Promise<MediaRe
     subtitles,
     pages,
     aiSummaryMarkdown: aiSummary,
+    ugcSeason,
   };
 }

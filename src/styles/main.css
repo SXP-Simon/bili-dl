@@ -23,6 +23,8 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
+  --font-sans: 'LXGW WenKai Screen', 'LXGW WenKai', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', system-ui, -apple-system, sans-serif;
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -81,7 +83,7 @@
   * {
     border-color: var(--border);
   }
-  #bili-dl-app {
+  :host, #bili-dl-app {
     font-family: 'LXGW WenKai Screen', 'LXGW WenKai', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', system-ui, -apple-system, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
     text-rendering: optimizeLegibility;
