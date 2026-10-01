@@ -18,8 +18,10 @@ const QUALITY_MAP: Record<number, string> = {
 };
 
 export function getBvidFromUrl(): string | null {
-  const match = location.pathname.match(/\/video\/(BV[a-zA-Z0-9]+)/);
+  const match = location.pathname.match(/(BV[a-zA-Z0-9]+)/i);
   if (match) return match[1];
+  const queryBvid = new URLSearchParams(location.search).get('bvid');
+  if (queryBvid) return queryBvid;
   const anyWindow = window as any;
   if (anyWindow.__INITIAL_STATE__?.videoData?.bvid) {
     return anyWindow.__INITIAL_STATE__.videoData.bvid;

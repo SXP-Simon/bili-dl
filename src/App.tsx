@@ -4,7 +4,7 @@ import { FloatButton } from './components/FloatButton';
 import { DownloadModal } from './components/DownloadModal';
 import { QuickActionMenu } from './components/QuickActionMenu';
 import { ToastContainer, ToastMessage } from './components/Toast';
-import { fetchCurrentMediaData, getVideoTitle } from './api/bilibili';
+import { fetchCurrentMediaData, getVideoTitle, getBvidFromUrl } from './api/bilibili';
 import { downloadAndMuxMp4, downloadAudio, saveBlobAsFile } from './media/downloader';
 import { fetchSubtitleSrt } from './media/subtitle';
 import { batchDetectAndDownloadSubtitles } from './media/batchSubtitle';
@@ -78,6 +78,54 @@ export const App: React.FC = () => {
     observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
     return () => observer.disconnect();
+  }, []);
+
+  const isModalOpenRef = useRef(isModalOpen);
+  useEffect(() => {
+    isModalOpenRef.current = isModalOpen;
+  }, [isModalOpen]);
+
+  // 监听 SPA 路由变化（B 站系列/分 P/推荐视频/列表无刷新切换）
+  useEffect(() => {
+    let lastUrl = location.href;
+
+    const handleUrlChange = async () => {
+      const currentUrl = location.href;
+      if (currentUrl !== lastUrl) {
+        lastUrl = currentUrl;
+        logger.info('Navigation', `检测到页面路由切换: ${currentUrl}`);
+        // 清除上一视频缓存，确保浮动按键与快捷操作对准新视频
+        setMediaData(null);
+
+        // 若当前面板处于打开状态，自动为新视频重新解析
+        if (isModalOpenRef.current) {
+          handleOpenModal();
+        }
+      }
+    };
+
+    const originalPushState = history.pushState;
+    const originalReplaceState = history.replaceState;
+
+    history.pushState = function (...args) {
+      originalPushState.apply(this, args);
+      handleUrlChange();
+    };
+
+    history.replaceState = function (...args) {
+      originalReplaceState.apply(this, args);
+      handleUrlChange();
+    };
+
+    window.addEventListener('popstate', handleUrlChange);
+    const checkInterval = setInterval(handleUrlChange, 500);
+
+    return () => {
+      history.pushState = originalPushState;
+      history.replaceState = originalReplaceState;
+      window.removeEventListener('popstate', handleUrlChange);
+      clearInterval(checkInterval);
+    };
   }, []);
 
   const handleToggleDark = () => {
@@ -269,17 +317,43 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleDownloadBatchSubtitles = async (customData?: MediaResourceData) => {
-    let data = customData || mediaData;
-    if (!data) {
-      setLoading(true);
-      try {
-        data = await fetchCurrentMediaData();
-        if (data) setMediaData(data);
-      } finally {
-        setLoading(false);
+  /**
+   * 确保获取当前页面实际对应视频的最新数据（防止 SPA 切换后复用陈旧视频）
+   */
+  const getFreshMediaData = async (customData?: MediaResourceData): Promise<MediaResourceData | null> => {
+    const currentBvid = getBvidFromUrl();
+    const currentP = new URLSearchParams(location.search).get('p');
+    const targetPageIndex = currentP ? parseInt(currentP, 10) - 1 : 0;
+
+    // 校验已有数据是否与当前页面 URL 强一致（BVID 相同且分 P 吻合）
+    if (customData && customData.bvid === currentBvid) {
+      return customData;
+    }
+    if (mediaData && mediaData.bvid === currentBvid) {
+      if (mediaData.pages.length > 1 && currentP) {
+        const expectedCid = mediaData.pages[targetPageIndex]?.cid;
+        if (expectedCid && mediaData.cid === expectedCid) {
+          return mediaData;
+        }
+      } else {
+        return mediaData;
       }
     }
+
+    setLoading(true);
+    try {
+      const fresh = await fetchCurrentMediaData();
+      if (fresh) {
+        setMediaData(fresh);
+      }
+      return fresh;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadBatchSubtitles = async (customData?: MediaResourceData) => {
+    const data = await getFreshMediaData(customData);
     if (!data) {
       showToast('未能解析到视频资源，请确认处于播放页面', 'error');
       return;
@@ -359,16 +433,7 @@ export const App: React.FC = () => {
   };
 
   const handleDownloadBatchAudiosLowest = async (customData?: MediaResourceData) => {
-    let data = customData || mediaData;
-    if (!data) {
-      setLoading(true);
-      try {
-        data = await fetchCurrentMediaData();
-        if (data) setMediaData(data);
-      } finally {
-        setLoading(false);
-      }
-    }
+    const data = await getFreshMediaData(customData);
     if (!data) {
       showToast('未能解析到视频资源', 'error');
       return;
@@ -415,16 +480,7 @@ export const App: React.FC = () => {
   };
 
   const handleDownloadBatchVideosHighest = async (customData?: MediaResourceData) => {
-    let data = customData || mediaData;
-    if (!data) {
-      setLoading(true);
-      try {
-        data = await fetchCurrentMediaData();
-        if (data) setMediaData(data);
-      } finally {
-        setLoading(false);
-      }
-    }
+    const data = await getFreshMediaData(customData);
     if (!data) {
       showToast('未能解析到视频资源', 'error');
       return;
@@ -481,6 +537,14 @@ export const App: React.FC = () => {
   ) => {
     setQuickMenuPos(pos);
     setIsQuickMenuOpen(true);
+
+    // 展开快捷操作菜单时，若未加载或当前数据与页面 URL 不一致，后台无感预拉取最新视频数据
+    const currentBvid = getBvidFromUrl();
+    if (!mediaData || mediaData.bvid !== currentBvid) {
+      fetchCurrentMediaData().then((fresh) => {
+        if (fresh) setMediaData(fresh);
+      }).catch(() => {});
+    }
   };
 
   const isBatchSubtitlesRunning = tasks.some(
