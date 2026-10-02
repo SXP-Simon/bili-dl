@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   Loader2,
   CheckCircle2,
@@ -42,6 +42,28 @@ function getTaskIcon(type: TaskType) {
   }
 }
 
+/**
+ * 任务状态优先级：当前正在进行/有进度的任务必须置顶
+ */
+function getTaskPriority(status: DownloadTask['status']): number {
+  switch (status) {
+    case 'downloading_video':
+    case 'downloading_audio':
+    case 'muxing':
+      return 0; // 最高优先级：当前正在进行中的任务置于最前
+    case 'pending':
+      return 1; // 队列排队中
+    case 'completed':
+      return 2; // 已完成
+    case 'error':
+      return 3; // 失败
+    case 'cancelled':
+      return 4; // 已取消
+    default:
+      return 5;
+  }
+}
+
 export const ProgressBar: React.FC<ProgressBarProps> = ({
   tasks = [],
   onRemoveTask,
@@ -49,6 +71,43 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   progress,
   compact = false,
 }) => {
+  const listRef = useRef<HTMLDivElement>(null);
+  const prevActiveTaskId = useRef<string | null>(null);
+
+  // 智能队列排序：正在执行 (带进度) 的任务绝对置顶，确保用户一眼直达当前下载状态
+  const sortedTasks = [...tasks].sort((a, b) => {
+    const prioA = getTaskPriority(a.status);
+    const prioB = getTaskPriority(b.status);
+    if (prioA !== prioB) {
+      return prioA - prioB;
+    }
+    // 同为进行中的任务：最新活跃/变动的排在最前
+    if (prioA === 0) {
+      return (b.timestamp || 0) - (a.timestamp || 0);
+    }
+    // 同为已完成的任务：最新完成的置于完成段的前面
+    if (prioA === 2) {
+      return (b.timestamp || 0) - (a.timestamp || 0);
+    }
+    return 0;
+  });
+
+  const activeRunningTask = sortedTasks.find(
+    (t) => t.status === 'downloading_video' || t.status === 'downloading_audio' || t.status === 'muxing'
+  );
+
+  const activeTaskId = activeRunningTask?.id;
+
+  // 当活跃任务发生切换时，自动轻量置顶滚动，避免用户迷失在大量排队项中
+  useEffect(() => {
+    if (activeTaskId && activeTaskId !== prevActiveTaskId.current) {
+      prevActiveTaskId.current = activeTaskId;
+      if (listRef.current) {
+        listRef.current.scrollTop = 0;
+      }
+    }
+  }, [activeTaskId]);
+
   // 如果使用多任务模式
   if (tasks.length > 0) {
     const activeTasks = tasks.filter((t) => t.status !== 'completed' && t.status !== 'error');
@@ -76,8 +135,11 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
         </div>
 
         {/* 任务列表：内部唯一滚动容器，自适应 compact 模式高度 */}
-        <div className={`space-y-2 overflow-y-auto pr-1 scrollbar-clean ${compact ? 'max-h-24' : 'max-h-40'}`}>
-          {tasks.map((task) => {
+        <div
+          ref={listRef}
+          className={`space-y-2 overflow-y-auto pr-1 scrollbar-clean ${compact ? 'max-h-24' : 'max-h-40'}`}
+        >
+          {sortedTasks.map((task) => {
             const isCompleted = task.status === 'completed';
             const isError = task.status === 'error';
             const isCancelled = task.status === 'cancelled';
@@ -86,7 +148,11 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
             return (
               <div
                 key={task.id}
-                className="p-2.5 rounded-xl bg-card border border-border/70 shadow-2xs transition-all duration-200"
+                className={`p-2.5 rounded-xl border transition-all duration-200 ${
+                  isActive && task.status !== 'pending'
+                    ? 'bg-card border-primary/50 shadow-xs ring-1 ring-primary/20'
+                    : 'bg-card/75 border-border/70 shadow-2xs opacity-90 hover:opacity-100'
+                }`}
               >
                 <div className="flex items-center justify-between gap-2 text-xs">
                   {/* 左侧：类型图标 + 任务标题 + 实时状态/速度 */}

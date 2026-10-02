@@ -175,7 +175,7 @@ export const App: React.FC = () => {
         next[idx] = task;
         return next;
       }
-      return [task, ...prev];
+      return [...prev, task];
     });
   };
 

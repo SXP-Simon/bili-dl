@@ -73,4 +73,44 @@ describe('ProgressBar component integration', () => {
     expect(screen.getByText('80%')).toBeInTheDocument();
     expect(screen.getByText('正在封装混流 MP4 容器...')).toBeInTheDocument();
   });
+
+  it('should always place actively progressing tasks at the very top ahead of pending and completed tasks', () => {
+    const tasks: DownloadTask[] = [
+      {
+        id: 'task-pending-1',
+        type: 'video',
+        title: 'P1: 排队任务',
+        status: 'pending',
+        progress: 0,
+        timestamp: 1000,
+      },
+      {
+        id: 'task-completed-1',
+        type: 'video',
+        title: 'P2: 已完成任务',
+        status: 'completed',
+        progress: 100,
+        timestamp: 2000,
+      },
+      {
+        id: 'task-active-1',
+        type: 'video',
+        title: 'P3: 当前正在下载任务',
+        status: 'downloading_video',
+        progress: 65,
+        speed: '8.5 MB/s',
+        timestamp: 3000,
+      },
+    ];
+
+    const { container } = render(<ProgressBar tasks={tasks} />);
+
+    const titles = Array.from(container.querySelectorAll('.truncate.max-w-\\[130px\\]')).map(
+      (el) => el.textContent
+    );
+
+    expect(titles[0]).toBe('P3: 当前正在下载任务');
+    expect(titles[1]).toBe('P1: 排队任务');
+    expect(titles[2]).toBe('P2: 已完成任务');
+  });
 });
