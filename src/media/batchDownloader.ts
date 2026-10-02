@@ -211,6 +211,9 @@ export async function batchDownloadAllHighestVideos(
         `P${page.page}-${highestVideo.codecName}`,
         signal
       );
+
+      // 每集下载封装完成后微歇 500ms，释放 CPU 占用并让浏览器执行垃圾回收 (GC)
+      await new Promise((r) => setTimeout(r, 500));
     } catch (err: unknown) {
       if (signal?.aborted || isAbortError(err)) {
         onTaskUpdate(taskId, { status: 'cancelled', message: '已取消下载' });
@@ -323,6 +326,9 @@ export async function batchDownloadSeasonHighestVideos(
         `合集第${ep.pageIndex}集-${highestVideo.codecName}`,
         signal
       );
+
+      // 每集下载封装完成后微歇 500ms，释放 CPU 占用并让浏览器执行垃圾回收 (GC)
+      await new Promise((r) => setTimeout(r, 500));
     } catch (err: unknown) {
       if (signal?.aborted || isAbortError(err)) {
         onTaskUpdate(taskId, { status: 'cancelled', message: '已取消下载' });

@@ -144,4 +144,21 @@ declare module 'mp4box' {
   }
 
   export function createFile(): MP4File;
+
+  export interface BoxParserResult {
+    code: number;
+    box?: {
+      type: string;
+      size: number;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  }
+
+  export const BoxParser: {
+    OK: number;
+    ERR_NOT_ENOUGH_DATA: number;
+    parseOneBox: (stream: unknown, headerOnly?: boolean, parentSize?: number) => BoxParserResult;
+    [key: string]: unknown;
+  };
 }

@@ -126,9 +126,9 @@ async function probeContentLength(urls: string[]): Promise<number> {
             if (total > 0) return resolve(total);
           }
           const len = headers.match(/content-length:\s*(\d+)/i);
-          if (len && len[1]) {
+          if (len && len[1] && res.status === 200) {
             const total = parseInt(len[1], 10);
-            if (total > 0) return resolve(total);
+            if (total > 1) return resolve(total);
           }
           resolve(0);
         },
@@ -258,7 +258,21 @@ async function fetchChunkWithRetry(
             hasFinished = true;
             cleanup();
             if (response.status >= 200 && response.status < 300) {
+              // 校验 1：如果请求了非 0 起始的 Range 分片，服务端必须返回 HTTP 206；若返回 200 则说明 CDN 节点忽略了 Range 头部返回了全量数据
+              if (start > 0 && response.status === 200) {
+                reject(new Error(`CDN 节点未正确响应 Range 分片 (返回 HTTP 200 全量流而非 206)`));
+                return;
+              }
+
               const u8 = new Uint8Array(response.response as ArrayBuffer);
+
+              // 校验 2：严格校验接收到的分片字节数必须与 Range 范围完全吻合
+              // 若网络波动中途截断导致字节不足，坚决重试，绝不允许未填满的 0 字节空洞混入媒体流导致后续 MP4 解析死循环
+              if (u8.length !== chunkSize) {
+                reject(new Error(`分片字节数不完整: 预期 ${chunkSize} 字节，实际仅接收 ${u8.length} 字节`));
+                return;
+              }
+
               onChunkProgress(u8.length);
               resolve(u8);
             } else {
@@ -478,8 +492,8 @@ export async function requestChunkedBuffer(
       throw new DOMException('Download aborted by user', 'AbortError');
     }
     const errMsg = getErrorMessage(err);
-    logger.error('Range', `${streamPrefix}多连接分片下载失败: ${errMsg}`, err, traceId);
-    throw err;
+    logger.warn('Range', `${streamPrefix}分片并发下载异常 (${errMsg})，正在自动安全降级回退至单流传输模式...`, null, traceId);
+    return requestBuffer(urlList[0], onProgress, signal);
   }
 }
 

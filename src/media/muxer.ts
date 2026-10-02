@@ -2,6 +2,18 @@ import MP4Box from 'mp4box';
 import { logger } from '../utils/logger';
 import { getErrorMessage } from '../utils/error';
 
+// 补丁：修复 mp4box.js 当遇到非 mdat 且 size 为 0 的残缺/末尾补零 box 时返回 OK 导致的同步死循环卡死主线程缺陷
+if (typeof MP4Box.BoxParser?.parseOneBox === 'function') {
+  const originalParseOneBox = MP4Box.BoxParser.parseOneBox;
+  MP4Box.BoxParser.parseOneBox = function (stream: unknown, headerOnly?: boolean, parentSize?: number) {
+    const ret = originalParseOneBox.call(this, stream, headerOnly, parentSize);
+    if (ret && ret.code === MP4Box.BoxParser.OK && ret.box && ret.box.size === 0 && ret.box.type !== 'mdat') {
+      return { code: MP4Box.BoxParser.ERR_NOT_ENOUGH_DATA };
+    }
+    return ret;
+  };
+}
+
 /**
  * 将 B 站的视频轨 (video.m4s) 和音频轨 (audio.m4s) 通过 mp4box.js 提取 sample 并完整混流为标准可播放的 MP4
  */
@@ -214,18 +226,31 @@ export async function muxMp4(
       }
 
       // 3. 灌入 Buffer 触发完整解析
-      const vBuf: ArrayBuffer & { fileStart?: number } = videoBuffer;
-      vBuf.fileStart = 0;
-      inVideo.appendBuffer(vBuf);
-      inVideo.flush();
-      videoDone = true;
+      try {
+        const vBuf: ArrayBuffer & { fileStart?: number } = videoBuffer;
+        vBuf.fileStart = 0;
+        inVideo.appendBuffer(vBuf);
+        inVideo.flush();
+        videoDone = true;
+      } catch (vErr: unknown) {
+        const msg = getErrorMessage(vErr);
+        logger.warn('Muxer', `视频流解析异常，直接使用原始视频流: ${msg}`, null, traceId);
+        resolve(new Blob([videoBuffer], { type: 'video/mp4' }));
+        return;
+      }
 
       if (inAudio && audioBuffer) {
-        const aBuf: ArrayBuffer & { fileStart?: number } = audioBuffer;
-        aBuf.fileStart = 0;
-        inAudio.appendBuffer(aBuf);
-        inAudio.flush();
-        audioDone = true;
+        try {
+          const aBuf: ArrayBuffer & { fileStart?: number } = audioBuffer;
+          aBuf.fileStart = 0;
+          inAudio.appendBuffer(aBuf);
+          inAudio.flush();
+          audioDone = true;
+        } catch (aErr: unknown) {
+          const msg = getErrorMessage(aErr);
+          logger.warn('Muxer', `音频流解析异常，跳过音频混流: ${msg}`, null, traceId);
+          audioDone = true;
+        }
       }
 
       checkFinished();
