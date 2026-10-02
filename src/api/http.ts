@@ -6,6 +6,7 @@ import {
 } from '$';
 import { logger } from '../utils/logger';
 import { getErrorMessage, isAbortError } from '../utils/error';
+import { getDownloadSettings } from '../utils/settings';
 
 export interface RequestProgressCallback {
   (loaded: number, total: number, speed?: string): void;
@@ -88,14 +89,16 @@ export async function requestBuffer(
  */
 export function getCdnNodeLabel(url: string): string {
   try {
-    const host = new URL(url).hostname;
+    const host = new URL(url).hostname.toLowerCase();
     if (host.includes('mirrorcos') || host.includes('upcdnbd')) return `腾讯云 COS (${host})`;
     if (host.includes('mirrorali')) return `阿里云 OSS (${host})`;
     if (host.includes('mirrorhw')) return `华为云 OBS (${host})`;
+    if (host.includes('mirrorbos')) return `百度云 BOS (${host})`;
     if (host.includes('mirror08c') || host.includes('mirror08h')) return `金山云/BGP (${host})`;
     if (host.includes('upcdnws')) return `网宿 CDN (${host})`;
     if (host.includes('upcdntx')) return `腾讯直连 (${host})`;
-    if (host.includes('akamai')) return `Akamai 海外 (${host})`;
+    if (host.includes('mcdn')) return `PCDN 节点 (${host})`;
+    if (host.includes('akamai') || host.includes('akamaized')) return `Akamai 海外 (${host})`;
     if (host.includes('fastly')) return `Fastly 海外 (${host})`;
     return host;
   } catch {
@@ -104,10 +107,53 @@ export function getCdnNodeLabel(url: string): string {
 }
 
 /**
+ * 计算 CDN 节点的网络亲和度与质量评分
+ * 优先国内一线头部对象存储与骨干直连，海外慢速节点与边缘 PCDN 节点排在后列
+ */
+export function getCdnPriorityScore(url: string): number {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    // 顶级国内对象存储与直连专线（带宽充足、极速、无丢包）
+    if (host.includes('mirrorcos') || host.includes('upcdnbd')) return 100; // 腾讯云 COS / 腾讯 BGP
+    if (host.includes('mirrorali')) return 95; // 阿里云 OSS
+    if (host.includes('mirrorhw')) return 90; // 华为云 OBS
+    if (host.includes('mirrorbos')) return 88; // 百度云 BOS
+    if (host.includes('upcdntx')) return 85; // 腾讯直连
+
+    // 优质国内主流 CDN 与 BGP
+    if (host.includes('mirror08c') || host.includes('mirror08h')) return 80; // 金山云 / 骨干 BGP
+    if (host.includes('upcdnws')) return 75; // 网宿 CDN
+    if (host.includes('bilivideo.com') || host.includes('bilivideo.cn')) {
+      if (host.includes('mcdn')) return 20; // PCDN 节点稳定性较差，排在靠后
+      return 65; // 标准国内 bilivideo 节点
+    }
+
+    // 海外边缘节点（跨国链路经常被限速、高延迟或丢包）
+    if (host.includes('akamai') || host.includes('akamaized')) return 10;
+    if (host.includes('fastly')) return 10;
+
+    return 50; // 其他未知主机
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * 根据 CDN 节点质量综合评分对候选 URL 进行智能升序排序（最高优先级在最前）
+ */
+export function sortCdnUrlsByQuality(urls: string[]): string[] {
+  const uniqueUrls = Array.from(new Set(urls.filter(Boolean)));
+  return uniqueUrls.sort((a, b) => getCdnPriorityScore(b) - getCdnPriorityScore(a));
+}
+
+/**
  * 探测媒体资源总字节大小（通过轻量 Range 探测，支持多 CDN 备用节点）
  */
 async function probeContentLength(urls: string[]): Promise<number> {
-  for (const url of urls) {
+  const settings = getDownloadSettings();
+  const candidateUrls = settings.enableCdnPriority !== false ? sortCdnUrlsByQuality(urls) : urls;
+
+  for (const url of candidateUrls) {
     const size = await new Promise<number>((resolve) => {
       GM_xmlhttpRequest({
         method: 'GET',
@@ -195,7 +241,7 @@ async function fetchChunkWithRetry(
   start: number,
   end: number,
   onChunkProgress: (loaded: number) => void,
-  retries = Math.max(3, urls.length),
+  retries = Math.max(4, urls.length * 2),
   traceId?: string,
   streamLabel?: string,
   signal?: AbortSignal
@@ -204,11 +250,16 @@ async function fetchChunkWithRetry(
   const streamPrefix = streamLabel ? `[${streamLabel}] ` : '';
 
   const chunkSize = end - start + 1;
+  const settings = getDownloadSettings();
+  const minSpeedKB = settings.cdnMinSpeedKB || 300;
+  const autoFailover = settings.cdnAutoFailover !== false && urls.length > 1 && chunkSize >= 1.5 * 1024 * 1024;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     if (signal?.aborted) {
       throw new DOMException('Download aborted by user', 'AbortError');
     }
+
+    onChunkProgress(0);
 
     const targetUrl = urls[(attempt - 1) % urls.length] || urls[0] || '';
     const currentNodeLabel = getCdnNodeLabel(targetUrl);
@@ -225,6 +276,11 @@ async function fetchChunkWithRetry(
       const result = await new Promise<Uint8Array>((resolve, reject) => {
         let hasFinished = false;
         let lastActivityTime = Date.now();
+        let lastCheckTime = Date.now();
+        let lastCheckLoaded = 0;
+        let currentChunkLoaded = 0;
+        let lowSpeedDurationMs = 0;
+        const attemptStartTime = Date.now();
         let stallCheckInterval: ReturnType<typeof setInterval> | null = null;
 
         // 计算自适应最大超时（以保底 30KB/s 速率计算，最少 90s，最多 300s）
@@ -250,7 +306,8 @@ async function fetchChunkWithRetry(
           onprogress: (event: GMXMLHttpRequestProgress) => {
             if (!hasFinished) {
               lastActivityTime = Date.now();
-              onChunkProgress(event.loaded || 0);
+              currentChunkLoaded = event.loaded || 0;
+              onChunkProgress(currentChunkLoaded);
             }
           },
           onload: (response: GMXMLHttpRequestResponse) => {
@@ -311,14 +368,16 @@ async function fetchChunkWithRetry(
           );
         }
 
-        // 动态数据传输停滞看门狗：每 2 秒检测一次。
-        // 只要持续有数据流动 (onprogress 触发) 绝不会误杀；仅当超过 20 秒完全没有任何新数据到达时，才判定为网络假死/断流并进行重试
+        // 双机制看门狗：
+        // 1. 完全停滞检测：20 秒没有任何新数据到达 -> 判定假死断流重试
+        // 2. 被动低速自愈：稳定建立 5 秒后，若传输速率持续 6 秒低于设定阈值 -> 主动切断并无缝换用备选 CDN 节点（零额外探测风险）
         stallCheckInterval = setInterval(() => {
           if (hasFinished) {
             cleanup();
             return;
           }
-          const idleTime = Date.now() - lastActivityTime;
+          const now = Date.now();
+          const idleTime = now - lastActivityTime;
           if (idleTime >= 20000) {
             hasFinished = true;
             cleanup();
@@ -326,8 +385,42 @@ async function fetchChunkWithRetry(
               req.abort();
             } catch {}
             reject(new Error(`分片 ${start}-${end} 数据传输停滞卡死 (20s 无新数据响应)`));
+            return;
           }
-        }, 2000);
+
+          if (autoFailover) {
+            const timeDiff = (now - lastCheckTime) / 1000;
+            if (timeDiff >= 1.0) {
+              const bytesDiff = currentChunkLoaded - lastCheckLoaded;
+              const currentSpeedKB = bytesDiff / 1024 / timeDiff;
+
+              // 预热期 (>= 5s) 过后开始评估速率
+              if (now - attemptStartTime >= 5000) {
+                if (currentSpeedKB < minSpeedKB) {
+                  lowSpeedDurationMs += timeDiff * 1000;
+                  if (lowSpeedDurationMs >= 6000) {
+                    hasFinished = true;
+                    cleanup();
+                    try {
+                      req.abort();
+                    } catch {}
+                    reject(
+                      new Error(
+                        `节点传输速率过慢 (${currentSpeedKB.toFixed(0)} KB/s < ${minSpeedKB} KB/s 持续 ${(lowSpeedDurationMs / 1000).toFixed(0)}s)，触发自愈换源`
+                      )
+                    );
+                    return;
+                  }
+                } else {
+                  lowSpeedDurationMs = Math.max(0, lowSpeedDurationMs - 1500);
+                }
+              }
+
+              lastCheckLoaded = currentChunkLoaded;
+              lastCheckTime = now;
+            }
+          }
+        }, 1000);
       });
 
       release();
@@ -348,9 +441,9 @@ async function fetchChunkWithRetry(
         traceId
       );
       if (attempt < retries) {
-        // 加入 300ms~800ms 随机退避抖动，防止重试群体风暴 (Thundering Herd)
-        const jitter = Math.floor(Math.random() * 500) + 300;
-        await new Promise((r) => setTimeout(r, jitter * attempt));
+        // 加入 200ms~500ms 随机退避抖动，防止重试群体风暴 (Thundering Herd)
+        const jitter = Math.floor(Math.random() * 300) + 200;
+        await new Promise((r) => setTimeout(r, jitter));
       }
     }
   }
@@ -372,11 +465,16 @@ export async function requestChunkedBuffer(
   streamLabel?: string,
   signal?: AbortSignal
 ): Promise<ArrayBuffer> {
-  const urlList = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
-  if (urlList.length === 0) throw new Error('No valid URL provided');
+  const rawUrlList = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
+  if (rawUrlList.length === 0) throw new Error('No valid URL provided');
   if (signal?.aborted) {
     throw new DOMException('Download aborted by user', 'AbortError');
   }
+
+  const settings = getDownloadSettings();
+  const urlList = settings.enableCdnPriority !== false
+    ? sortCdnUrlsByQuality(rawUrlList)
+    : Array.from(new Set(rawUrlList));
 
   const streamPrefix = streamLabel ? `[${streamLabel}] ` : '';
 

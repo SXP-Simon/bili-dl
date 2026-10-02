@@ -18,6 +18,9 @@ describe('Settings & Path Resolution Unit Tests', () => {
     expect(settings.subfolder).toBe('bili-dl');
     expect(settings.autoTitleFolder).toBe(true);
     expect(settings.alwaysAskSaveAs).toBe(false);
+    expect(settings.enableCdnPriority).toBe(true);
+    expect(settings.cdnAutoFailover).toBe(true);
+    expect(settings.cdnMinSpeedKB).toBe(300);
   });
 
   it('should save and retrieve updated settings', () => {
@@ -25,12 +28,18 @@ describe('Settings & Path Resolution Unit Tests', () => {
       subfolder: 'Custom/Anime',
       autoTitleFolder: false,
       alwaysAskSaveAs: true,
+      enableCdnPriority: false,
+      cdnAutoFailover: false,
+      cdnMinSpeedKB: 500,
     });
 
     const updated = getDownloadSettings();
     expect(updated.subfolder).toBe('Custom/Anime');
     expect(updated.autoTitleFolder).toBe(false);
     expect(updated.alwaysAskSaveAs).toBe(true);
+    expect(updated.enableCdnPriority).toBe(false);
+    expect(updated.cdnAutoFailover).toBe(false);
+    expect(updated.cdnMinSpeedKB).toBe(500);
   });
 
   it('should reset settings back to default', () => {
@@ -38,11 +47,17 @@ describe('Settings & Path Resolution Unit Tests', () => {
       subfolder: 'MyPath',
       autoTitleFolder: false,
       alwaysAskSaveAs: true,
+      enableCdnPriority: false,
+      cdnAutoFailover: false,
+      cdnMinSpeedKB: 100,
     });
 
     const reset = resetDownloadSettings();
     expect(reset).toEqual(DEFAULT_SETTINGS);
     expect(getDownloadSettings().subfolder).toBe('bili-dl');
+    expect(getDownloadSettings().enableCdnPriority).toBe(true);
+    expect(getDownloadSettings().cdnAutoFailover).toBe(true);
+    expect(getDownloadSettings().cdnMinSpeedKB).toBe(300);
   });
 
   describe('resolveDownloadRelativePath', () => {

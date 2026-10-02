@@ -8,12 +8,18 @@ export interface DownloadSettings {
   subfolder: string; // 下载相对子目录 (默认 'bili-dl')
   autoTitleFolder: boolean; // 是否自动以视频标题建立子目录 (默认 true)
   alwaysAskSaveAs: boolean; // 每次下载是否弹出另存为对话框 (默认 false)
+  enableCdnPriority: boolean; // 智能优选国内高速 CDN 节点 (默认 true)
+  cdnAutoFailover: boolean; // 慢速自动切换备选 CDN 节点 (默认 true)
+  cdnMinSpeedKB: number; // 慢速换源判定阈值 (KB/s，默认 300)
 }
 
 export const DEFAULT_SETTINGS: DownloadSettings = {
   subfolder: 'bili-dl',
   autoTitleFolder: true,
   alwaysAskSaveAs: false,
+  enableCdnPriority: true,
+  cdnAutoFailover: true,
+  cdnMinSpeedKB: 300,
 };
 
 const SETTINGS_KEY = 'bili_dl_download_settings';

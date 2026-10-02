@@ -7,6 +7,9 @@ import {
   X,
   HelpCircle,
   Sparkles,
+  Zap,
+  Server,
+  Gauge,
 } from 'lucide-react';
 import {
   getDownloadSettings,
@@ -143,6 +146,102 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
               }`}
             />
           </button>
+        </div>
+
+        {/* 4. CDN 智能调度与慢速自愈换源 */}
+        <div className="p-3.5 rounded-2xl bg-muted/30 border border-border/70 space-y-3">
+          {/* CDN 智能节点优选 */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <Server className="w-4 h-4 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
+                <span className="font-semibold text-foreground">国内高速 CDN 节点智能优选</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                优先调度腾讯云 COS、阿里云 OSS、华为云 OBS 等国内骨干专线，海外 Akamai/Fastly 慢速节点自动下沉备选。
+              </p>
+            </div>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={settings.enableCdnPriority}
+              onClick={() => updateSetting('enableCdnPriority', !settings.enableCdnPriority)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                settings.enableCdnPriority ? 'bg-primary' : 'bg-muted-foreground/30'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  settings.enableCdnPriority ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="h-px bg-border/40 my-1" />
+
+          {/* 慢速自动自愈换源 */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
+                <span className="font-semibold text-foreground">分片传输慢速自愈换源</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                被动测速（零额外探测防风控）：分片下载中若持续低于设定速率，自动切断并无缝换用下一备用 CDN 节点。
+              </p>
+            </div>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={settings.cdnAutoFailover}
+              onClick={() => updateSetting('cdnAutoFailover', !settings.cdnAutoFailover)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                settings.cdnAutoFailover ? 'bg-primary' : 'bg-muted-foreground/30'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  settings.cdnAutoFailover ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* 慢速判定阈值选择 */}
+          {settings.cdnAutoFailover && (
+            <div className="pt-2 pl-6 space-y-2 border-t border-border/30">
+              <div className="flex items-center justify-between text-[11px]">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Gauge className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
+                  <span>换源速率判定阈值</span>
+                </div>
+                <span className="font-mono font-medium text-foreground">
+                  当前: {settings.cdnMinSpeedKB >= 1000 ? `${(settings.cdnMinSpeedKB / 1000).toFixed(0)} MB/s` : `${settings.cdnMinSpeedKB} KB/s`}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {[100, 200, 300, 500, 1000].map((speed) => (
+                  <button
+                    key={speed}
+                    type="button"
+                    onClick={() => updateSetting('cdnMinSpeedKB', speed)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-semibold transition-all cursor-pointer border ${
+                      settings.cdnMinSpeedKB === speed
+                        ? 'bg-primary text-primary-foreground border-primary shadow-2xs'
+                        : 'bg-background hover:bg-muted text-muted-foreground hover:text-foreground border-border/80'
+                    }`}
+                  >
+                    {speed >= 1000 ? `${(speed / 1000).toFixed(0)} MB/s` : `${speed} KB/s`}
+                    {speed === 300 && ' (推荐)'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
