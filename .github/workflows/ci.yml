@@ -65,12 +65,12 @@ jobs:
     name: Version Bump Detect & Release
     needs: quality-check
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    if: (github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))) || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -86,32 +86,113 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check Version Change
+      - name: Check Version Change & Resolve Tags
         id: version_check
         run: |
           CURRENT_VERSION=$(node -p "require('./package.json').version")
           echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
 
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "is_tag=true" >> $GITHUB_OUTPUT
-            echo "should_release=true" >> $GITHUB_OUTPUT
-            echo "tag_name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          else
-            echo "is_tag=false" >> $GITHUB_OUTPUT
-            # 比较上一 commit 与当前 package.json 的版本号变化
-            git checkout HEAD~1 package.json 2>/dev/null || true
-            PREV_VERSION=$(node -p "try { require('./package.json').version } catch(e) { '' }")
-            git checkout HEAD package.json
+          SHOULD_RELEASE="false"
+          TAG_NAME="v$CURRENT_VERSION"
+          OLD_TAG="none"
 
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SHOULD_RELEASE="true"
+            OLD_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
+            echo "Workflow dispatch triggered for version: $TAG_NAME (prev tag: $OLD_TAG)"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            SHOULD_RELEASE="true"
+            TAG_NAME="${{ github.ref_name }}"
+            OLD_TAG=$(git describe --tags --abbrev=0 "${TAG_NAME}^" 2>/dev/null || echo "none")
+            echo "Push tag triggered: $TAG_NAME (previous tag: $OLD_TAG)"
+          else
+            PREV_VERSION=$(git show HEAD~1:package.json 2>/dev/null | node -p "try { JSON.parse(fs.readFileSync(0)).version } catch(e) { '' }" || true)
             echo "Previous version: $PREV_VERSION, Current version: $CURRENT_VERSION"
 
             if [ "$CURRENT_VERSION" != "$PREV_VERSION" ] && [ -n "$CURRENT_VERSION" ]; then
-              echo "should_release=true" >> $GITHUB_OUTPUT
-              echo "tag_name=v$CURRENT_VERSION" >> $GITHUB_OUTPUT
+              SHOULD_RELEASE="true"
+              OLD_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "none")
+              echo "Version changed from $PREV_VERSION to $CURRENT_VERSION -> Target tag: $TAG_NAME (prev tag: $OLD_TAG)"
             else
-              echo "should_release=false" >> $GITHUB_OUTPUT
+              SHOULD_RELEASE="false"
+              echo "No version bump detected in package.json, skipping release."
             fi
           fi
+
+          echo "should_release=$SHOULD_RELEASE" >> $GITHUB_OUTPUT
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "old_tag=$OLD_TAG" >> $GITHUB_OUTPUT
+
+      - name: Generate Structured Release Notes
+        if: steps.version_check.outputs.should_release == 'true'
+        run: |
+          TAG_NAME="${{ steps.version_check.outputs.tag_name }}"
+          OLD_TAG="${{ steps.version_check.outputs.old_tag }}"
+
+          echo "## 🚀 Release $TAG_NAME" > release_notes.md
+          echo "" >> release_notes.md
+
+          # 1. 尝试从 CHANGELOG.md 提取对应版本说明
+          if [ -f "CHANGELOG.md" ]; then
+            awk -v ver="${TAG_NAME#v}" -v full_ver="$TAG_NAME" '
+              /^## \[?v?/ && (index($0, ver) || index($0, full_ver)) { flag=1 }
+              /^## \[?v?/ && !(index($0, ver) || index($0, full_ver)) { flag=0 }
+              flag
+            ' CHANGELOG.md >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+
+          # 2. 生成 Conventional Commits 分类列表
+          echo "### 🔍 Commits" >> release_notes.md
+          echo "" >> release_notes.md
+
+          process_log() {
+            local range="$1"
+            git log --pretty=format:"%s|%h|%H" "$range" --no-merges > commits.txt
+
+            print_category() {
+              local marker="$1"
+              local title="$2"
+              local pattern="$3"
+              local commits=$(grep -iE "$pattern" commits.txt || true)
+              if [ -n "$commits" ]; then
+                echo "#### $marker $title" >> release_notes.md
+                echo "$commits" | while IFS='|' read -r msg hash full_hash; do
+                  echo "- $msg ([$hash](https://github.com/${{ github.repository }}/commit/$full_hash))" >> release_notes.md
+                done
+                echo "" >> release_notes.md
+              fi
+            }
+
+            print_category "✨" "Features" "^(feat|feature)(\(.*\))?:"
+            print_category "🐛" "Fixes" "^fix(\(.*\))?:"
+            print_category "📚" "Documentation" "^docs(\(.*\))?:"
+            print_category "💄" "Style & Refactor" "^(style|refactor|perf)(\(.*\))?:"
+            print_category "🔧" "Chore & Test" "^(chore|test|ci|build)(\(.*\))?:"
+
+            local others=$(grep -ivE "^(feat|feature|fix|docs|style|refactor|perf|chore|test|ci|build)(\(.*\))?:" commits.txt || true)
+            if [ -n "$others" ]; then
+              echo "#### 📌 Other Changes" >> release_notes.md
+              echo "$others" | while IFS='|' read -r msg hash full_hash; do
+                echo "- $msg ([$hash](https://github.com/${{ github.repository }}/commit/$full_hash))" >> release_notes.md
+              done
+              echo "" >> release_notes.md
+            fi
+
+            rm -f commits.txt
+          }
+
+          if [ "$OLD_TAG" != "none" ] && git rev-parse "$OLD_TAG" >/dev/null 2>&1; then
+            process_log "$OLD_TAG..HEAD"
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$OLD_TAG...$TAG_NAME" >> release_notes.md
+          else
+            echo "#### 🆕 Recent Commits" >> release_notes.md
+            git log -n 15 --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" --no-merges >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+
+          echo "Generated release notes:"
+          cat release_notes.md
 
       - name: Build Production Userscript
         if: steps.version_check.outputs.should_release == 'true'
@@ -130,9 +211,16 @@ jobs:
             git push origin "$TAG_NAME" || true
           fi
 
-          # 自动创建 GitHub Release 并附带编译完成的 user.js 脚本
+          # 自动创建 GitHub Release 并附带编译完成的 user.js 脚本与元数据文件，附带生成的 Release Message
+          ASSETS=()
+          [ -f "dist/bili-dl.user.js" ] && ASSETS+=("dist/bili-dl.user.js")
+          [ -f "dist/bili-dl.meta.js" ] && ASSETS+=("dist/bili-dl.meta.js")
+
           gh release create "$TAG_NAME" \
-            dist/bili-dl.user.js \
+            "${ASSETS[@]}" \
             --title "Release $TAG_NAME" \
-            --generate-notes \
-            --latest || gh release upload "$TAG_NAME" dist/bili-dl.user.js --clobber
+            --notes-file release_notes.md \
+            --latest || {
+              gh release edit "$TAG_NAME" --notes-file release_notes.md || true
+              gh release upload "$TAG_NAME" "${ASSETS[@]}" --clobber
+            }
