@@ -25,9 +25,9 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./assets/demo-dark.png" />
-    <source media="(prefers-color-scheme: light)" srcset="./assets/demo-light.png" />
-    <img src="./assets/demo-light.png" alt="Bili-DL Preview" width="100%" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-light.png" />
+    <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-light.png" alt="Bili-DL Preview" width="100%" />
   </picture>
   <br>
   <b>极简 · 清爽 · 高性能</b><br>
@@ -51,18 +51,18 @@
   <tbody>
     <tr>
       <td align="center" width="50%" valign="top">
-        <img src="./assets/demo-light.png" alt="主下载面板 - 浅色模式" width="100%">
+        <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-light.png" alt="主下载面板 - 浅色模式" width="100%">
       </td>
       <td align="center" width="50%" valign="top">
-        <img src="./assets/demo-dark.png" alt="主下载面板 - 深色模式" width="100%">
+        <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-dark.png" alt="主下载面板 - 深色模式" width="100%">
       </td>
     </tr>
     <tr>
       <td align="center" width="50%" valign="top">
-        <img src="./assets/setting-light.png" alt="偏好与下载器设置 - 浅色模式" width="100%">
+        <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/setting-light.png" alt="偏好与下载器设置 - 浅色模式" width="100%">
       </td>
       <td align="center" width="50%" valign="top">
-        <img src="./assets/setting-dark.png" alt="偏好与下载器设置 - 深色模式" width="100%">
+        <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/setting-dark.png" alt="偏好与下载器设置 - 深色模式" width="100%">
       </td>
     </tr>
   </tbody>
