@@ -4,7 +4,8 @@ import type { VideoPageItem, SeasonEpisodeItem, DownloadTask } from '../../src/t
 // Mock dependencies
 vi.mock('../../src/api/bilibili', () => ({
   getVideoTitle: vi.fn().mockReturnValue('测试总标题'),
-  fetchCurrentMediaData: vi.fn(),
+  fetchMediaPlayStreams: vi.fn(),
+  fetchVideoPages: vi.fn().mockResolvedValue([{ cid: 2001, page: 1, part: '第1话' }]),
 }));
 
 vi.mock('../../src/media/downloader', () => ({
@@ -24,7 +25,7 @@ import {
   batchDownloadSeasonHighestVideos,
   batchDownloadSeasonLowestAudios,
 } from '../../src/media/batchDownloader';
-import { fetchCurrentMediaData } from '../../src/api/bilibili';
+import { fetchMediaPlayStreams } from '../../src/api/bilibili';
 import { downloadAudio, downloadAndMuxMp4 } from '../../src/media/downloader';
 
 describe('Batch Downloader Unit Tests', () => {
@@ -47,17 +48,13 @@ describe('Batch Downloader Unit Tests', () => {
         updatedTasks[id] = { ...updatedTasks[id], ...partial };
       };
 
-      (fetchCurrentMediaData as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-        bvid: 'BV1test411c7mD',
-        cid: 1001,
-        title: '测试总标题_P1_第一讲',
-        pages: mockPages,
+      (fetchMediaPlayStreams as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
         videos: [],
         audios: [
           { id: 30280, bandwidth: 320000, name: '320K', qualityDesc: '320K', codec: 'mp4a', sizeMB: '10', baseUrl: 'http://a320.m4s' },
           { id: 30216, bandwidth: 64000, name: '64K', qualityDesc: '64K', codec: 'mp4a', sizeMB: '2', baseUrl: 'http://a64.m4s' },
         ],
-        subtitles: [],
+        duration: 120,
       });
 
       await batchDownloadAllLowestAudios('BV1test411c7mD', mockPages, onTaskAdd, onTaskUpdate);
@@ -105,11 +102,7 @@ describe('Batch Downloader Unit Tests', () => {
       const addedTasks: DownloadTask[] = [];
       const updatedTasks: Record<string, Partial<DownloadTask>> = {};
 
-      (fetchCurrentMediaData as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-        bvid: 'BV1test411c7mD',
-        cid: 1001,
-        title: '测试总标题_P1_第一讲',
-        pages: mockPages,
+      (fetchMediaPlayStreams as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
         videos: [
           { id: 116, bandwidth: 5000000, qualityName: '1080P 60帧', codecName: 'AVC', width: 1920, height: 1080, frameRate: '60', baseUrl: 'http://v1080p60.m4s' },
           { id: 80, bandwidth: 2000000, qualityName: '1080P', codecName: 'AVC', width: 1920, height: 1080, frameRate: '30', baseUrl: 'http://v1080.m4s' },
@@ -117,7 +110,7 @@ describe('Batch Downloader Unit Tests', () => {
         audios: [
           { id: 30280, bandwidth: 320000, name: '320K', qualityDesc: '320K', codec: 'mp4a', sizeMB: '10', baseUrl: 'http://a320.m4s' },
         ],
-        subtitles: [],
+        duration: 120,
       });
 
       await batchDownloadAllHighestVideos(
@@ -146,18 +139,14 @@ describe('Batch Downloader Unit Tests', () => {
       const addedTasks: DownloadTask[] = [];
       const updatedTasks: Record<string, Partial<DownloadTask>> = {};
 
-      (fetchCurrentMediaData as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-        bvid: 'BV1season001',
-        cid: 2001,
-        title: '单集原标题',
-        pages: [{ cid: 2001, page: 1, part: '第1话' }],
+      (fetchMediaPlayStreams as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
         videos: [
           { id: 80, bandwidth: 2000000, qualityName: '1080P', codecName: 'AVC', width: 1920, height: 1080, frameRate: '30', baseUrl: 'http://v.m4s' },
         ],
         audios: [
           { id: 30280, bandwidth: 320000, name: '320K', qualityDesc: '320K', codec: 'mp4a', sizeMB: '5', baseUrl: 'http://a.m4s' },
         ],
-        subtitles: [],
+        duration: 120,
       });
 
       await batchDownloadSeasonHighestVideos(
@@ -176,16 +165,12 @@ describe('Batch Downloader Unit Tests', () => {
       const addedTasks: DownloadTask[] = [];
       const updatedTasks: Record<string, Partial<DownloadTask>> = {};
 
-      (fetchCurrentMediaData as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-        bvid: 'BV1season002',
-        cid: 2002,
-        title: '单集原标题2',
-        pages: [{ cid: 2002, page: 1, part: '第2话' }],
+      (fetchMediaPlayStreams as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
         videos: [],
         audios: [
           { id: 30216, bandwidth: 64000, name: '64K', qualityDesc: '64K', codec: 'mp4a', sizeMB: '1', baseUrl: 'http://a64.m4s' },
         ],
-        subtitles: [],
+        duration: 120,
       });
 
       await batchDownloadSeasonLowestAudios(
@@ -213,18 +198,14 @@ describe('Batch Downloader Unit Tests', () => {
         resolveConfig: vi.fn(),
       };
 
-      (fetchCurrentMediaData as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-        bvid: 'BV1season001',
-        cid: 2001,
-        title: '单集原标题',
-        pages: [{ cid: 2001, page: 1, part: '第1话' }],
+      (fetchMediaPlayStreams as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
         videos: [
           { id: 80, bandwidth: 2000000, qualityName: '1080P', codecName: 'AVC', width: 1920, height: 1080, frameRate: '30', baseUrl: 'http://v.m4s' },
         ],
         audios: [
           { id: 30280, bandwidth: 320000, name: '320K', qualityDesc: '320K', codec: 'mp4a', sizeMB: '5', baseUrl: 'http://a.m4s' },
         ],
-        subtitles: [],
+        duration: 120,
       });
 
       await batchDownloadSeasonHighestVideos(

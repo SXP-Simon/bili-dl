@@ -83,8 +83,9 @@ export class ExternalDownloaderRegistry {
       : { port: downloader.defaultPort };
     const port = config.port || downloader.defaultPort;
     const isExternal =
-      resolvedSettings.defaultDownloaderEngine === 'external' ||
-      resolvedSettings.externalDownloaderEnabled === true;
+      resolvedSettings.externalDownloaderEnabled !== false &&
+      (resolvedSettings.defaultDownloaderEngine === 'external' ||
+        (resolvedSettings.defaultDownloaderEngine !== 'internal' && resolvedSettings.externalDownloaderEnabled === true));
 
     return {
       downloader,

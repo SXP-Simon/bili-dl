@@ -310,31 +310,14 @@ export async function fetchUgcSeasonData(_currentBvid?: string): Promise<UgcSeas
   return undefined;
 }
 
-export async function fetchCurrentMediaData(targetCid?: number, customBvid?: string): Promise<MediaResourceData | null> {
-  const bvid = customBvid || getBvidFromUrl();
-  if (!bvid) return null;
-
-  const pages = await fetchVideoPages(bvid);
-  const currentP = new URLSearchParams(location.search).get('p');
-  const pageIndex = currentP ? parseInt(currentP, 10) - 1 : 0;
-  const cid = targetCid || pages[pageIndex]?.cid || pages[0]?.cid;
-
-  if (!cid) return null;
-
-  const baseTitle = getVideoTitle();
-  const cover = getVideoCover();
-
-  // 若存在多分 P 剧集，精准拼接分 P 标题与序号，防止多 P 下载时文件名相同产生冲突
-  let title = baseTitle;
-  const currentPage = pages.find((p) => p.cid === cid) || pages[pageIndex] || pages[0];
-  if (pages.length > 1 && currentPage) {
-    const partSuffix = currentPage.part
-      ? `_P${currentPage.page}_${currentPage.part.replace(/[\\/:*?"<>|]/g, '_').trim()}`
-      : `_P${currentPage.page}`;
-    title = `${baseTitle}${partSuffix}`;
-  }
-
-  // 1. 请求 DASH 格式播放流
+/**
+ * 高性能轻量级音视频播放流解析器 (专用于多分 P / 合集等批量流式投递)
+ * 仅请求 /x/player/playurl 单一必要接口，剔除字幕、AI 大纲、合集元数据等无关并发开销
+ */
+export async function fetchMediaPlayStreams(
+  cid: number,
+  bvid: string
+): Promise<{ videos: VideoStreamItem[]; audios: AudioStreamItem[]; duration: number } | null> {
   let dashData: BiliDashData | undefined;
   let totalDuration = 0;
 
@@ -346,28 +329,23 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
       const playUrlData = parsed.data.data || parsed.data.result;
       dashData = (playUrlData?.dash as BiliDashData | undefined) || undefined;
       totalDuration = Number(playUrlData?.duration || playUrlData?.dash?.duration || 0);
-    } else {
-      logger.warn('API', '播放地址校验未完全匹配 Schema，启用防御性降级解析', {
-        issues: parsed.error.issues,
-      });
-      if (res && typeof res === 'object') {
-        const rawRes = res as {
-          data?: { dash?: BiliDashData; duration?: number };
-          result?: { dash?: BiliDashData; duration?: number };
-        };
-        const playUrlData = rawRes.data || rawRes.result;
-        if (playUrlData?.dash) {
-          dashData = playUrlData.dash;
-          totalDuration = Number(playUrlData.duration || playUrlData.dash.duration || 0);
-        }
+    } else if (res && typeof res === 'object') {
+      const rawRes = res as {
+        data?: { dash?: BiliDashData; duration?: number };
+        result?: { dash?: BiliDashData; duration?: number };
+      };
+      const playUrlData = rawRes.data || rawRes.result;
+      if (playUrlData?.dash) {
+        dashData = playUrlData.dash;
+        totalDuration = Number(playUrlData.duration || playUrlData.dash.duration || 0);
       }
     }
   } catch (err: unknown) {
     const msg = getErrorMessage(err);
-    logger.warn('API', `请求 DASH 播放地址网络失败: ${msg}`);
+    logger.warn('API', `[${bvid}/${cid}] 请求 DASH 播放流失败: ${msg}`);
   }
 
-  // 2. DOM 兜底
+  // DOM 兜底
   if (!dashData) {
     const win = getBiliWindow();
     if (win.__playinfo__?.data?.dash) {
@@ -391,9 +369,11 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
     }
   }
 
+  if (!dashData) return null;
+
   const duration = totalDuration || Number(dashData?.duration || 0);
 
-  // 3. 解析视频流
+  // 解析视频流
   const rawVideos: BiliDashVideoItem[] = (dashData?.video as BiliDashVideoItem[]) || [];
   const videos: VideoStreamItem[] = [];
   const seenVideoIds = new Set<string>();
@@ -427,7 +407,7 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
     });
   }
 
-  // 4. 解析音频流
+  // 解析音频流
   const rawAudios: BiliDashAudioItem[] = [
     ...(dashData?.dolby?.audio || []),
     ...(dashData?.flac?.audio ? [dashData.flac.audio] : []),
@@ -471,7 +451,40 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
     });
   });
 
-  // 5. 获取官方双语字幕 (采用 WBI 签名请求 /x/player/wbi/v2)
+  return { videos, audios, duration };
+}
+
+export async function fetchCurrentMediaData(targetCid?: number, customBvid?: string): Promise<MediaResourceData | null> {
+  const bvid = customBvid || getBvidFromUrl();
+  if (!bvid) return null;
+
+  const pages = await fetchVideoPages(bvid);
+  const currentP = new URLSearchParams(location.search).get('p');
+  const pageIndex = currentP ? parseInt(currentP, 10) - 1 : 0;
+  const cid = targetCid || pages[pageIndex]?.cid || pages[0]?.cid;
+
+  if (!cid) return null;
+
+  const baseTitle = getVideoTitle();
+  const cover = getVideoCover();
+
+  // 若存在多分 P 剧集，精准拼接分 P 标题与序号，防止多 P 下载时文件名相同产生冲突
+  let title = baseTitle;
+  const currentPage = pages.find((p) => p.cid === cid) || pages[pageIndex] || pages[0];
+  if (pages.length > 1 && currentPage) {
+    const partSuffix = currentPage.part
+      ? `_P${currentPage.page}_${currentPage.part.replace(/[\\/:*?"<>|]/g, '_').trim()}`
+      : `_P${currentPage.page}`;
+    title = `${baseTitle}${partSuffix}`;
+  }
+
+  // 1. 请求 DASH 音视频流
+  const streams = await fetchMediaPlayStreams(cid, bvid);
+  const videos = streams?.videos || [];
+  const audios = streams?.audios || [];
+  const duration = streams?.duration || 0;
+
+  // 2. 获取官方双语字幕 (采用 WBI 签名请求 /x/player/wbi/v2)
   const subtitles: SubtitleItem[] = [];
   try {
     const signedQuery = await signWbiQuery({ bvid, cid });

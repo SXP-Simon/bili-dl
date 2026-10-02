@@ -618,16 +618,17 @@ export const App: React.FC = () => {
     }
 
     const season = data.ugcSeason;
-    const { downloader, port, isExternal } = externalDownloaderRegistry.getActiveContext();
+    const isExternal = downloadEngine === 'external';
+    const { downloader, port } = externalDownloaderRegistry.getActiveContext();
     const count = season.episodes.length;
 
     await runManagedTask({
       taskId: `season_audios_${season.id}`,
       startToast: isExternal
-        ? `已将合集全部 ${count} 集音频推送到 ${downloader.name}`
+        ? `正在向 ${downloader.name} 逐集推送合集全部 ${count} 集音频...`
         : `已将合集全部 ${count} 集音频加入下载队列`,
       successToast: isExternal
-        ? `合集全部 ${count} 集音频已成功推送到 ${downloader.name}`
+        ? `合集全部 ${count} 集音频已全部推送到 ${downloader.name}`
         : `合集全部 ${count} 集音频下载已完成`,
       cancelToast: '合集音频下载任务已取消',
       failPrefix: '合集音频下载失败',
@@ -653,16 +654,17 @@ export const App: React.FC = () => {
     }
 
     const season = data.ugcSeason;
-    const { downloader, port, isExternal } = externalDownloaderRegistry.getActiveContext();
+    const isExternal = downloadEngine === 'external';
+    const { downloader, port } = externalDownloaderRegistry.getActiveContext();
     const count = season.episodes.length;
 
     await runManagedTask({
       taskId: `season_videos_${season.id}`,
       startToast: isExternal
-        ? `已将合集全部 ${count} 集最高画质推送到 ${downloader.name}`
+        ? `正在向 ${downloader.name} 逐集推送合集全部 ${count} 集最高画质...`
         : `已将合集全部 ${count} 集最高画质加入合成队列`,
       successToast: isExternal
-        ? `合集全部 ${count} 集视频已成功推送到 ${downloader.name}`
+        ? `合集全部 ${count} 集视频已全部推送到 ${downloader.name}`
         : `合集全部 ${count} 集视频合成任务已完成`,
       cancelToast: '合集视频下载任务已取消',
       failPrefix: '合集视频合成失败',
@@ -686,7 +688,8 @@ export const App: React.FC = () => {
       return;
     }
 
-    const { downloader, port, isExternal } = externalDownloaderRegistry.getActiveContext();
+    const isExternal = downloadEngine === 'external';
+    const { downloader, port } = externalDownloaderRegistry.getActiveContext();
 
     if (data.pages.length <= 1) {
       // 单 P 视频：根据下载引擎分流
@@ -707,7 +710,7 @@ export const App: React.FC = () => {
     await runManagedTask({
       taskId: `batch_audios_${data.bvid}`,
       startToast: isExternal
-        ? `已将 ${count} 集音频推送到 ${downloader.name}`
+        ? `正在向 ${downloader.name} 逐集推送 ${count} 集音频...`
         : `已将 ${count} 集最低音质音频加入下载队列`,
       successToast: isExternal
         ? `全集 ${count} P 音频已全部推送到 ${downloader.name}`
@@ -734,7 +737,8 @@ export const App: React.FC = () => {
       return;
     }
 
-    const { downloader, port, isExternal } = externalDownloaderRegistry.getActiveContext();
+    const isExternal = downloadEngine === 'external';
+    const { downloader, port } = externalDownloaderRegistry.getActiveContext();
 
     if (data.pages.length <= 1) {
       // 单 P 视频：根据下载引擎分流
@@ -756,7 +760,7 @@ export const App: React.FC = () => {
     await runManagedTask({
       taskId: `batch_videos_${data.bvid}`,
       startToast: isExternal
-        ? `已将 ${count} 集最高画质推送到 ${downloader.name}`
+        ? `正在向 ${downloader.name} 逐集推送 ${count} 集最高画质...`
         : `已将 ${count} 集最高画质 MP4 加入合成队列`,
       successToast: isExternal
         ? `全集 ${count} P 视频已成功全部推送到 ${downloader.name}`

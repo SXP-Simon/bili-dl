@@ -2,7 +2,7 @@
  * 多分 P 视频及系列合集 (Season/Series) 批量音视频自动化下载与流媒体混流调度器
  */
 
-import { fetchCurrentMediaData, getVideoTitle } from '../api/bilibili';
+import { fetchMediaPlayStreams, fetchVideoPages, getVideoTitle } from '../api/bilibili';
 import { downloadAudio, downloadAndMuxMp4 } from './downloader';
 import { logger } from '../utils/logger';
 import { getErrorMessage, isAbortError } from '../utils/error';
@@ -75,7 +75,7 @@ export async function batchDownloadAllLowestAudios(
         message: `正在解析 P${page.page} 音频流...`,
       });
 
-      const mediaData = await fetchCurrentMediaData(page.cid, bvid);
+      const mediaData = await fetchMediaPlayStreams(page.cid, bvid);
       if (!mediaData || mediaData.audios.length === 0) {
         logger.warn('BatchDownload', `[P${page.page}] 未获取到可用音频轨，跳过`, null, traceId);
         onTaskUpdate(taskId, {
@@ -210,7 +210,7 @@ export async function batchDownloadAllHighestVideos(
         message: `正在解析 P${page.page} 视频/音频流...`,
       });
 
-      const mediaData = await fetchCurrentMediaData(page.cid, bvid);
+      const mediaData = await fetchMediaPlayStreams(page.cid, bvid);
       if (!mediaData || mediaData.videos.length === 0) {
         logger.warn('BatchDownload', `[P${page.page}] 未获取到可用视频流，跳过`, null, traceId);
         onTaskUpdate(taskId, {
@@ -352,7 +352,13 @@ export async function batchDownloadSeasonHighestVideos(
         message: `正在解析第 ${ep.pageIndex} 集视频流...`,
       });
 
-      const mediaData = await fetchCurrentMediaData(ep.cid, ep.bvid);
+      const cid = ep.cid || (await fetchVideoPages(ep.bvid))[0]?.cid;
+      if (!cid) {
+        onTaskUpdate(taskId, { status: 'error', message: '未获取到分集 CID' });
+        continue;
+      }
+
+      const mediaData = await fetchMediaPlayStreams(cid, ep.bvid);
       if (!mediaData || mediaData.videos.length === 0) {
         logger.warn('BatchDownload', `[合集第 ${ep.pageIndex} 集] 未获取到可用视频流，跳过`, null, traceId);
         onTaskUpdate(taskId, {
@@ -388,7 +394,7 @@ export async function batchDownloadSeasonHighestVideos(
             sources,
             downloadPage: epUrl,
             bvid: ep.bvid,
-            cid: ep.cid,
+            cid,
           },
           options: { port: options.externalPort },
           taskId,
@@ -493,7 +499,13 @@ export async function batchDownloadSeasonLowestAudios(
         message: `正在解析第 ${ep.pageIndex} 集音频流...`,
       });
 
-      const mediaData = await fetchCurrentMediaData(ep.cid, ep.bvid);
+      const cid = ep.cid || (await fetchVideoPages(ep.bvid))[0]?.cid;
+      if (!cid) {
+        onTaskUpdate(taskId, { status: 'error', message: '未获取到分集 CID' });
+        continue;
+      }
+
+      const mediaData = await fetchMediaPlayStreams(cid, ep.bvid);
       if (!mediaData || mediaData.audios.length === 0) {
         logger.warn('BatchDownload', `[合集第 ${ep.pageIndex} 集] 未获取到可用音频轨，跳过`, null, traceId);
         onTaskUpdate(taskId, {
@@ -525,7 +537,7 @@ export async function batchDownloadSeasonLowestAudios(
             sources,
             downloadPage: epUrl,
             bvid: ep.bvid,
-            cid: ep.cid,
+            cid,
           },
           options: { port: options.externalPort },
           taskId,
