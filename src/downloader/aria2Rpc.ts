@@ -13,6 +13,7 @@ import { getErrorMessage } from '../utils/error';
 export class Aria2RpcDownloader implements IExternalDownloader {
   public readonly id = 'aria2_rpc';
   public readonly name = 'Aria2 / Motrix RPC';
+  public readonly shortName = 'Aria2';
   public readonly description = 'Aria2 / Motrix 远程 RPC 下载引擎';
   public readonly defaultPort = 6800;
 

@@ -90,4 +90,24 @@ describe('DownloadModal Integration Tests', () => {
     expect(onDownloadVideo).toHaveBeenCalledTimes(1);
     expect(onDownloadVideo).toHaveBeenCalledWith(mockData.videos[0], undefined);
   });
+
+  it('should render dynamic external downloader button when onDownloadWithExternal is provided', async () => {
+    const onDownloadWithExternal = vi.fn().mockResolvedValue(undefined);
+    render(
+      <DownloadModal
+        {...defaultProps}
+        onDownloadWithExternal={onDownloadWithExternal}
+      />
+    );
+
+    // Buttons should be displayed with active downloader badge on video and audio cards
+    const extBtns = screen.getAllByRole('button', { name: /ABDM/ });
+    expect(extBtns.length).toBeGreaterThan(0);
+
+    await act(async () => {
+      fireEvent.click(extBtns[0]!);
+    });
+
+    expect(onDownloadWithExternal).toHaveBeenCalledTimes(1);
+  });
 });

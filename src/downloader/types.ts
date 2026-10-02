@@ -31,6 +31,7 @@ export interface ExternalDownloaderStatus {
 export interface IExternalDownloader {
   readonly id: string;
   readonly name: string;
+  readonly shortName?: string;
   readonly description: string;
   readonly defaultPort: number;
 

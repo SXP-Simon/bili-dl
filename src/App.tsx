@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Video, Music, FolderArchive, Film, DownloadCloud } from 'lucide-react';
+import { Video, Music, FolderArchive, Film } from 'lucide-react';
 import { FloatButton } from './components/FloatButton';
 import { DownloadModal } from './components/DownloadModal';
 import { QuickActionMenu } from './components/QuickActionMenu';
@@ -11,9 +11,8 @@ import { batchDetectAndDownloadSubtitles, batchDownloadSeasonSubtitlesZip } from
 import { batchDownloadAllLowestAudios, batchDownloadAllHighestVideos, batchDownloadSeasonHighestVideos, batchDownloadSeasonLowestAudios } from './media/batchDownloader';
 import { logger } from './utils/logger';
 import { getErrorMessage, isAbortError } from './utils/error';
-import { getDownloadSettings } from './utils/settings';
+import { getDownloadSettings, saveDownloadSettings } from './utils/settings';
 import {
-  abDownloadManager,
   externalDownloaderRegistry,
   type IExternalDownloader,
   type ExternalDownloadSource,
@@ -41,7 +40,19 @@ export const App: React.FC = () => {
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
   const [abdmStatus, setAbdmStatus] = useState<ExternalDownloaderStatus | null>(null);
   const [isCheckingAbdm, setIsCheckingAbdm] = useState(false);
+  const [downloadEngine, setDownloadEngine] = useState<'internal' | 'external'>(() => {
+    const s = getDownloadSettings();
+    return s.defaultDownloaderEngine || 'internal';
+  });
   const activeControllers = useRef<Map<string, AbortController>>(new Map());
+
+  const handleToggleEngine = (newEngine: 'internal' | 'external') => {
+    setDownloadEngine(newEngine);
+    const s = getDownloadSettings();
+    s.defaultDownloaderEngine = newEngine;
+    saveDownloadSettings(s);
+    showToast(`已切换默认下载引擎为: ${newEngine === 'external' ? '外部持久化下载器' : '浏览器内置'}`, 'info');
+  };
 
   // 记录导航序列号，防止快速切集时的竞态乱序覆盖
   const navEpochRef = useRef(0);
@@ -571,11 +582,26 @@ export const App: React.FC = () => {
     }
 
     const season = data.ugcSeason;
+    const currentSettings = getDownloadSettings();
+    const isExternal = downloadEngine === 'external';
+    const activeExtDownloader = externalDownloaderRegistry.getActive(currentSettings.externalDownloaderId);
+    const activePort =
+      activeExtDownloader.id === 'abdm'
+        ? currentSettings.abdmPort
+        : activeExtDownloader.id === 'aria2_rpc'
+        ? currentSettings.aria2Port
+        : activeExtDownloader.defaultPort;
+
     const controller = new AbortController();
     const taskId = `season_audios_${season.id}`;
     activeControllers.current.set(taskId, controller);
 
-    showToast(`已将合集全部 ${season.episodes.length} 集音频加入下载队列`, 'info');
+    showToast(
+      isExternal
+        ? `已将合集全部 ${season.episodes.length} 集音频推送到 ${activeExtDownloader.name}`
+        : `已将合集全部 ${season.episodes.length} 集音频加入下载队列`,
+      'info'
+    );
 
     try {
       await batchDownloadSeasonLowestAudios(
@@ -584,10 +610,16 @@ export const App: React.FC = () => {
         upsertTask,
         updateTaskProgress,
         `合集音频-${season.id}`,
-        controller.signal
+        controller.signal,
+        isExternal ? { externalDownloader: activeExtDownloader, externalPort: activePort } : undefined
       );
       if (!controller.signal.aborted) {
-        showToast(`合集全部 ${season.episodes.length} 集音频下载已完成`, 'success');
+        showToast(
+          isExternal
+            ? `合集全部 ${season.episodes.length} 集音频已成功推送到 ${activeExtDownloader.name}`
+            : `合集全部 ${season.episodes.length} 集音频下载已完成`,
+          'success'
+        );
       }
     } catch (err: unknown) {
       if (controller.signal.aborted || isAbortError(err)) {
@@ -610,11 +642,26 @@ export const App: React.FC = () => {
     }
 
     const season = data.ugcSeason;
+    const currentSettings = getDownloadSettings();
+    const isExternal = downloadEngine === 'external';
+    const activeExtDownloader = externalDownloaderRegistry.getActive(currentSettings.externalDownloaderId);
+    const activePort =
+      activeExtDownloader.id === 'abdm'
+        ? currentSettings.abdmPort
+        : activeExtDownloader.id === 'aria2_rpc'
+        ? currentSettings.aria2Port
+        : activeExtDownloader.defaultPort;
+
     const controller = new AbortController();
     const taskId = `season_videos_${season.id}`;
     activeControllers.current.set(taskId, controller);
 
-    showToast(`已将合集全部 ${season.episodes.length} 集最高画质加入合成队列`, 'info');
+    showToast(
+      isExternal
+        ? `已将合集全部 ${season.episodes.length} 集最高画质推送到 ${activeExtDownloader.name}`
+        : `已将合集全部 ${season.episodes.length} 集最高画质加入合成队列`,
+      'info'
+    );
 
     try {
       await batchDownloadSeasonHighestVideos(
@@ -623,10 +670,16 @@ export const App: React.FC = () => {
         upsertTask,
         updateTaskProgress,
         `合集视频-${season.id}`,
-        controller.signal
+        controller.signal,
+        isExternal ? { externalDownloader: activeExtDownloader, externalPort: activePort } : undefined
       );
       if (!controller.signal.aborted) {
-        showToast(`合集全部 ${season.episodes.length} 集视频合成任务已完成`, 'success');
+        showToast(
+          isExternal
+            ? `合集全部 ${season.episodes.length} 集视频已成功推送到 ${activeExtDownloader.name}`
+            : `合集全部 ${season.episodes.length} 集视频合成任务已完成`,
+          'success'
+        );
       }
     } catch (err: unknown) {
       if (controller.signal.aborted || isAbortError(err)) {
@@ -647,11 +700,25 @@ export const App: React.FC = () => {
       return;
     }
 
+    const currentSettings = getDownloadSettings();
+    const isExternal = downloadEngine === 'external';
+    const activeExtDownloader = externalDownloaderRegistry.getActive(currentSettings.externalDownloaderId);
+    const activePort =
+      activeExtDownloader.id === 'abdm'
+        ? currentSettings.abdmPort
+        : activeExtDownloader.id === 'aria2_rpc'
+        ? currentSettings.aria2Port
+        : activeExtDownloader.defaultPort;
+
     if (data.pages.length <= 1) {
-      // 单 P 视频：直接下载最低音质
+      // 单 P 视频：根据下载引擎分流
       const lowestAudio = [...data.audios].sort((a, b) => a.bandwidth - b.bandwidth)[0] || data.audios[data.audios.length - 1];
       if (lowestAudio) {
-        await handleDownloadAudio(lowestAudio, data.title);
+        if (isExternal) {
+          await handleDownloadWithExternal(activeExtDownloader, undefined, lowestAudio);
+        } else {
+          await handleDownloadAudio(lowestAudio, data.title);
+        }
       } else {
         showToast('未能获取到音频流', 'error');
       }
@@ -662,7 +729,12 @@ export const App: React.FC = () => {
     const taskId = `batch_audios_${data.bvid}`;
     activeControllers.current.set(taskId, controller);
 
-    showToast(`已将 ${data.pages.length} 集最低音质音频加入下载队列`, 'info');
+    showToast(
+      isExternal
+        ? `已将 ${data.pages.length} 集音频推送到 ${activeExtDownloader.name}`
+        : `已将 ${data.pages.length} 集最低音质音频加入下载队列`,
+      'info'
+    );
 
     try {
       await batchDownloadAllLowestAudios(
@@ -671,10 +743,16 @@ export const App: React.FC = () => {
         upsertTask,
         updateTaskProgress,
         `全集音频-${data.bvid}`,
-        controller.signal
+        controller.signal,
+        isExternal ? { externalDownloader: activeExtDownloader, externalPort: activePort } : undefined
       );
       if (!controller.signal.aborted) {
-        showToast(`全集 ${data.pages.length} P 音频批量下载任务已完成`, 'success');
+        showToast(
+          isExternal
+            ? `全集 ${data.pages.length} P 音频已全部推送到 ${activeExtDownloader.name}`
+            : `全集 ${data.pages.length} P 音频批量下载任务已完成`,
+          'success'
+        );
       }
     } catch (err: unknown) {
       if (controller.signal.aborted || isAbortError(err)) {
@@ -695,12 +773,26 @@ export const App: React.FC = () => {
       return;
     }
 
+    const currentSettings = getDownloadSettings();
+    const isExternal = downloadEngine === 'external';
+    const activeExtDownloader = externalDownloaderRegistry.getActive(currentSettings.externalDownloaderId);
+    const activePort =
+      activeExtDownloader.id === 'abdm'
+        ? currentSettings.abdmPort
+        : activeExtDownloader.id === 'aria2_rpc'
+        ? currentSettings.aria2Port
+        : activeExtDownloader.defaultPort;
+
     if (data.pages.length <= 1) {
-      // 单 P 视频：直接下载最高画质视频 + 最佳音频
+      // 单 P 视频：根据下载引擎分流
       const highestVideo = data.videos[0];
       const bestAudio = data.audios[0];
       if (highestVideo) {
-        await handleDownloadVideo(highestVideo, bestAudio, data.title);
+        if (isExternal) {
+          await handleDownloadWithExternal(activeExtDownloader, highestVideo, bestAudio);
+        } else {
+          await handleDownloadVideo(highestVideo, bestAudio, data.title);
+        }
       } else {
         showToast('未能获取到视频流', 'error');
       }
@@ -711,7 +803,12 @@ export const App: React.FC = () => {
     const taskId = `batch_videos_${data.bvid}`;
     activeControllers.current.set(taskId, controller);
 
-    showToast(`已将 ${data.pages.length} 集最高画质 MP4 加入合成队列`, 'info');
+    showToast(
+      isExternal
+        ? `已将 ${data.pages.length} 集最高画质推送到 ${activeExtDownloader.name}`
+        : `已将 ${data.pages.length} 集最高画质 MP4 加入合成队列`,
+      'info'
+    );
 
     try {
       await batchDownloadAllHighestVideos(
@@ -720,10 +817,16 @@ export const App: React.FC = () => {
         upsertTask,
         updateTaskProgress,
         `全集视频-${data.bvid}`,
-        controller.signal
+        controller.signal,
+        isExternal ? { externalDownloader: activeExtDownloader, externalPort: activePort } : undefined
       );
       if (!controller.signal.aborted) {
-        showToast(`全集 ${data.pages.length} P 视频批量合成任务已完成`, 'success');
+        showToast(
+          isExternal
+            ? `全集 ${data.pages.length} P 视频已成功全部推送到 ${activeExtDownloader.name}`
+            : `全集 ${data.pages.length} P 视频批量合成任务已完成`,
+          'success'
+        );
       }
     } catch (err: unknown) {
       if (controller.signal.aborted || isAbortError(err)) {
@@ -748,12 +851,20 @@ export const App: React.FC = () => {
     setQuickMenuPos(pos);
     setIsQuickMenuOpen(true);
 
-    // 展开快捷操作菜单时，异步探测外部持久化下载器 (AB Download Manager)
+    // 展开快捷操作菜单时，异步探测用户配置的外部持久化下载器
     const settings = getDownloadSettings();
-    if (settings.abdmEnabled !== false) {
+    const activeDownloader = externalDownloaderRegistry.getActive(settings.externalDownloaderId);
+    const activePort =
+      activeDownloader.id === 'abdm'
+        ? settings.abdmPort
+        : activeDownloader.id === 'aria2_rpc'
+        ? settings.aria2Port
+        : activeDownloader.defaultPort;
+
+    if (settings.externalDownloaderEnabled !== false) {
       setIsCheckingAbdm(true);
-      abDownloadManager
-        .checkAvailability({ port: settings.abdmPort, timeoutMs: 1500 })
+      activeDownloader
+        .checkAvailability({ port: activePort, timeoutMs: 1500 })
         .then((st) => setAbdmStatus(st))
         .catch(() => {})
         .finally(() => setIsCheckingAbdm(false));
@@ -778,14 +889,15 @@ export const App: React.FC = () => {
    * 统一外部持久化下载调度器 (遵循开闭原则 OCP，支持投递至 AB Download Manager、Aria2 RPC 等桌面端客户端)
    */
   const handleDownloadWithExternal = async (
-    downloaderOrId: IExternalDownloader | string,
+    downloaderOrId?: IExternalDownloader | string,
     targetVideo?: VideoStreamItem,
     targetAudio?: AudioStreamItem
   ) => {
+    const settings = getDownloadSettings();
     const downloader =
       typeof downloaderOrId === 'string'
-        ? externalDownloaderRegistry.get(downloaderOrId) || abDownloadManager
-        : downloaderOrId;
+        ? externalDownloaderRegistry.get(downloaderOrId) || externalDownloaderRegistry.getActive(settings.externalDownloaderId)
+        : downloaderOrId || externalDownloaderRegistry.getActive(settings.externalDownloaderId);
 
     let currentMedia = mediaData;
     if (!currentMedia) {
@@ -806,15 +918,19 @@ export const App: React.FC = () => {
       return;
     }
 
-    const settings = getDownloadSettings();
-    const port = settings.abdmPort || downloader.defaultPort;
+    const port =
+      downloader.id === 'abdm'
+        ? settings.abdmPort
+        : downloader.id === 'aria2_rpc'
+        ? settings.aria2Port
+        : downloader.defaultPort;
 
     // 1. 快速探测客户端运行与端口联通状态
     const status = await downloader.checkAvailability({ port, timeoutMs: 2000 });
     setAbdmStatus(status);
     if (!status.isAvailable) {
       showToast(
-        `未检测到 ${downloader.name} (端口 ${port} 未响应)。请确认客户端已启动且在设置中启用了「浏览器插件集成」。`,
+        `未检测到 ${downloader.name} (端口 ${port} 未响应)。请确认客户端已启动且在设置中启用了对应接口。`,
         'warning'
       );
       return;
@@ -898,55 +1014,44 @@ export const App: React.FC = () => {
   };
 
   // 抽象与配置右键快捷操作列表 (支持任意未来快捷项灵活追加)
-    const hasUgcSeason = Boolean(mediaData?.ugcSeason);
+  const hasUgcSeason = Boolean(mediaData?.ugcSeason);
   const seasonEpisodeCount = mediaData?.ugcSeason?.episodes.length || 0;
+  const currentSettings = getDownloadSettings();
+  const isExternal = downloadEngine === 'external';
+  const activeExtDownloader = externalDownloaderRegistry.getActive(currentSettings.externalDownloaderId);
 
-  // 外部持久化下载器快捷入口 (右键菜单直观感知 15151 端口客户端连接状态)
-  const abdmActionItem: QuickActionItem = {
-    id: 'quick_abdm_download',
-    icon: <DownloadCloud className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
-    label: '推送到 AB Download Manager',
-    loading: isCheckingAbdm,
-    description: abdmStatus?.isAvailable
-      ? '已连接桌面端客户端，后台持久化下载不惧切换或关闭 Tab'
-      : '未检测到客户端运行，请启动客户端并在设置中启用「浏览器插件集成」',
-    badge: isCheckingAbdm
-      ? '探测中...'
-      : abdmStatus?.isAvailable
-      ? '● 已就绪'
-      : '● 未运行',
-    onClick: async () => {
-      logger.info('QuickAction', '触发快捷投递: 推送到 AB Download Manager');
-      await handleDownloadWithExternal(abDownloadManager);
-    },
-  };
-
-  // 抽象与配置右键快捷操作列表 (根据是否为合集自动呈现最匹配的选项，外部持久化下载器排在首项)
-  const quickActions: QuickActionItem[] = [
-    abdmActionItem,
-    ...(hasUgcSeason
-      ? [
+  // 抽象与配置右键快捷操作列表 (根据是否为合集自动呈现最匹配的选项，通过下载引擎开关无缝分流浏览器或外部下载器)
+  const quickActions: QuickActionItem[] = hasUgcSeason
+    ? [
           {
             id: 'quick_season_videos_highest',
             icon: <Film className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
-            label: `一键下载合集全部视频 (${seasonEpisodeCount}集)`,
+            label: isExternal
+              ? `一键推送到 ${activeExtDownloader.shortName || '外部'}: 合集视频 (${seasonEpisodeCount}集)`
+              : `一键下载合集全部视频 (${seasonEpisodeCount}集)`,
             loading: isBatchVideosRunning,
-            description: `批量下载合集《${mediaData?.ugcSeason?.title}》全部最高画质 MP4`,
-            badge: '合集全量',
+            description: isExternal
+              ? `批量推送到 ${activeExtDownloader.name} 独立持久化下载全集最高画质 MP4`
+              : `批量下载合集《${mediaData?.ugcSeason?.title}》全部最高画质 MP4`,
+            badge: isExternal ? (activeExtDownloader.shortName || '外部') : '合集全量',
             onClick: async () => {
-              logger.info('QuickAction', '触发快捷下载: 一键下载合集全部最高画质');
+              logger.info('QuickAction', '触发快捷操作: 一键下载/推送合集全部最高画质');
               await handleDownloadSeasonVideosHighest();
             },
           },
           {
             id: 'quick_season_audios_lowest',
             icon: <Music className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
-            label: `一键提取合集全部音频 (${seasonEpisodeCount}集)`,
+            label: isExternal
+              ? `一键推送到 ${activeExtDownloader.shortName || '外部'}: 合集音频 (${seasonEpisodeCount}集)`
+              : `一键提取合集全部音频 (${seasonEpisodeCount}集)`,
             loading: isBatchAudiosRunning,
-            description: `批量抽取合集《${mediaData?.ugcSeason?.title}》全集省流音频`,
-            badge: '合集音频',
+            description: isExternal
+              ? `批量推送到 ${activeExtDownloader.name} 独立持久化下载全集省流音频`
+              : `批量抽取合集《${mediaData?.ugcSeason?.title}》全集省流音频`,
+            badge: isExternal ? (activeExtDownloader.shortName || '外部') : '合集音频',
             onClick: async () => {
-              logger.info('QuickAction', '触发快捷下载: 一键提取合集全部音频');
+              logger.info('QuickAction', '触发快捷操作: 一键提取/推送合集全部音频');
               await handleDownloadSeasonAudiosLowest();
             },
           },
@@ -967,28 +1072,36 @@ export const App: React.FC = () => {
           {
             id: 'quick_batch_videos_highest',
             icon: <Video className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
-            label: '一键下载全部最高质量视频',
+            label: isExternal
+              ? `一键推送到 ${activeExtDownloader.shortName || '外部'}: 全部最高质量视频`
+              : '一键下载全部最高质量视频',
             loading: isBatchVideosRunning,
-            description: mediaData && mediaData.pages.length > 1
+            description: isExternal
+              ? `推送到 ${activeExtDownloader.name} 独立持久化下载，不惧切换 Tab`
+              : mediaData && mediaData.pages.length > 1
               ? `批量下载全集 ${mediaData.pages.length} P 并无损封装含音频 MP4`
               : '下载最高画质视频并合成含音频 MP4',
-            badge: 'MP4',
+            badge: isExternal ? (activeExtDownloader.shortName || '外部') : 'MP4',
             onClick: async () => {
-              logger.info('QuickAction', '触发快捷下载: 一键下载全部最高质量视频');
+              logger.info('QuickAction', '触发快捷操作: 一键下载/推送全部最高质量视频');
               await handleDownloadBatchVideosHighest();
             },
           },
           {
             id: 'quick_batch_audios_lowest',
             icon: <Music className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
-            label: '一键下载全部最低质量音频',
+            label: isExternal
+              ? `一键推送到 ${activeExtDownloader.shortName || '外部'}: 全部最低质量音频`
+              : '一键下载全部最低质量音频',
             loading: isBatchAudiosRunning,
-            description: mediaData && mediaData.pages.length > 1
+            description: isExternal
+              ? `推送到 ${activeExtDownloader.name} 独立持久化提取全集音频`
+              : mediaData && mediaData.pages.length > 1
               ? `批量提取全集 ${mediaData.pages.length} P 最低码率音频 (省流)`
               : '提取当前视频最低码率独立音轨 (.m4a)',
-            badge: '64K',
+            badge: isExternal ? (activeExtDownloader.shortName || '外部') : '64K',
             onClick: async () => {
-              logger.info('QuickAction', '触发快捷下载: 一键下载全部最低质量音频');
+              logger.info('QuickAction', '触发快捷操作: 一键下载/推送全部最低质量音频');
               await handleDownloadBatchAudiosLowest();
             },
           },
@@ -1006,8 +1119,7 @@ export const App: React.FC = () => {
               await handleDownloadBatchSubtitles();
             },
           },
-        ]),
-  ];
+        ];
 
   return (
     <div className={isDark ? 'dark' : ''}>
@@ -1025,6 +1137,11 @@ export const App: React.FC = () => {
         actions={quickActions}
         headerInfo={quickMenuHeader}
         anchorPosition={quickMenuPos}
+        engine={downloadEngine}
+        onToggleEngine={handleToggleEngine}
+        activeDownloaderShortName={activeExtDownloader.shortName || activeExtDownloader.name}
+        isExternalAvailable={Boolean(abdmStatus?.isAvailable)}
+        isCheckingExternal={isCheckingAbdm}
       />
       {isModalOpen && mediaData && (
         <DownloadModal

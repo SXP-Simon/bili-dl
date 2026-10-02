@@ -21,7 +21,7 @@ import {
   resetDownloadSettings,
   type DownloadSettings,
 } from '../utils/settings';
-import { abDownloadManager } from '../downloader';
+import { externalDownloaderRegistry } from '../downloader';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -31,6 +31,9 @@ interface SettingsPanelProps {
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToast }) => {
   const [settings, setSettings] = useState<DownloadSettings>(() => getDownloadSettings());
   const [testStatus, setTestStatus] = useState<{ loading: boolean; message: string; ok?: boolean } | null>(null);
+
+  const registeredDownloaders = externalDownloaderRegistry.getAll();
+  const activeDownloader = externalDownloaderRegistry.getActive(settings.externalDownloaderId);
 
   const updateSetting = <K extends keyof DownloadSettings>(key: K, value: DownloadSettings[K]) => {
     const next = { ...settings, [key]: value };
@@ -45,18 +48,24 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
     onShowToast('已恢复全部默认下载设置', 'info');
   };
 
-  const handleTestAbdm = async () => {
-    const port = settings.abdmPort || 15151;
+  const handleTestConnection = async () => {
+    const port =
+      activeDownloader.id === 'abdm'
+        ? settings.abdmPort
+        : activeDownloader.id === 'aria2_rpc'
+        ? settings.aria2Port
+        : activeDownloader.defaultPort;
+
     setTestStatus({ loading: true, message: `正在探测 127.0.0.1:${port}...` });
     try {
-      const res = await abDownloadManager.checkAvailability({ port, timeoutMs: 2000 });
+      const res = await activeDownloader.checkAvailability({ port, timeoutMs: 2000 });
       setTestStatus({
         loading: false,
         ok: res.isAvailable,
         message: res.message,
       });
       if (res.isAvailable) {
-        onShowToast('AB Download Manager 连接测试成功！', 'success');
+        onShowToast(`${activeDownloader.name} 连接测试成功！`, 'success');
       } else {
         onShowToast(`连接失败: ${res.message}`, 'warning');
       }
@@ -306,51 +315,152 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
           )}
         </div>
 
-        {/* 5. 外部持久化下载器集成 (AB Download Manager) */}
+        {/* 5. 默认下载引擎配置 */}
+        <div className="p-3.5 rounded-2xl bg-muted/30 border border-border/70 space-y-2.5">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
+                <span className="font-semibold text-foreground">默认下载引擎</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                决定右键快捷任务与资源卡片下载的默认触发方式。
+              </p>
+            </div>
+
+            <div className="flex items-center bg-background rounded-xl p-1 border border-border/80 shrink-0">
+              <button
+                type="button"
+                onClick={() => updateSetting('defaultDownloaderEngine', 'internal')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  settings.defaultDownloaderEngine !== 'external'
+                    ? 'bg-primary text-primary-foreground shadow-2xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                🌐 浏览器内置
+              </button>
+              <button
+                type="button"
+                onClick={() => updateSetting('defaultDownloaderEngine', 'external')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  settings.defaultDownloaderEngine === 'external'
+                    ? 'bg-primary text-primary-foreground shadow-2xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                🚀 外部下载器
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 6. 外部持久化下载器集成与选择 (支持 AB Download Manager、Aria2 RPC 等) */}
         <div className="p-3.5 rounded-2xl bg-muted/30 border border-border/70 space-y-3">
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
               <div className="flex items-center gap-2">
                 <DownloadCloud className="w-4 h-4 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
-                <span className="font-semibold text-foreground">AB Download Manager 桌面端持久化下载</span>
+                <span className="font-semibold text-foreground">外部持久化下载器集成</span>
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                联动外部开源下载器后台高速下载，彻底解决网页切换 Tab 或最小化时下载中断/失败的问题。
+                联动外部桌面端下载器接管任务，解决浏览器切 Tab、最小化或休眠时下载中断的问题。
               </p>
             </div>
 
             <button
               type="button"
               role="switch"
-              aria-checked={settings.abdmEnabled}
-              onClick={() => updateSetting('abdmEnabled', !settings.abdmEnabled)}
+              aria-checked={settings.externalDownloaderEnabled}
+              onClick={() => {
+                const nextVal = !settings.externalDownloaderEnabled;
+                updateSetting('externalDownloaderEnabled', nextVal);
+                updateSetting('abdmEnabled', nextVal);
+              }}
               className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                settings.abdmEnabled ? 'bg-primary' : 'bg-muted-foreground/30'
+                settings.externalDownloaderEnabled ? 'bg-primary' : 'bg-muted-foreground/30'
               }`}
             >
               <span
                 className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                  settings.abdmEnabled ? 'translate-x-5' : 'translate-x-0'
+                  settings.externalDownloaderEnabled ? 'translate-x-5' : 'translate-x-0'
                 }`}
               />
             </button>
           </div>
 
-          {settings.abdmEnabled && (
-            <div className="pt-2 pl-6 space-y-2.5 border-t border-border/30">
-              <div className="flex items-center justify-between gap-3 text-[11px]">
-                <span className="text-muted-foreground">客户端服务端口 (默认 15151)</span>
+          {settings.externalDownloaderEnabled && (
+            <div className="pt-2 pl-6 space-y-3 border-t border-border/30">
+              {/* 选择默认外部下载器 */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] text-muted-foreground font-medium">选择外部下载器引擎：</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {registeredDownloaders.map((downloader) => {
+                    const isSelected = (settings.externalDownloaderId || 'abdm') === downloader.id;
+                    const port =
+                      downloader.id === 'abdm'
+                        ? settings.abdmPort
+                        : downloader.id === 'aria2_rpc'
+                        ? settings.aria2Port
+                        : downloader.defaultPort;
+
+                    return (
+                      <button
+                        key={downloader.id}
+                        type="button"
+                        onClick={() => {
+                          updateSetting('externalDownloaderId', downloader.id);
+                          setTestStatus(null);
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                          isSelected
+                            ? 'bg-primary/15 border-primary text-emerald-950 dark:text-emerald-100 shadow-2xs font-bold'
+                            : 'bg-background hover:bg-muted text-muted-foreground hover:text-foreground border-border/80'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-foreground">{downloader.name}</span>
+                          <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-muted border border-border/60">
+                            :{port}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground/80 line-clamp-1">
+                          {downloader.description}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 端口配置与连接测试 */}
+              <div className="flex items-center justify-between gap-3 text-[11px] pt-1">
+                <span className="text-muted-foreground">
+                  {activeDownloader.name} 监听端口：
+                </span>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
-                    value={settings.abdmPort}
-                    onChange={(e) => updateSetting('abdmPort', parseInt(e.target.value, 10) || 15151)}
+                    value={
+                      activeDownloader.id === 'abdm'
+                        ? settings.abdmPort
+                        : activeDownloader.id === 'aria2_rpc'
+                        ? settings.aria2Port
+                        : activeDownloader.defaultPort
+                    }
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (activeDownloader.id === 'abdm') {
+                        updateSetting('abdmPort', val || 15151);
+                      } else if (activeDownloader.id === 'aria2_rpc') {
+                        updateSetting('aria2Port', val || 6800);
+                      }
+                    }}
                     className="w-24 px-2.5 py-1 rounded-lg bg-background border border-border/80 text-foreground font-mono text-xs text-center focus:outline-none focus:ring-1 focus:ring-primary"
-                    placeholder="15151"
                   />
                   <button
                     type="button"
-                    onClick={handleTestAbdm}
+                    onClick={handleTestConnection}
                     disabled={testStatus?.loading}
                     className="px-2.5 py-1 rounded-lg bg-secondary/40 hover:bg-secondary text-secondary-foreground text-[10px] font-semibold border border-secondary/60 transition-colors cursor-pointer"
                   >
@@ -377,7 +487,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
               )}
 
               <div className="text-[10.5px] text-muted-foreground/80 leading-relaxed">
-                提示：请确保电脑已安装并启动 AB Download Manager 桌面端，且在「设置 - 浏览器插件集成」中开启了「启用」，端口保持一致即可。
+                提示：请确保电脑已安装并启动对应客户端（例如 AB Download Manager 或 Motrix/Aria2），且端口保持一致。
               </div>
             </div>
           )}

@@ -12,10 +12,15 @@ interface QuickActionMenuProps {
     y?: number;
     buttonRect?: { left: number; top: number; right: number; bottom: number; width: number; height: number };
   };
+  engine?: 'internal' | 'external';
+  onToggleEngine?: (engine: 'internal' | 'external') => void;
+  activeDownloaderShortName?: string;
+  isExternalAvailable?: boolean;
+  isCheckingExternal?: boolean;
 }
 
 /**
- * 极简原生感快捷右键菜单 (紧凑轻量、紧贴悬浮球、零多余占位、带目标视频实时就绪指示头)
+ * 极简原生感快捷右键菜单 (紧凑轻量、紧贴悬浮球、零多余占位、带目标视频实时就绪指示头与引擎切换器)
  */
 export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
   isOpen,
@@ -23,6 +28,11 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
   actions,
   headerInfo,
   anchorPosition,
+  engine = 'internal',
+  onToggleEngine,
+  activeDownloaderShortName = '外部',
+  isExternalAvailable = false,
+  isCheckingExternal = false,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -46,8 +56,9 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
   const itemHeight = 34;
   const menuPadding = 8;
   const headerHeight = headerInfo ? 36 : 0;
+  const engineSwitcherHeight = onToggleEngine ? 30 : 0;
   const menuWidth = 295;
-  const menuHeight = actions.length * itemHeight + menuPadding + headerHeight;
+  const menuHeight = actions.length * itemHeight + menuPadding + headerHeight + engineSwitcherHeight;
 
   let left = 0;
   let top = 0;
@@ -120,6 +131,44 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
                 {headerInfo.bvid.slice(0, 8)}..
               </span>
             )}
+          </div>
+        )}
+
+        {/* 顶部下载引擎切换器: 浏览器内置 vs 外部持久化下载器 */}
+        {onToggleEngine && (
+          <div className="flex items-center justify-between p-0.5 mb-1 rounded-lg bg-muted/50 border border-border/40 text-[11px]">
+            <button
+              type="button"
+              onClick={() => onToggleEngine('internal')}
+              className={`flex-1 py-1 rounded-md text-center font-medium transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                engine !== 'external'
+                  ? 'bg-card text-foreground shadow-2xs font-bold'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <span>🌐 浏览器内置</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onToggleEngine('external')}
+              className={`flex-1 py-1 rounded-md text-center font-medium transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                engine === 'external'
+                  ? 'bg-primary/20 text-emerald-950 dark:text-emerald-100 font-bold shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <span>🚀 {activeDownloaderShortName}</span>
+              <span
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  isCheckingExternal
+                    ? 'bg-sky-400 animate-pulse'
+                    : isExternalAvailable
+                    ? 'bg-emerald-500'
+                    : 'bg-amber-500'
+                }`}
+                title={isExternalAvailable ? '客户端在线已就绪' : '未检测到客户端运行'}
+              />
+            </button>
           </div>
         )}
 

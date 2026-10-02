@@ -7,6 +7,12 @@ import { downloadAudio, downloadAndMuxMp4 } from './downloader';
 import { logger } from '../utils/logger';
 import { getErrorMessage, isAbortError } from '../utils/error';
 import type { VideoPageItem, DownloadTask, SeasonEpisodeItem } from '../types';
+import type { IExternalDownloader, ExternalDownloadSource } from '../downloader';
+
+export interface BatchDownloadOptions {
+  externalDownloader?: IExternalDownloader;
+  externalPort?: number;
+}
 
 /**
  * 批量下载全集最低质量音频轨 (极速提取音频/省流播客) - 支持多分 P
@@ -17,7 +23,8 @@ export async function batchDownloadAllLowestAudios(
   onTaskAdd: (task: DownloadTask) => void,
   onTaskUpdate: (id: string, partial: Partial<DownloadTask>) => void,
   traceId = '全集最低音质',
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: BatchDownloadOptions
 ): Promise<void> {
   const mainTitle = getVideoTitle();
   const total = pages.length;
@@ -83,6 +90,49 @@ export async function batchDownloadAllLowestAudios(
         message: `准备下载 P${page.page} 音频 (${lowestAudio.name})...`,
       });
 
+      if (options?.externalDownloader) {
+        const ext = options.externalDownloader;
+        onTaskUpdate(taskId, {
+          status: 'downloading_audio',
+          progress: 50,
+          message: `正在推送到 ${ext.name}...`,
+        });
+
+        const safeTitle = pageTitle.replace(/[\\/:*?"<>|]/g, '_');
+        const res = await ext.sendDownload(
+          {
+            title: pageTitle,
+            sources: [
+              {
+                url: lowestAudio.baseUrl,
+                filename: `${safeTitle}_${lowestAudio.name}.m4a`,
+                type: 'audio',
+                qualityDesc: lowestAudio.name,
+              },
+            ],
+            downloadPage: typeof location !== 'undefined' ? location.href : undefined,
+            bvid,
+            cid: page.cid,
+          },
+          { port: options.externalPort }
+        );
+
+        if (res.success) {
+          onTaskUpdate(taskId, {
+            status: 'completed',
+            progress: 100,
+            message: `已推送到 ${ext.name}`,
+          });
+        } else {
+          onTaskUpdate(taskId, {
+            status: 'error',
+            message: `推送到 ${ext.name} 失败: ${res.message}`,
+          });
+        }
+        await new Promise((r) => setTimeout(r, 150));
+        continue;
+      }
+
       await downloadAudio(
         pageTitle,
         lowestAudio,
@@ -127,7 +177,8 @@ export async function batchDownloadAllHighestVideos(
   onTaskAdd: (task: DownloadTask) => void,
   onTaskUpdate: (id: string, partial: Partial<DownloadTask>) => void,
   traceId = '全集最高画质',
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: BatchDownloadOptions
 ): Promise<void> {
   const mainTitle = getVideoTitle();
   const total = pages.length;
@@ -196,6 +247,59 @@ export async function batchDownloadAllHighestVideos(
         message: `准备下载并合成 P${page.page} (${highestVideo.qualityName})...`,
       });
 
+      if (options?.externalDownloader) {
+        const ext = options.externalDownloader;
+        onTaskUpdate(taskId, {
+          status: 'downloading_video',
+          progress: 50,
+          message: `正在推送到 ${ext.name}...`,
+        });
+
+        const safeTitle = pageTitle.replace(/[\\/:*?"<>|]/g, '_');
+        const sources: ExternalDownloadSource[] = [
+          {
+            url: highestVideo.baseUrl,
+            filename: `${safeTitle}_${highestVideo.qualityName}_${highestVideo.codecName}.m4s`,
+            type: 'video',
+            qualityDesc: highestVideo.qualityName,
+          },
+        ];
+        if (bestAudio) {
+          sources.push({
+            url: bestAudio.baseUrl,
+            filename: `${safeTitle}_${bestAudio.name}.m4s`,
+            type: 'audio',
+            qualityDesc: bestAudio.name,
+          });
+        }
+
+        const res = await ext.sendDownload(
+          {
+            title: pageTitle,
+            sources,
+            downloadPage: typeof location !== 'undefined' ? location.href : undefined,
+            bvid,
+            cid: page.cid,
+          },
+          { port: options.externalPort }
+        );
+
+        if (res.success) {
+          onTaskUpdate(taskId, {
+            status: 'completed',
+            progress: 100,
+            message: `已推送到 ${ext.name}`,
+          });
+        } else {
+          onTaskUpdate(taskId, {
+            status: 'error',
+            message: `推送到 ${ext.name} 失败: ${res.message}`,
+          });
+        }
+        await new Promise((r) => setTimeout(r, 150));
+        continue;
+      }
+
       await downloadAndMuxMp4(
         pageTitle,
         highestVideo,
@@ -244,7 +348,8 @@ export async function batchDownloadSeasonHighestVideos(
   onTaskAdd: (task: DownloadTask) => void,
   onTaskUpdate: (id: string, partial: Partial<DownloadTask>) => void,
   traceId = '合集最高画质',
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: BatchDownloadOptions
 ): Promise<void> {
   const safeSeasonTitle = seasonTitle.replace(/[\\/:*?"<>|]/g, '_').trim();
   const total = episodes.length;
@@ -311,6 +416,58 @@ export async function batchDownloadSeasonHighestVideos(
         message: `准备下载并合成第 ${ep.pageIndex} 集 (${highestVideo.qualityName})...`,
       });
 
+      if (options?.externalDownloader) {
+        const ext = options.externalDownloader;
+        onTaskUpdate(taskId, {
+          status: 'downloading_video',
+          progress: 50,
+          message: `正在推送到 ${ext.name}...`,
+        });
+
+        const sources: ExternalDownloadSource[] = [
+          {
+            url: highestVideo.baseUrl,
+            filename: `${episodeFileName}_${highestVideo.qualityName}_${highestVideo.codecName}.m4s`,
+            type: 'video',
+            qualityDesc: highestVideo.qualityName,
+          },
+        ];
+        if (bestAudio) {
+          sources.push({
+            url: bestAudio.baseUrl,
+            filename: `${episodeFileName}_${bestAudio.name}.m4s`,
+            type: 'audio',
+            qualityDesc: bestAudio.name,
+          });
+        }
+
+        const res = await ext.sendDownload(
+          {
+            title: episodeFileName,
+            sources,
+            downloadPage: typeof location !== 'undefined' ? location.href : undefined,
+            bvid: ep.bvid,
+            cid: ep.cid,
+          },
+          { port: options.externalPort }
+        );
+
+        if (res.success) {
+          onTaskUpdate(taskId, {
+            status: 'completed',
+            progress: 100,
+            message: `已推送到 ${ext.name}`,
+          });
+        } else {
+          onTaskUpdate(taskId, {
+            status: 'error',
+            message: `推送到 ${ext.name} 失败: ${res.message}`,
+          });
+        }
+        await new Promise((r) => setTimeout(r, 150));
+        continue;
+      }
+
       await downloadAndMuxMp4(
         episodeFileName,
         highestVideo,
@@ -359,7 +516,8 @@ export async function batchDownloadSeasonLowestAudios(
   onTaskAdd: (task: DownloadTask) => void,
   onTaskUpdate: (id: string, partial: Partial<DownloadTask>) => void,
   traceId = '合集最低音频',
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: BatchDownloadOptions
 ): Promise<void> {
   const safeSeasonTitle = seasonTitle.replace(/[\\/:*?"<>|]/g, '_').trim();
   const total = episodes.length;
@@ -422,6 +580,48 @@ export async function batchDownloadSeasonLowestAudios(
         progress: 0,
         message: `准备下载第 ${ep.pageIndex} 集音频 (${lowestAudio.name})...`,
       });
+
+      if (options?.externalDownloader) {
+        const ext = options.externalDownloader;
+        onTaskUpdate(taskId, {
+          status: 'downloading_audio',
+          progress: 50,
+          message: `正在推送到 ${ext.name}...`,
+        });
+
+        const res = await ext.sendDownload(
+          {
+            title: episodeFileName,
+            sources: [
+              {
+                url: lowestAudio.baseUrl,
+                filename: `${episodeFileName}_${lowestAudio.name}.m4a`,
+                type: 'audio',
+                qualityDesc: lowestAudio.name,
+              },
+            ],
+            downloadPage: typeof location !== 'undefined' ? location.href : undefined,
+            bvid: ep.bvid,
+            cid: ep.cid,
+          },
+          { port: options.externalPort }
+        );
+
+        if (res.success) {
+          onTaskUpdate(taskId, {
+            status: 'completed',
+            progress: 100,
+            message: `已推送到 ${ext.name}`,
+          });
+        } else {
+          onTaskUpdate(taskId, {
+            status: 'error',
+            message: `推送到 ${ext.name} 失败: ${res.message}`,
+          });
+        }
+        await new Promise((r) => setTimeout(r, 150));
+        continue;
+      }
 
       await downloadAudio(
         episodeFileName,

@@ -41,6 +41,17 @@ export class ExternalDownloaderRegistry {
   public getDefault(): IExternalDownloader {
     return abDownloadManager;
   }
+
+  /**
+   * 按 ID 获取下载器，若未找到则回退至默认下载器
+   */
+  public getActive(id?: string): IExternalDownloader {
+    if (id) {
+      const found = this.get(id);
+      if (found) return found;
+    }
+    return this.getDefault();
+  }
 }
 
 export const externalDownloaderRegistry = new ExternalDownloaderRegistry();

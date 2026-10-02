@@ -15,6 +15,7 @@ import { getErrorMessage } from '../utils/error';
 export class ABDownloadManager implements IExternalDownloader {
   public readonly id = 'abdm';
   public readonly name = 'AB Download Manager';
+  public readonly shortName = 'ABDM';
   public readonly description = '现代化开源多线程下载管理器 (支持持久化离线后台下载)';
   public readonly defaultPort = 15151;
 

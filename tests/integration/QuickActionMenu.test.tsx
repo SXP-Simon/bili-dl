@@ -76,6 +76,30 @@ describe('QuickActionMenu Integration Tests', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('should render engine segmented switch and trigger onToggleEngine', () => {
+    const onToggleEngine = vi.fn();
+    render(
+      <QuickActionMenu
+        isOpen={true}
+        onClose={vi.fn()}
+        actions={mockActions}
+        engine="internal"
+        onToggleEngine={onToggleEngine}
+        activeDownloaderShortName="ABDM"
+        isExternalAvailable={true}
+      />
+    );
+
+    expect(screen.getByText(/浏览器内置/)).toBeInTheDocument();
+    expect(screen.getByText(/ABDM/)).toBeInTheDocument();
+
+    const extBtn = screen.getByText(/ABDM/).closest('button');
+    expect(extBtn).not.toBeNull();
+    fireEvent.click(extBtn!);
+
+    expect(onToggleEngine).toHaveBeenCalledWith('external');
+  });
+
   it('should close when pressing Escape key', () => {
     const onClose = vi.fn();
     render(

@@ -12,8 +12,13 @@ export interface DownloadSettings {
   cdnAutoFailover: boolean; // 慢速自动切换备选 CDN 节点 (默认 true)
   cdnMinSpeedKB: number; // 慢速换源判定阈值 (KB/s，默认 300)
   cdnFailoverDurationSec: number; // 慢速持续判定时间 (秒，默认 8)
-  abdmEnabled: boolean; // 是否启用 AB Download Manager 联动 (默认 true)
+  defaultDownloaderEngine: 'internal' | 'external'; // 默认下载引擎 (默认 'internal')
+  externalDownloaderId: string; // 选用的外部持久化下载器 ID (默认 'abdm')
+  externalDownloaderEnabled: boolean; // 是否启用外部持久化下载器功能 (默认 true)
   abdmPort: number; // AB Download Manager 监听端口 (默认 15151)
+  aria2Port: number; // Aria2 监听端口 (默认 6800)
+  aria2Secret?: string; // Aria2 RPC 访问密钥
+  abdmEnabled?: boolean; // 兼容旧字段
 }
 
 export const DEFAULT_SETTINGS: DownloadSettings = {
@@ -24,8 +29,13 @@ export const DEFAULT_SETTINGS: DownloadSettings = {
   cdnAutoFailover: true,
   cdnMinSpeedKB: 300,
   cdnFailoverDurationSec: 8,
-  abdmEnabled: true,
+  defaultDownloaderEngine: 'internal',
+  externalDownloaderId: 'abdm',
+  externalDownloaderEnabled: true,
   abdmPort: 15151,
+  aria2Port: 6800,
+  aria2Secret: '',
+  abdmEnabled: true,
 };
 
 const SETTINGS_KEY = 'bili_dl_download_settings';
@@ -37,12 +47,19 @@ export function resetDownloadSettings(): DownloadSettings {
 
 export function getDownloadSettings(): DownloadSettings {
   try {
+    let parsed: Partial<DownloadSettings> | null = null;
     if (typeof GM_getValue !== 'undefined') {
       const saved = (GM_getValue as (key: string) => string | undefined)(SETTINGS_KEY);
-      if (saved) return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+      if (saved) parsed = JSON.parse(saved);
     } else {
       const saved = localStorage.getItem(SETTINGS_KEY);
-      if (saved) return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+      if (saved) parsed = JSON.parse(saved);
+    }
+    if (parsed) {
+      if (parsed.abdmEnabled !== undefined && parsed.externalDownloaderEnabled === undefined) {
+        parsed.externalDownloaderEnabled = parsed.abdmEnabled;
+      }
+      return { ...DEFAULT_SETTINGS, ...parsed };
     }
   } catch {}
   return { ...DEFAULT_SETTINGS };

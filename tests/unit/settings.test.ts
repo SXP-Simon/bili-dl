@@ -24,6 +24,10 @@ describe('Settings & Path Resolution Unit Tests', () => {
     expect(settings.cdnFailoverDurationSec).toBe(8);
     expect(settings.abdmEnabled).toBe(true);
     expect(settings.abdmPort).toBe(15151);
+    expect(settings.defaultDownloaderEngine).toBe('internal');
+    expect(settings.externalDownloaderId).toBe('abdm');
+    expect(settings.externalDownloaderEnabled).toBe(true);
+    expect(settings.aria2Port).toBe(6800);
   });
 
   it('should save and retrieve updated settings', () => {
@@ -37,6 +41,11 @@ describe('Settings & Path Resolution Unit Tests', () => {
       cdnFailoverDurationSec: 10,
       abdmEnabled: false,
       abdmPort: 16161,
+      defaultDownloaderEngine: 'external',
+      externalDownloaderId: 'aria2_rpc',
+      externalDownloaderEnabled: false,
+      aria2Port: 7800,
+      aria2Secret: 'secret123',
     });
 
     const updated = getDownloadSettings();
@@ -49,6 +58,11 @@ describe('Settings & Path Resolution Unit Tests', () => {
     expect(updated.cdnFailoverDurationSec).toBe(10);
     expect(updated.abdmEnabled).toBe(false);
     expect(updated.abdmPort).toBe(16161);
+    expect(updated.defaultDownloaderEngine).toBe('external');
+    expect(updated.externalDownloaderId).toBe('aria2_rpc');
+    expect(updated.externalDownloaderEnabled).toBe(false);
+    expect(updated.aria2Port).toBe(7800);
+    expect(updated.aria2Secret).toBe('secret123');
   });
 
   it('should reset settings back to default', () => {
@@ -62,6 +76,10 @@ describe('Settings & Path Resolution Unit Tests', () => {
       cdnFailoverDurationSec: 15,
       abdmEnabled: false,
       abdmPort: 18888,
+      defaultDownloaderEngine: 'external',
+      externalDownloaderId: 'aria2_rpc',
+      externalDownloaderEnabled: false,
+      aria2Port: 9999,
     });
 
     const reset = resetDownloadSettings();
@@ -73,6 +91,10 @@ describe('Settings & Path Resolution Unit Tests', () => {
     expect(getDownloadSettings().cdnFailoverDurationSec).toBe(8);
     expect(getDownloadSettings().abdmEnabled).toBe(true);
     expect(getDownloadSettings().abdmPort).toBe(15151);
+    expect(getDownloadSettings().defaultDownloaderEngine).toBe('internal');
+    expect(getDownloadSettings().externalDownloaderId).toBe('abdm');
+    expect(getDownloadSettings().externalDownloaderEnabled).toBe(true);
+    expect(getDownloadSettings().aria2Port).toBe(6800);
   });
 
   describe('resolveDownloadRelativePath', () => {

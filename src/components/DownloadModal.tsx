@@ -32,6 +32,8 @@ import { exportAria2Command } from '../media/aria2';
 import { fetchDanmakuAss } from '../media/danmaku';
 import { fetchSubtitleSrt } from '../media/subtitle';
 import { saveBlobAsFile, directDownload } from '../media/downloader';
+import { getDownloadSettings } from '../utils/settings';
+import { externalDownloaderRegistry } from '../downloader';
 import type { MediaResourceData, CategoryType, VideoStreamItem, AudioStreamItem, DownloadProgress, DownloadTask } from '../types';
 
 interface DownloadModalProps {
@@ -85,6 +87,10 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   const [showLogs, setShowLogs] = useState(false);
   const [isLogsMaximized, setIsLogsMaximized] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+
+  const settings = getDownloadSettings();
+  const isExternalEnabled = settings.externalDownloaderEnabled !== false;
+  const activeDownloader = externalDownloaderRegistry.getActive(settings.externalDownloaderId);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -507,22 +513,24 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                             )}
                           </button>
 
-                          <button
-                            onClick={async () => {
-                              setActiveActionKey(`video_abdm_${v.id}_${v.codecName}`);
-                              try {
-                                await onDownloadWithExternal?.('abdm', v, bestAudio);
-                              } finally {
-                                setActiveActionKey(null);
-                              }
-                            }}
-                            disabled={isAnyProcessing}
-                            title="发送至 AB Download Manager (桌面客户端持久化下载，不受网页切换/休眠影响)"
-                            className="inline-flex items-center gap-1 px-2 py-1.5 rounded-xl text-xs font-semibold border border-border/70 hover:border-primary/60 bg-muted/20 hover:bg-primary/10 text-foreground transition-all duration-200 cursor-pointer shadow-2xs"
-                          >
-                            <DownloadCloud className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
-                            <span className="text-[11px]">ABDM</span>
-                          </button>
+                          {isExternalEnabled && (
+                            <button
+                              onClick={async () => {
+                                setActiveActionKey(`video_ext_${v.id}_${v.codecName}`);
+                                try {
+                                  await onDownloadWithExternal?.(activeDownloader.id, v, bestAudio);
+                                } finally {
+                                  setActiveActionKey(null);
+                                }
+                              }}
+                              disabled={isAnyProcessing}
+                              title={`发送至 ${activeDownloader.name} (桌面客户端持久化下载，不受网页切换/休眠影响)`}
+                              className="inline-flex items-center gap-1 px-2 py-1.5 rounded-xl text-xs font-semibold border border-border/70 hover:border-primary/60 bg-muted/20 hover:bg-primary/10 text-foreground transition-all duration-200 cursor-pointer shadow-2xs"
+                            >
+                              <DownloadCloud className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
+                              <span className="text-[11px]">{activeDownloader.shortName || activeDownloader.name}</span>
+                            </button>
+                          )}
                         </div>
                       </SpotlightCard>
                     );
@@ -563,22 +571,24 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                         </div>
 
                         <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={async () => {
-                              setActiveActionKey(`audio_abdm_${a.id}`);
-                              try {
-                                await onDownloadWithExternal?.('abdm', undefined, a);
-                              } finally {
-                                setActiveActionKey(null);
-                              }
-                            }}
-                            disabled={isProcessing}
-                            title="发送音频至 AB Download Manager (桌面客户端持久化下载)"
-                            className="inline-flex items-center gap-1 px-2 py-1.5 rounded-xl text-xs font-semibold border border-border/70 hover:border-primary/60 bg-muted/20 hover:bg-primary/10 text-foreground transition-all duration-200 cursor-pointer shadow-2xs"
-                          >
-                            <DownloadCloud className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
-                            <span className="text-[11px]">ABDM</span>
-                          </button>
+                          {isExternalEnabled && (
+                            <button
+                              onClick={async () => {
+                                setActiveActionKey(`audio_ext_${a.id}`);
+                                try {
+                                  await onDownloadWithExternal?.(activeDownloader.id, undefined, a);
+                                } finally {
+                                  setActiveActionKey(null);
+                                }
+                              }}
+                              disabled={isProcessing}
+                              title={`发送音频至 ${activeDownloader.name} (桌面客户端持久化下载)`}
+                              className="inline-flex items-center gap-1 px-2 py-1.5 rounded-xl text-xs font-semibold border border-border/70 hover:border-primary/60 bg-muted/20 hover:bg-primary/10 text-foreground transition-all duration-200 cursor-pointer shadow-2xs"
+                            >
+                              <DownloadCloud className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
+                              <span className="text-[11px]">{activeDownloader.shortName || activeDownloader.name}</span>
+                            </button>
+                          )}
 
                           <button
                             onClick={async () => {
