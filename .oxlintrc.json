@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc",
+    "react",
+    "promise"
+  ],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/no-unsafe-declaration-merging": "error",
+    "typescript/no-extra-non-null-assertion": "error"
+  },
+  "env": {
+    "builtin": true,
+    "browser": true
+  }
+}
