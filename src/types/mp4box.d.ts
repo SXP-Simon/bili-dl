@@ -64,7 +64,22 @@ declare module 'mp4box' {
 
   export interface MP4TrackBox {
     id?: number;
+    samples_duration?: number;
+    tkhd?: {
+      track_id?: number;
+      duration?: number;
+      width?: number;
+      height?: number;
+      volume?: number;
+    };
     mdia?: {
+      mdhd?: {
+        timescale?: number;
+        duration?: number;
+      };
+      hdlr?: {
+        handler?: string;
+      };
       minf?: {
         stbl?: {
           stsd?: {
@@ -77,6 +92,7 @@ declare module 'mp4box' {
 
   export interface MP4BoxTrackOptions {
     type: string;
+    hdlr?: string;
     width?: number;
     height?: number;
     timescale: number;
@@ -110,6 +126,10 @@ declare module 'mp4box' {
     onError?: (e: string) => void;
     onSamples?: (trackId: number, ref: unknown, samples: MP4Sample[]) => void;
     moov?: {
+      mvhd?: {
+        timescale?: number;
+        duration?: number;
+      };
       traks?: MP4TrackBox[];
     };
     getTrackById(id: number): MP4TrackBox | undefined;

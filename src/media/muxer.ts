@@ -35,6 +35,31 @@ export async function muxMp4(
       const checkFinished = () => {
         if (videoDone && audioDone) {
           try {
+            // 计算并设置总时长到 mvhd、tkhd 及 mdhd，确保各主流播放器（如 Windows Media Player）能精准读取时长并允许拖动进度条
+            const mvhdTimescale = outMp4.moov?.mvhd?.timescale || 600;
+            let maxMovieDuration = 0;
+
+            for (const trak of outMp4.moov?.traks || []) {
+              const trakTimescale = trak.mdia?.mdhd?.timescale || 1;
+              const sampleDuration = trak.samples_duration || trak.tkhd?.duration || 0;
+              if (sampleDuration > 0) {
+                if (trak.mdia?.mdhd) {
+                  trak.mdia.mdhd.duration = sampleDuration;
+                }
+                const movieScaledDuration = Math.round((sampleDuration / trakTimescale) * mvhdTimescale);
+                if (trak.tkhd) {
+                  trak.tkhd.duration = movieScaledDuration;
+                }
+                if (movieScaledDuration > maxMovieDuration) {
+                  maxMovieDuration = movieScaledDuration;
+                }
+              }
+            }
+
+            if (outMp4.moov?.mvhd && maxMovieDuration > 0) {
+              outMp4.moov.mvhd.duration = maxMovieDuration;
+            }
+
             outMp4.flush();
             const buffer = outMp4.getBuffer();
             if (buffer && buffer.byteLength > 0) {
@@ -66,6 +91,7 @@ export async function muxMp4(
 
             videoOutTrackId = outMp4.addTrack({
               type: entryType,
+              hdlr: 'vide',
               width: track.track_width,
               height: track.track_height,
               timescale: track.timescale,
@@ -78,6 +104,12 @@ export async function muxMp4(
               hvcC: track.hvcC,
               av1C: track.av1C,
             });
+
+            // 规范化视频轨 tkhd: 视频音量应为 0
+            const vTrak = typeof outMp4.getTrackById === 'function' ? outMp4.getTrackById(videoOutTrackId) : undefined;
+            if (vTrak?.tkhd) {
+              vTrak.tkhd.volume = 0;
+            }
 
             inVideo.setExtractionOptions(track.id, null, { nbSamples: 1000 });
           }
@@ -130,6 +162,7 @@ export async function muxMp4(
 
               audioOutTrackId = outMp4.addTrack({
                 type: entryType,
+                hdlr: 'soun',
                 timescale: track.timescale,
                 duration: track.duration,
                 channel_count: track.audio?.channel_count || track.channel_count || 2,
@@ -138,6 +171,14 @@ export async function muxMp4(
                 codec: track.codec,
                 description_boxes: entry?.boxes,
               });
+
+              // 规范化音频轨 tkhd: 音频宽高为 0，音量为 1 (0x0100)
+              const aTrak = typeof outMp4.getTrackById === 'function' ? outMp4.getTrackById(audioOutTrackId) : undefined;
+              if (aTrak?.tkhd) {
+                aTrak.tkhd.width = 0;
+                aTrak.tkhd.height = 0;
+                aTrak.tkhd.volume = 1;
+              }
 
               inAudio.setExtractionOptions(track.id, null, { nbSamples: 1000 });
             }

@@ -21,8 +21,32 @@ describe('MP4 Muxer Unit Tests', () => {
   it('should mux video and audio buffers into a single MP4 blob', async () => {
     const mockOutBuffer = new Uint8Array([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70]).buffer;
 
+    const mockTrak1 = {
+      id: 1,
+      samples_duration: 30000,
+      tkhd: { volume: 1, width: 1920, height: 1080, duration: 0 },
+      mdia: { mdhd: { timescale: 30000, duration: 0 } },
+    };
+    const mockTrak2 = {
+      id: 2,
+      samples_duration: 48000,
+      tkhd: { volume: 0, width: 320, height: 320, duration: 0 },
+      mdia: { mdhd: { timescale: 48000, duration: 0 } },
+    };
+
     const mockOutMp4: Partial<MP4File> = {
-      addTrack: vi.fn().mockReturnValue(1),
+      moov: {
+        mvhd: { timescale: 600, duration: 0 },
+        traks: [mockTrak1, mockTrak2],
+      },
+      getTrackById: vi.fn().mockImplementation((id: number) => {
+        if (id === 1) return mockTrak1;
+        if (id === 2) return mockTrak2;
+        return undefined;
+      }),
+      addTrack: vi.fn().mockImplementation((options) => {
+        return options.hdlr === 'soun' ? 2 : 1;
+      }),
       addSample: vi.fn(),
       flush: vi.fn(),
       getBuffer: vi.fn().mockReturnValue(mockOutBuffer),
@@ -148,7 +172,16 @@ describe('MP4 Muxer Unit Tests', () => {
     const resultBlob = await muxPromise;
     expect(resultBlob).toBeInstanceOf(Blob);
     expect(resultBlob.type).toBe('video/mp4');
-    expect(mockOutMp4.addTrack).toHaveBeenCalled();
+    expect(mockOutMp4.addTrack).toHaveBeenCalledWith(expect.objectContaining({ hdlr: 'vide' }));
+    expect(mockOutMp4.addTrack).toHaveBeenCalledWith(expect.objectContaining({ hdlr: 'soun' }));
+    expect(mockTrak1.tkhd.volume).toBe(0);
+    expect(mockTrak2.tkhd.width).toBe(0);
+    expect(mockTrak2.tkhd.height).toBe(0);
+    expect(mockTrak2.tkhd.volume).toBe(1);
+    expect(mockTrak1.mdia.mdhd.duration).toBe(30000);
+    expect(mockTrak1.tkhd.duration).toBe(600);
+    expect(mockTrak2.tkhd.duration).toBe(600);
+    expect(mockOutMp4.moov?.mvhd?.duration).toBe(600);
     expect(mockOutMp4.addSample).toHaveBeenCalled();
     expect(progressUpdates).toContain(100);
   });
@@ -156,7 +189,19 @@ describe('MP4 Muxer Unit Tests', () => {
   it('should support video-only muxing when audio buffer is omitted', async () => {
     const mockOutBuffer = new Uint8Array([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]).buffer;
 
+    const mockVideoTrak = {
+      id: 1,
+      samples_duration: 15000,
+      tkhd: { volume: 1, width: 1280, height: 720, duration: 0 },
+      mdia: { mdhd: { timescale: 30000, duration: 0 } },
+    };
+
     const mockOutMp4: Partial<MP4File> = {
+      moov: {
+        mvhd: { timescale: 600, duration: 0 },
+        traks: [mockVideoTrak],
+      },
+      getTrackById: vi.fn().mockReturnValue(mockVideoTrak),
       addTrack: vi.fn().mockReturnValue(1),
       addSample: vi.fn(),
       flush: vi.fn(),
