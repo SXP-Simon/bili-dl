@@ -25,14 +25,14 @@
 
 <table align="center" width="100%">
   <tr>
-    <td align="center" width="50%" valign="top">
+    <td align="center" width="63%" valign="middle">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-dark.png" />
         <source media="(prefers-color-scheme: light)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-light.png" />
         <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-light.png" alt="Bili-DL 主下载面板" width="100%" />
       </picture>
     </td>
-    <td align="center" width="50%" valign="top">
+    <td align="center" width="37%" valign="middle">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/setting-dark.png" />
         <source media="(prefers-color-scheme: light)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/setting-light.png" />
