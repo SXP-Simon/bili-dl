@@ -241,15 +241,16 @@ export async function downloadAndMuxMp4(
     }
 
     // 3. 保存文件
-    const filename = `${title}_${video.qualityName}_${video.codecName}.mp4`;
-    saveBlobAsFile(finalBlob, filename);
+    const suffix = audioBuffer ? '' : '_仅画面(无声)';
+    const filename = `${title}_${video.qualityName}_${video.codecName}${suffix}.mp4`;
+    await saveBlobAsFile(finalBlob, filename, title);
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
     logger.success('Downloader', `文件保存成功: ${filename} (总耗时 ${totalTime}s)`, null, finalTraceId);
 
     onProgress({
       status: 'completed',
       progress: 100,
-      message: '下载与混流完成，已保存到本地',
+      message: audioBuffer ? '下载与混流完成，已保存到本地' : '纯画面视频下载完成，已保存到本地',
     });
   } catch (err: unknown) {
     if (signal?.aborted || isAbortError(err)) {
@@ -322,7 +323,7 @@ export async function downloadAudio(
     }
 
     const blob = new Blob([audioBuffer], { type: mimeType });
-    saveBlobAsFile(blob, filename);
+    await saveBlobAsFile(blob, filename, title);
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
     logger.success('Downloader', `音频保存成功: ${filename} (耗时 ${totalTime}s)`, null, finalTraceId);
 

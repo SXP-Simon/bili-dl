@@ -239,9 +239,14 @@ export const App: React.FC = () => {
 
   const handleDownloadVideo = async (video: VideoStreamItem, audio?: AudioStreamItem, customTitle?: string) => {
     const title = customTitle || mediaData?.title || getVideoTitle();
-    const taskId = `video_${video.id}_${video.codecName}`;
-    const taskTitle = `${video.qualityName} (${video.codecName})`;
-    const traceId = `${video.qualityName.replace(/\s+/g, '')}-${video.codecName}`;
+    const isMux = Boolean(audio);
+    const taskId = isMux
+      ? `video_mux_${video.id}_${video.codecName}`
+      : `video_pure_${video.id}_${video.codecName}`;
+    const taskTitle = isMux
+      ? `${video.qualityName} (${video.codecName}) - 有声 MP4`
+      : `${video.qualityName} (${video.codecName}) - 仅画面`;
+    const traceId = `${video.qualityName.replace(/\s+/g, '')}-${video.codecName}${isMux ? '-mux' : '-pure'}`;
 
     // 创建并注册该任务的 AbortController
     const controller = new AbortController();
@@ -253,7 +258,7 @@ export const App: React.FC = () => {
       title: taskTitle,
       status: 'downloading_video',
       progress: 0,
-      message: '正在准备视频流...',
+      message: isMux ? '正在准备音视频双轨...' : '正在准备纯画面视频流...',
       timestamp: Date.now(),
     });
 
@@ -274,7 +279,10 @@ export const App: React.FC = () => {
         controller.signal
       );
       if (!controller.signal.aborted) {
-        showToast(`MP4 无损封装完成 (${taskTitle})`, 'success');
+        showToast(
+          isMux ? `MP4 音画封装完成 (${video.qualityName})` : `纯画面下载完成 (${video.qualityName})`,
+          'success'
+        );
       }
     } catch (err: unknown) {
       if (controller.signal.aborted || isAbortError(err)) {

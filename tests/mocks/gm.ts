@@ -38,11 +38,13 @@ export const GM_xmlhttpRequest = (options: {
   };
 };
 
-export const GM_download = (_options: { url: string; name: string }) => {
+import { vi } from 'vitest';
+
+export const GM_download = vi.fn((_options: { url: string; name: string }) => {
   return {
     abort: () => {},
   };
-};
+});
 
 const store = new Map<string, unknown>();
 
@@ -57,4 +59,4 @@ export const GM_getValue = <T>(name: string, defaultValue?: T): T => {
   return defaultValue as T;
 };
 
-export const GM_setClipboard = (_data: string, _info?: unknown): void => {};
+export const GM_setClipboard = vi.fn((_data: string, _info?: unknown): void => {});

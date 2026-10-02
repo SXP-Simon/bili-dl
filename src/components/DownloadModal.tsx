@@ -367,9 +367,27 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                 {/* 1. 视频列表 */}
                 {(activeTab === 'all' || activeTab === 'video') &&
                   data.videos.map((v, idx) => {
-                    const isProcessing =
-                      (tasks && tasks.some((t) => t.id === `video_${v.id}_${v.codecName}` && t.status !== 'completed' && t.status !== 'error')) ||
-                      activeActionKey === `video_${v.id}_${v.codecName}`;
+                    const isMuxProcessing =
+                      (tasks &&
+                        tasks.some(
+                          (t) =>
+                            t.id === `video_mux_${v.id}_${v.codecName}` &&
+                            t.status !== 'completed' &&
+                            t.status !== 'error'
+                        )) ||
+                      activeActionKey === `video_mux_${v.id}_${v.codecName}`;
+
+                    const isPureProcessing =
+                      (tasks &&
+                        tasks.some(
+                          (t) =>
+                            t.id === `video_pure_${v.id}_${v.codecName}` &&
+                            t.status !== 'completed' &&
+                            t.status !== 'error'
+                        )) ||
+                      activeActionKey === `video_pure_${v.id}_${v.codecName}`;
+
+                    const isAnyProcessing = isMuxProcessing || isPureProcessing;
                     return (
                       <SpotlightCard
                         key={`${v.id}_${v.codecName}`}
@@ -428,30 +446,60 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
 
                           <button
                             onClick={async () => {
-                              setActiveActionKey(`video_${v.id}_${v.codecName}`);
+                              setActiveActionKey(`video_pure_${v.id}_${v.codecName}`);
+                              try {
+                                await onDownloadVideo(v, undefined);
+                              } finally {
+                                setActiveActionKey(null);
+                              }
+                            }}
+                            disabled={isAnyProcessing}
+                            title="仅下载纯画面视频流 (无音频，适合专业剪辑/空镜素材)"
+                            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl font-semibold text-xs border shadow-2xs active:scale-95 transition-all duration-150 cursor-pointer ${
+                              isPureProcessing
+                                ? 'bg-secondary/40 text-secondary-foreground border-secondary/60 cursor-wait'
+                                : 'bg-secondary/20 hover:bg-secondary/45 text-secondary-foreground hover:text-foreground border-secondary/40 hover:border-secondary'
+                            }`}
+                          >
+                            {isPureProcessing ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={2.4} />
+                                <span className="text-[11px]">处理中...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Film className="w-3.5 h-3.5 text-muted-foreground" strokeWidth={2.2} />
+                                <span className="text-[11px]">仅画面</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              setActiveActionKey(`video_mux_${v.id}_${v.codecName}`);
                               try {
                                 await onDownloadVideo(v, bestAudio);
                               } finally {
                                 setActiveActionKey(null);
                               }
                             }}
-                            disabled={isProcessing}
-                            title="下载视频与音频并在浏览器中无损封装为 MP4 文件"
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold text-xs border shadow-2xs active:scale-95 transition-all duration-200 cursor-pointer ${
-                              isProcessing
+                            disabled={isAnyProcessing}
+                            title={bestAudio ? `一键混流：下载视频 + ${bestAudio.name}，封装为完整 MP4` : '下载完整 MP4 视频'}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs border shadow-2xs active:scale-95 transition-all duration-200 cursor-pointer ${
+                              isMuxProcessing
                                 ? 'bg-primary/40 text-emerald-950 dark:text-emerald-100 border-primary/60 cursor-wait'
-                                : 'bg-primary/20 hover:bg-primary text-emerald-950 dark:text-emerald-100 hover:text-primary-foreground border-primary/40 hover:border-primary hover:shadow-xs'
+                                : 'bg-primary/25 hover:bg-primary text-emerald-950 dark:text-emerald-100 hover:text-primary-foreground border-primary/50 hover:border-primary hover:shadow-xs'
                             }`}
                           >
-                            {isProcessing ? (
+                            {isMuxProcessing ? (
                               <>
                                 <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-800 dark:text-emerald-200" strokeWidth={2.4} />
                                 <span>处理中...</span>
                               </>
                             ) : (
                               <>
-                                <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
-                                <span>合成 MP4</span>
+                                <Download className="w-3.5 h-3.5" strokeWidth={2.4} />
+                                <span>有声 MP4</span>
                               </>
                             )}
                           </button>

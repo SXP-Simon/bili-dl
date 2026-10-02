@@ -160,6 +160,11 @@ test.describe('Bilibili Downloader Userscript E2E', () => {
     await expect(page.getByRole('button', { name: /^音频/ })).toBeVisible();
     await expect(page.getByRole('button', { name: '封面' })).toBeVisible();
     await expect(page.getByRole('button', { name: /^弹幕\/字幕/ })).toBeVisible();
+
+    // Verify dual video buttons (有声 MP4 priority button and 仅画面 button)
+    await expect(page.getByRole('button', { name: '有声 MP4' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '仅画面' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '命令' })).toBeVisible();
   });
 
   test('should switch tabs properly inside the modal', async ({ page }) => {
