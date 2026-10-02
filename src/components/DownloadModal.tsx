@@ -152,7 +152,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
     >
       <div
         className={`relative w-full max-w-2xl flex flex-col rounded-3xl bg-card border border-border/80 shadow-2xl overflow-hidden transition-all duration-200 ${
-          showLogs || showSettings ? 'h-[90vh] max-h-[92vh]' : 'max-h-[85vh]'
+          showLogs || showSettings ? 'h-[85vh] max-h-[88vh]' : 'max-h-[85vh]'
         }`}
       >
         {/* 头部 Header (固定) */}
@@ -229,7 +229,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
         </div>
 
         {showSettings ? (
-          <div className="flex-1 min-h-[420px] max-h-[560px] flex flex-col overflow-hidden bg-card">
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-card">
             <SettingsPanel
               onClose={() => setShowSettings(false)}
               onShowToast={onShowToast}
