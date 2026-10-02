@@ -21,6 +21,8 @@ import {
   Globe,
   Rocket,
   AlertCircle,
+  FolderPen,
+  Plug,
 } from 'lucide-react';
 import {
   getDownloadSettings,
@@ -152,17 +154,54 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
               <Folder className="w-4 h-4 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
               <span className="font-semibold text-foreground">下载相对子目录 (Subfolder)</span>
             </div>
-            <span className="text-[10px] font-mono text-muted-foreground">基于浏览器默认下载目录</span>
+            <span className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              <span>失焦或回车自动保存</span>
+            </span>
           </div>
 
-          <div className="relative">
-            <input
-              type="text"
-              value={settings.subfolder}
-              onChange={(e) => updateSetting('subfolder', e.target.value)}
-              placeholder="例如: bili-dl 或 Videos/Bili"
-              className="w-full px-3 py-1.5 rounded-xl bg-background border border-border/80 text-foreground font-mono text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
-            />
+          <div className="relative group">
+            <div className="flex items-center rounded-xl bg-background border border-border/80 group-hover:border-primary/60 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 shadow-2xs transition-all overflow-hidden">
+              <div className="px-2.5 py-1.5 bg-muted/50 border-r border-border/60 text-muted-foreground font-mono text-xs select-none flex items-center gap-1.5 shrink-0">
+                <FolderPen className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
+                <span>~/Downloads/</span>
+              </div>
+              <input
+                type="text"
+                value={settings.subfolder}
+                onChange={(e) => updateSetting('subfolder', e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Escape') {
+                    e.stopPropagation();
+                  }
+                  if (e.key === 'Enter') {
+                    (e.target as HTMLInputElement).blur();
+                    onShowToast(`已保存下载子目录: ${settings.subfolder || '(根目录)'}`, 'info');
+                  }
+                }}
+                onKeyUp={(e) => {
+                  if (e.key !== 'Escape') {
+                    e.stopPropagation();
+                  }
+                }}
+                placeholder="点击输入子目录名称 (如 bili-dl)"
+                className="flex-1 min-w-0 px-3 py-1.5 bg-transparent text-foreground font-mono text-xs focus:outline-none placeholder:text-muted-foreground/50"
+                title="点击输入下载相对子目录名称"
+              />
+              {settings.subfolder && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateSetting('subfolder', '');
+                    onShowToast('已清空子目录（直接保存至下载根目录）', 'info');
+                  }}
+                  className="px-2.5 py-1 text-muted-foreground hover:text-foreground text-[10px] cursor-pointer hover:bg-muted/60 transition-colors shrink-0"
+                  title="清空子目录"
+                >
+                  清空
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground leading-relaxed">
             <HelpCircle className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70 mt-0.5" />
@@ -563,24 +602,53 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
 
               {/* 端口配置与连接测试 */}
               <div className="flex items-center justify-between gap-3 text-[11px] pt-1">
-                <span className="text-muted-foreground">
-                  {activeDownloader.name} 监听端口：
-                </span>
+                <div className="space-y-0.5">
+                  <span className="text-muted-foreground font-medium flex items-center gap-1.5">
+                    <Plug className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
+                    <span>{activeDownloader.name} 监听端口：</span>
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/70 block">
+                    可点击右侧输入框修改端口 (失焦或回车自动保存)
+                  </span>
+                </div>
+
                 <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    value={externalDownloaderRegistry.getDownloaderPort(activeDownloader, settings)}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value, 10);
-                      handleUpdateActivePort(val);
-                    }}
-                    className="w-24 px-2.5 py-1 rounded-lg bg-background border border-border/80 text-foreground font-mono text-xs text-center focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
+                  <div className="relative flex items-center rounded-lg bg-background border border-border/80 hover:border-primary/60 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 shadow-2xs transition-all overflow-hidden group">
+                    <span className="pl-2 pr-0.5 text-muted-foreground font-mono text-xs select-none">
+                      :
+                    </span>
+                    <input
+                      type="number"
+                      value={externalDownloaderRegistry.getDownloaderPort(activeDownloader, settings)}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        handleUpdateActivePort(val);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Escape') {
+                          e.stopPropagation();
+                        }
+                        if (e.key === 'Enter') {
+                          (e.target as HTMLInputElement).blur();
+                          const currentPort = externalDownloaderRegistry.getDownloaderPort(activeDownloader, settings);
+                          onShowToast(`已保存 ${activeDownloader.name} 监听端口: ${currentPort}`, 'info');
+                        }
+                      }}
+                      onKeyUp={(e) => {
+                        if (e.key !== 'Escape') {
+                          e.stopPropagation();
+                        }
+                      }}
+                      placeholder="端口"
+                      className="w-20 pr-2 py-1 bg-transparent text-foreground font-mono text-xs text-left focus:outline-none"
+                      title="点击修改端口号，失焦或回车自动保存"
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={handleTestConnection}
                     disabled={testStatus?.loading}
-                    className="px-2.5 py-1 rounded-lg bg-secondary/40 hover:bg-secondary text-secondary-foreground text-[10px] font-semibold border border-secondary/60 transition-colors cursor-pointer"
+                    className="px-2.5 py-1.5 rounded-lg bg-secondary/40 hover:bg-secondary text-secondary-foreground text-[10px] font-semibold border border-secondary/60 transition-colors cursor-pointer"
                   >
                     {testStatus?.loading ? '探测中...' : '测试连接'}
                   </button>
