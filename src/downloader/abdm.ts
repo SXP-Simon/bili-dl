@@ -106,13 +106,16 @@ export class ABDownloadManager implements IExternalDownloader {
     const targetUrl = `http://127.0.0.1:${port}/add`;
     const defaultPage = payload.downloadPage || (typeof location !== 'undefined' ? location.href : 'https://www.bilibili.com/');
     const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Mozilla/5.0';
+    const cookie = typeof document !== 'undefined' && document.cookie ? document.cookie : '';
 
     // 格式化符合 ABDM REST-API.yml 的请求体 (数组形式)
     const requestBody = payload.sources.map((src) => ({
       link: src.url,
       headers: {
-        'Referer': 'https://www.bilibili.com/',
+        'Referer': src.downloadPage || defaultPage,
+        'Origin': 'https://www.bilibili.com',
         'User-Agent': userAgent,
+        ...(cookie ? { 'Cookie': cookie } : {}),
         ...src.headers,
       },
       downloadPage: src.downloadPage || defaultPage,

@@ -20,6 +20,7 @@ import {
   ListOrdered,
   Globe,
   Rocket,
+  AlertCircle,
 } from 'lucide-react';
 import {
   getDownloadSettings,
@@ -602,6 +603,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
                   <span>{testStatus.message}</span>
                 </div>
               )}
+
+              {/* 格式与混流特别说明 */}
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-2 text-[11px] text-amber-900 dark:text-amber-200">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                <div className="space-y-0.5 leading-relaxed">
+                  <span className="font-semibold block">关于外部下载器文件格式的特别说明：</span>
+                  <p className="text-[10.5px] text-amber-800/90 dark:text-amber-300/90">
+                    B站官方采用音视频分离的 DASH 流架构。外部下载器 (如 AB Download Manager、Aria2、Motrix) 仅负责网络分块下载，<strong>不会自动混流封装为 MP4/M4A</strong>，落盘的文件为原始 <code>.m4s</code> 视频/音频轨（主流播放器如 PotPlayer / VLC / mpv 支持直接拖入播放，或使用 ffmpeg 单条命令快速无损合并）。
+                  </p>
+                  <p className="text-[10.5px] text-amber-800/90 dark:text-amber-300/90">
+                    如需自动生成单文件完整 MP4（音画已在浏览器中封装完毕），请将默认下载引擎切换为<strong>「浏览器内置」</strong>。
+                  </p>
+                </div>
+              </div>
 
               <div className="text-[10.5px] text-muted-foreground/80 leading-relaxed">
                 提示：请确保电脑已安装并启动对应客户端（例如 AB Download Manager 或 Motrix/Aria2），且端口保持一致。

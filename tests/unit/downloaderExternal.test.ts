@@ -5,6 +5,7 @@ import {
   ABDownloadManager,
   buildMediaDownloadSources,
   dispatchExternalDownloadTask,
+  dispatchConsolidatedExternalBatch,
   type IExternalDownloader,
 } from '../../src/downloader';
 import type { DownloadSettings } from '../../src/utils/settings';
@@ -136,7 +137,7 @@ describe('External Downloader Architecture Unit Tests (OCP)', () => {
       const items = capturedPayload as Array<{ link: string; headers: Record<string, string>; downloadPage: string }>;
       expect(items).toHaveLength(2);
       expect(items[0].link).toBe('https://cn-upcdn.bilivideo.com/video.m4s');
-      expect(items[0].headers.Referer).toBe('https://www.bilibili.com/');
+      expect(items[0].headers.Referer).toBe('https://www.bilibili.com/video/BV1test');
       expect(items[0].downloadPage).toBe('https://www.bilibili.com/video/BV1test');
       expect(items[1].link).toBe('https://cn-upcdn.bilivideo.com/audio.m4s');
     });
@@ -218,6 +219,49 @@ describe('External Downloader Architecture Unit Tests (OCP)', () => {
         status: 'completed',
         progress: 100,
       }));
+    });
+
+    it('should consolidate multiple episode entries and dispatch a single external request', async () => {
+      const mockDownloader = {
+        id: 'mock_batch_dl',
+        name: 'Mock Batch DL',
+        defaultPort: 9999,
+        checkAvailability: vi.fn(),
+        sendDownload: vi.fn().mockResolvedValue({ success: true, message: 'All dispatched' }),
+        resolveConfig: vi.fn().mockReturnValue({ port: 9999 }),
+      };
+
+      const onTaskUpdate = vi.fn();
+      await dispatchConsolidatedExternalBatch({
+        downloader: mockDownloader as unknown as IExternalDownloader,
+        batchTitle: '全集打包',
+        entries: [
+          {
+            taskId: 'batch-1',
+            title: 'P1',
+            sources: [{ url: 'https://test.com/p1.m4s', filename: 'p1.m4s', type: 'video' }],
+            taskType: 'video',
+          },
+          {
+            taskId: 'batch-2',
+            title: 'P2',
+            sources: [{ url: 'https://test.com/p2.m4s', filename: 'p2.m4s', type: 'video' }],
+            taskType: 'video',
+          },
+        ],
+        onTaskUpdate,
+      });
+
+      // Crucial: sendDownload should only be called ONCE with all combined sources
+      expect(mockDownloader.sendDownload).toHaveBeenCalledTimes(1);
+      const callArg = mockDownloader.sendDownload.mock.calls[0][0];
+      expect(callArg.sources).toHaveLength(2);
+      expect(callArg.sources[0].url).toBe('https://test.com/p1.m4s');
+      expect(callArg.sources[1].url).toBe('https://test.com/p2.m4s');
+
+      // Both task IDs should receive updates
+      expect(onTaskUpdate).toHaveBeenCalledWith('batch-1', expect.objectContaining({ status: 'completed' }));
+      expect(onTaskUpdate).toHaveBeenCalledWith('batch-2', expect.objectContaining({ status: 'completed' }));
     });
   });
 });

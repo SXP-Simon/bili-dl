@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Loader2, Globe, Rocket } from 'lucide-react';
+import { Loader2, Globe, Rocket, AlertCircle } from 'lucide-react';
 import type { QuickActionItem, QuickMenuHeaderInfo } from '../types';
 
 interface QuickActionMenuProps {
@@ -57,8 +57,9 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
   const menuPadding = 8;
   const headerHeight = headerInfo ? 36 : 0;
   const engineSwitcherHeight = onToggleEngine ? 30 : 0;
+  const noticeHeight = engine === 'external' ? 24 : 0;
   const menuWidth = 295;
-  const menuHeight = actions.length * itemHeight + menuPadding + headerHeight + engineSwitcherHeight;
+  const menuHeight = actions.length * itemHeight + menuPadding + headerHeight + engineSwitcherHeight + noticeHeight;
 
   let left = 0;
   let top = 0;
@@ -233,6 +234,14 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
             );
           })}
         </div>
+
+        {/* 外部下载器原始流提醒 */}
+        {engine === 'external' && (
+          <div className="mt-1 pt-1 border-t border-border/40 px-2 py-0.5 flex items-center gap-1.5 text-[10px] text-amber-800 dark:text-amber-300 bg-amber-500/10 rounded-md">
+            <AlertCircle className="w-3 h-3 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span className="truncate">外部下载为原始 .m4s 轨（不自动混流合成 MP4）</span>
+          </div>
+        )}
       </div>
     </div>
   );

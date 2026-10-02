@@ -105,14 +105,21 @@ export class Aria2RpcDownloader implements IExternalDownloader {
   ): Promise<{ success: boolean; message: string; details?: unknown }> {
     const port = options?.port || this.defaultPort;
     const url = `http://127.0.0.1:${port}/jsonrpc`;
+    const defaultPage = payload.downloadPage || (typeof location !== 'undefined' ? location.href : 'https://www.bilibili.com/');
     const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Mozilla/5.0';
+    const cookie = typeof document !== 'undefined' && document.cookie ? document.cookie : '';
 
     let successCount = 0;
     for (const src of payload.sources) {
+      const referer = src.downloadPage || defaultPage;
       const headerList = [
-        'Referer: https://www.bilibili.com/',
+        `Referer: ${referer}`,
+        'Origin: https://www.bilibili.com',
         `User-Agent: ${userAgent}`,
       ];
+      if (cookie) {
+        headerList.push(`Cookie: ${cookie}`);
+      }
 
       const rpcBody = {
         jsonrpc: '2.0',

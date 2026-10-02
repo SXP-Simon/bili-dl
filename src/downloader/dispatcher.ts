@@ -12,16 +12,27 @@ export interface BuildMediaSourcesParams {
   audio?: AudioStreamItem | null;
   title: string;
   settings?: DownloadSettings;
+  downloadPage?: string;
 }
 
 /**
  * 统一根据 CDN 优先级体系装配媒体流的 ExternalDownloadSource 数组
  */
 export function buildMediaDownloadSources(params: BuildMediaSourcesParams): ExternalDownloadSource[] {
-  const { video, audio, title, settings } = params;
+  const { video, audio, title, settings, downloadPage } = params;
   const currentSettings = settings || getDownloadSettings();
   const safeTitle = title.replace(/[\\/:*?"<>|]/g, '_');
   const sources: ExternalDownloadSource[] = [];
+
+  const referer = downloadPage || (typeof location !== 'undefined' ? location.href : 'https://www.bilibili.com/');
+  const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Mozilla/5.0';
+  const cookie = typeof document !== 'undefined' && document.cookie ? document.cookie : '';
+  const baseHeaders: Record<string, string> = {
+    'Referer': referer,
+    'Origin': 'https://www.bilibili.com',
+    'User-Agent': userAgent,
+    ...(cookie ? { 'Cookie': cookie } : {}),
+  };
 
   if (video) {
     const videoUrls = getPrioritizedCdnUrls(video.baseUrl, video.backupUrl, currentSettings);
@@ -31,10 +42,8 @@ export function buildMediaDownloadSources(params: BuildMediaSourcesParams): Exte
       filename: `${safeTitle}_${video.qualityName}_${video.codecName}.m4s`,
       type: 'video',
       qualityDesc: video.qualityName,
-      headers: {
-        'Referer': 'https://www.bilibili.com/',
-        'User-Agent': typeof navigator !== 'undefined' ? navigator.userAgent : 'Mozilla/5.0',
-      },
+      downloadPage: referer,
+      headers: { ...baseHeaders },
     });
   }
 
@@ -47,10 +56,8 @@ export function buildMediaDownloadSources(params: BuildMediaSourcesParams): Exte
       filename: `${safeTitle}_${audio.name}.${ext}`,
       type: 'audio',
       qualityDesc: audio.name || audio.qualityDesc,
-      headers: {
-        'Referer': 'https://www.bilibili.com/',
-        'User-Agent': typeof navigator !== 'undefined' ? navigator.userAgent : 'Mozilla/5.0',
-      },
+      downloadPage: referer,
+      headers: { ...baseHeaders },
     });
   }
 
@@ -108,3 +115,69 @@ export async function dispatchExternalDownloadTask(params: DispatchTaskParams): 
 
   return res.success;
 }
+
+export interface ExternalBatchEntry {
+  taskId: string;
+  sources: ExternalDownloadSource[];
+  title?: string;
+  taskType?: 'video' | 'audio' | 'batch_video' | 'batch_audio';
+}
+
+/**
+ * 累积全量剧集/分 P 媒体流后，向外部下载器发送单次合并投递请求
+ * 解决每集触发独立弹窗导致桌面端频繁弹出新建窗口的糟糕体验
+ */
+export async function dispatchConsolidatedExternalBatch(params: {
+  downloader: IExternalDownloader;
+  batchTitle: string;
+  entries: ExternalBatchEntry[];
+  options?: DownloaderRuntimeOptions;
+  downloadPage?: string;
+  bvid?: string;
+  onTaskUpdate: (id: string, partial: Partial<DownloadTask>) => void;
+}): Promise<boolean> {
+  const { downloader, batchTitle, entries, options, downloadPage, bvid, onTaskUpdate } = params;
+  if (entries.length === 0) return true;
+
+  const allSources = entries.flatMap((e) => e.sources);
+  if (allSources.length === 0) return true;
+
+  for (const entry of entries) {
+    const status = entry.taskType === 'audio' || entry.taskType === 'batch_audio'
+      ? 'downloading_audio'
+      : 'downloading_video';
+    onTaskUpdate(entry.taskId, {
+      status,
+      progress: 80,
+      message: `正在合并投递至 ${downloader.name}...`,
+    });
+  }
+
+  const res = await downloader.sendDownload(
+    {
+      title: batchTitle,
+      sources: allSources,
+      downloadPage: downloadPage || (typeof location !== 'undefined' ? location.href : undefined),
+      bvid,
+    },
+    options
+  );
+
+  for (const entry of entries) {
+    if (res.success) {
+      onTaskUpdate(entry.taskId, {
+        status: 'completed',
+        progress: 100,
+        message: `已批量推送到 ${downloader.name}`,
+      });
+    } else {
+      onTaskUpdate(entry.taskId, {
+        status: 'error',
+        message: `推送失败: ${res.message}`,
+      });
+    }
+  }
+
+  return res.success;
+}
+
