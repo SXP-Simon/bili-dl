@@ -198,6 +198,33 @@ test.describe('Bilibili Downloader Userscript E2E', () => {
     await expect(page.getByText('下载落盘路径与偏好设置')).not.toBeVisible();
   });
 
+  test('should open diagnostic logs and toggle maximize mode', async ({ page }) => {
+    const floatBtn = page.getByText('Bili-DL 下载');
+    await floatBtn.click();
+
+    await expect(page.getByRole('heading', { name: 'bili-dl' })).toBeVisible();
+
+    // Click logs button
+    const logsBtn = page.locator('button[title*="日志"]');
+    await logsBtn.click();
+
+    // Verify diagnostic logs console is visible
+    await expect(page.getByText('诊断日志')).toBeVisible();
+
+    // Click maximize
+    const maxBtn = page.locator('button[title="全屏展开日志"]');
+    await maxBtn.click();
+
+    // Click restore
+    const restoreBtn = page.locator('button[title="还原底栏模式"]');
+    await restoreBtn.click();
+
+    // Close logs console
+    const closeLogsBtn = page.locator('button[title="关闭日志控制台"]');
+    await closeLogsBtn.click();
+    await expect(page.getByText('诊断日志')).not.toBeVisible();
+  });
+
   test('should close modal when clicking the close button', async ({ page }) => {
     const floatBtn = page.getByText('Bili-DL 下载');
     await floatBtn.click();

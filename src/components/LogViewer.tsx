@@ -11,15 +11,19 @@ import {
   Info,
   ChevronRight,
   ChevronDown,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { logger } from '../utils/logger';
 import type { LogEntry, LogLevel } from '../types';
 
 interface LogViewerProps {
   onClose: () => void;
+  isMaximized?: boolean;
+  onToggleMaximize?: () => void;
 }
 
-export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
+export const LogViewer: React.FC<LogViewerProps> = ({ onClose, isMaximized = false, onToggleMaximize }) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [filterTrace, setFilterTrace] = useState<string>('all');
@@ -253,6 +257,16 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose }) => {
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
+
+          {onToggleMaximize && (
+            <button
+              onClick={onToggleMaximize}
+              title={isMaximized ? '还原底栏模式' : '全屏展开日志'}
+              className="p-1 rounded-lg bg-card hover:bg-muted text-muted-foreground hover:text-foreground border border-border/70 transition-all active:scale-95 cursor-pointer shadow-2xs shrink-0"
+            >
+              {isMaximized ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            </button>
+          )}
 
           <button
             onClick={onClose}

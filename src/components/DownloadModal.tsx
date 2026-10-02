@@ -80,6 +80,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   const [copiedSummary, setCopiedSummary] = useState(false);
   const [activeActionKey, setActiveActionKey] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
+  const [isLogsMaximized, setIsLogsMaximized] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
@@ -140,7 +141,11 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-3xl bg-card border border-border/80 shadow-2xl overflow-hidden">
+      <div
+        className={`relative w-full max-w-2xl flex flex-col rounded-3xl bg-card border border-border/80 shadow-2xl overflow-hidden transition-all duration-200 ${
+          showLogs || showSettings ? 'h-[90vh] max-h-[92vh]' : 'max-h-[85vh]'
+        }`}
+      >
         {/* 头部 Header (固定) */}
         <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b border-border/70 bg-card">
           <div className="flex items-center gap-2.5">
@@ -221,8 +226,19 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
               onShowToast={onShowToast}
             />
           </div>
+        ) : showLogs && isLogsMaximized ? (
+          <div className="flex-1 min-h-[440px] flex flex-col overflow-hidden bg-card">
+            <LogViewer
+              onClose={() => {
+                setShowLogs(false);
+                setIsLogsMaximized(false);
+              }}
+              isMaximized={true}
+              onToggleMaximize={() => setIsLogsMaximized(false)}
+            />
+          </div>
         ) : (
-          <>
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             {/* 视频信息预览 (固定) */}
             <div className="flex-shrink-0 px-6 pt-3 pb-2">
               <div className="flex gap-3.5 p-3 rounded-2xl bg-card border border-border/80 items-center shadow-2xs">
@@ -341,8 +357,12 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
               <TabPill tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
             </div>
 
-            {/* 资源列表区：弹性自适应滚动，弹窗内容多时自动收缩滚动而不破坏 Header */}
-            <div className="flex-1 min-h-[140px] max-h-[400px] overflow-y-auto pl-6 pr-4 pb-4 scrollbar-clean">
+            {/* 资源列表区：弹性自适应滚动，当开启日志时紧凑收缩，为日志留出充足视口 */}
+            <div
+              className={`overflow-y-auto pl-6 pr-4 pb-2 scrollbar-clean ${
+                showLogs ? 'max-h-[140px] flex-shrink-0' : 'flex-1 min-h-[140px] max-h-[400px]'
+              }`}
+            >
               <div className="space-y-2 py-2 pb-2">
                 {/* 1. 视频列表 */}
                 {(activeTab === 'all' || activeTab === 'video') &&
@@ -771,25 +791,33 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                 )}
               </div>
             </div>
-          </>
-        )}
 
-        {/* 底部进度条与多任务并发管理面板 (固定高度内部滚动) */}
-        {((tasks && tasks.length > 0) || (progress && progress.status !== 'idle')) && (
-          <div className="flex-shrink-0 max-h-44 overflow-y-auto px-6 pb-3 bg-muted/30 border-t border-border/70 scrollbar-clean">
-            <ProgressBar
-              tasks={tasks}
-              onRemoveTask={onRemoveTask}
-              onClearCompleted={onClearCompleted}
-              progress={progress}
-            />
-          </div>
-        )}
+            {/* 底部进度条与多任务并发管理面板 (固定高度内部滚动) */}
+            {((tasks && tasks.length > 0) || (progress && progress.status !== 'idle')) && (
+              <div
+                className={`flex-shrink-0 overflow-y-auto px-6 pb-2.5 bg-muted/30 border-t border-border/70 scrollbar-clean ${
+                  showLogs ? 'max-h-24' : 'max-h-44'
+                }`}
+              >
+                <ProgressBar
+                  tasks={tasks}
+                  onRemoveTask={onRemoveTask}
+                  onClearCompleted={onClearCompleted}
+                  progress={progress}
+                />
+              </div>
+            )}
 
-        {/* 底部运行日志与诊断控制台 */}
-        {showLogs && (
-          <div className="flex-shrink-0 h-60 min-h-0 border-t border-border/70 flex flex-col overflow-hidden bg-card">
-            <LogViewer onClose={() => setShowLogs(false)} />
+            {/* 底部运行日志与诊断控制台 (底栏停靠模式，自适应填充，保证内部独立滚动且绝不被挤出视口) */}
+            {showLogs && (
+              <div className="flex-1 min-h-[220px] border-t border-border/70 flex flex-col overflow-hidden bg-card">
+                <LogViewer
+                  onClose={() => setShowLogs(false)}
+                  isMaximized={false}
+                  onToggleMaximize={() => setIsLogsMaximized(true)}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
