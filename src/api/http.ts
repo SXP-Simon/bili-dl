@@ -497,8 +497,13 @@ export async function requestJson<T = unknown>(url: string): Promise<T> {
       },
       onload: (res: GMXMLHttpRequestResponse) => {
         if (res.status >= 200 && res.status < 300) {
-          const data = typeof res.response === 'string' ? JSON.parse(res.response) : res.response;
-          resolve(data as T);
+          const raw = res.response !== undefined && res.response !== null && res.response !== '' ? res.response : res.responseText;
+          try {
+            const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            resolve(data as T);
+          } catch (e: unknown) {
+            reject(new Error(`Failed to parse JSON response: ${getErrorMessage(e)}`));
+          }
         } else {
           reject(new Error(`HTTP ${res.status}: ${res.statusText}`));
         }

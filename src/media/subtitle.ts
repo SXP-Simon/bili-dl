@@ -36,8 +36,8 @@ export function convertSubtitleJsonToSrt(data: unknown): string {
   let srt = '';
   let validIndex = 1;
   rawList.forEach((item) => {
-    const from = typeof item.from === 'number' ? item.from : parseFloat(item.from) || 0;
-    const to = typeof item.to === 'number' ? item.to : parseFloat(item.to) || (from + 2);
+    const from = typeof item.from === 'number' ? item.from : parseFloat(String(item.from ?? 0)) || 0;
+    const to = typeof item.to === 'number' ? item.to : parseFloat(String(item.to ?? (from + 2))) || (from + 2);
     const content = (item.content || item.text || item.words || '').trim();
     if (content) {
       srt += `${validIndex}\n`;

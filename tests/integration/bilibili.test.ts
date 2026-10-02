@@ -137,6 +137,84 @@ describe('Bilibili API integration tests', () => {
     expect(media?.audios[0]?.name).toBe('320K 极高音质');
   });
 
+  it('fetchCurrentMediaData should handle realistic Bilibili DASH response containing null dolby, flac, and backup_urls', async () => {
+    setMockRequestHandler((options) => {
+      if (options.url?.includes('x/player/pagelist')) {
+        options.onload?.({
+          status: 200,
+          statusText: 'OK',
+          responseHeaders: '',
+          response: {
+            code: 0,
+            message: '0',
+            data: [{ cid: 9999, page: 1, part: 'Realistic Video', duration: 120 }],
+          },
+        });
+      } else if (options.url?.includes('x/player/playurl')) {
+        options.onload?.({
+          status: 200,
+          statusText: 'OK',
+          responseHeaders: '',
+          response: {
+            code: 0,
+            message: '0',
+            ttl: 1,
+            data: {
+              from: 'local',
+              result: 'suee',
+              message: '',
+              quality: 80,
+              format: 'mp4720',
+              timelength: 120000,
+              dash: {
+                duration: 120,
+                minBufferTime: 1.5,
+                video: [
+                  {
+                    id: 80,
+                    baseUrl: 'https://cn-bj1.bilivideo.com/v80.m4s',
+                    base_url: 'https://cn-bj1.bilivideo.com/v80.m4s',
+                    backupUrl: null,
+                    backup_url: null,
+                    bandwidth: 1500000,
+                    codecs: 'avc1.640028',
+                    width: 1920,
+                    height: 1080,
+                    frameRate: '30',
+                    frame_rate: '30',
+                  },
+                ],
+                audio: [
+                  {
+                    id: 30280,
+                    baseUrl: 'https://cn-bj1.bilivideo.com/a30280.m4s',
+                    base_url: 'https://cn-bj1.bilivideo.com/a30280.m4s',
+                    backupUrl: null,
+                    backup_url: null,
+                    bandwidth: 320000,
+                    codecs: 'mp4a.40.2',
+                  },
+                ],
+                dolby: null,
+                flac: null,
+              },
+            },
+          },
+        });
+      } else {
+        options.onerror?.({ error: 'Not mocked' });
+      }
+    });
+
+    const media = await fetchCurrentMediaData(9999, 'BV1iv4y1K7fu');
+    expect(media).not.toBeNull();
+    expect(media?.videos).toHaveLength(1);
+    expect(media?.videos[0]?.id).toBe(80);
+    expect(media?.videos[0]?.qualityName).toBe('1080P 高清');
+    expect(media?.audios).toHaveLength(1);
+    expect(media?.audios[0]?.id).toBe(30280);
+  });
+
   it('fetchUgcSeasonData should parse UGC season metadata and archives', async () => {
     // Inject __INITIAL_STATE__
     const win = window as unknown as {

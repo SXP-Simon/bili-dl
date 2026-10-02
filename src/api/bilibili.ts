@@ -76,6 +76,10 @@ const QUALITY_MAP: Record<number, string> = {
 };
 
 function getBiliWindow(): WindowWithBiliGlobals {
+  const globalWin = globalThis as unknown as { unsafeWindow?: WindowWithBiliGlobals };
+  if (globalWin.unsafeWindow) {
+    return globalWin.unsafeWindow;
+  }
   return window as unknown as WindowWithBiliGlobals;
 }
 
@@ -131,9 +135,20 @@ export async function fetchVideoPages(bvid: string): Promise<VideoPageItem[]> {
     );
     const parsed = BiliPageListResponseSchema.safeParse(res);
     if (parsed.success && parsed.data.code === 0 && Array.isArray(parsed.data.data)) {
-      return parsed.data.data;
+      return parsed.data.data.map((p) => ({
+        cid: p.cid,
+        page: p.page,
+        part: p.part || '',
+        duration: p.duration || 0,
+      }));
     }
-  } catch {}
+    if (res && typeof res === 'object' && Array.isArray((res as { data?: unknown[] }).data)) {
+      return (res as { data: VideoPageItem[] }).data;
+    }
+  } catch (err: unknown) {
+    const msg = getErrorMessage(err);
+    logger.warn('API', `获取分 P 列表失败: ${msg}`);
+  }
   return [];
 }
 
@@ -221,10 +236,10 @@ export async function fetchUgcSeasonData(_currentBvid?: string): Promise<UgcSeas
         const episodes: SeasonEpisodeItem[] = archives.map((item, idx) => ({
           id: item.aid || idx + 1,
           bvid: item.bvid,
-          cid: item.cid,
-          title: item.title,
-          cover: item.pic,
-          duration: item.duration,
+          cid: item.cid ?? undefined,
+          title: item.title || '',
+          cover: item.pic ?? undefined,
+          duration: item.duration ?? undefined,
           pageIndex: idx + 1,
         }));
 
@@ -329,17 +344,35 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
     const parsed = BiliPlayUrlResponseSchema.safeParse(res);
     if (parsed.success) {
       const playUrlData = parsed.data.data || parsed.data.result;
-      dashData = playUrlData?.dash;
-      totalDuration = playUrlData?.duration || playUrlData?.dash?.duration || 0;
+      dashData = (playUrlData?.dash as BiliDashData | undefined) || undefined;
+      totalDuration = Number(playUrlData?.duration || playUrlData?.dash?.duration || 0);
+    } else {
+      logger.warn('API', '播放地址校验未完全匹配 Schema，启用防御性降级解析', {
+        issues: parsed.error.issues,
+      });
+      if (res && typeof res === 'object') {
+        const rawRes = res as {
+          data?: { dash?: BiliDashData; duration?: number };
+          result?: { dash?: BiliDashData; duration?: number };
+        };
+        const playUrlData = rawRes.data || rawRes.result;
+        if (playUrlData?.dash) {
+          dashData = playUrlData.dash;
+          totalDuration = Number(playUrlData.duration || playUrlData.dash.duration || 0);
+        }
+      }
     }
-  } catch {}
+  } catch (err: unknown) {
+    const msg = getErrorMessage(err);
+    logger.warn('API', `请求 DASH 播放地址网络失败: ${msg}`);
+  }
 
   // 2. DOM 兜底
   if (!dashData) {
     const win = getBiliWindow();
     if (win.__playinfo__?.data?.dash) {
       dashData = win.__playinfo__.data.dash;
-      totalDuration = win.__playinfo__.data.duration || dashData?.duration || 0;
+      totalDuration = Number(win.__playinfo__.data.duration || dashData?.duration || 0);
     } else {
       for (const script of Array.from(document.scripts)) {
         const text = script.textContent || '';
@@ -349,7 +382,7 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
             try {
               const parsed = JSON.parse(match[1]) as { data?: { dash?: BiliDashData; duration?: number } };
               dashData = parsed?.data?.dash;
-              totalDuration = parsed?.data?.duration || dashData?.duration || 0;
+              totalDuration = Number(parsed?.data?.duration || dashData?.duration || 0);
               break;
             } catch {}
           }
@@ -358,36 +391,39 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
     }
   }
 
-  const duration = totalDuration || dashData?.duration || 0;
+  const duration = totalDuration || Number(dashData?.duration || 0);
 
   // 3. 解析视频流
-  const rawVideos: BiliDashVideoItem[] = dashData?.video || [];
+  const rawVideos: BiliDashVideoItem[] = (dashData?.video as BiliDashVideoItem[]) || [];
   const videos: VideoStreamItem[] = [];
   const seenVideoIds = new Set<string>();
 
   for (const v of rawVideos) {
+    if (!v) continue;
     const codec = (v.codecs || '').toLowerCase();
     const codecName: 'AVC' | 'HEVC' | 'AV1' = codec.includes('avc') ? 'AVC' : codec.includes('hev') ? 'HEVC' : 'AV1';
-    const key = `${v.id}_${codecName}`;
+    const numId = Number(v.id);
+    const key = `${numId}_${codecName}`;
     if (seenVideoIds.has(key)) continue;
     seenVideoIds.add(key);
 
-    const sizeMB = duration ? ((v.bandwidth * duration) / 8 / 1024 / 1024).toFixed(1) : '0';
+    const bandwidth = Number(v.bandwidth || 0);
+    const sizeMB = duration ? (((bandwidth) * duration) / 8 / 1024 / 1024).toFixed(1) : '0';
     const primaryUrl = v.baseUrl || v.base_url || '';
-    const backupUrl = v.backupUrl || v.backup_url;
+    const backupUrl = (v.backupUrl || v.backup_url || undefined) ?? undefined;
 
     videos.push({
-      id: v.id,
-      qualityName: QUALITY_MAP[v.id] || `${v.id}P`,
+      id: numId,
+      qualityName: QUALITY_MAP[numId] || `${numId}P`,
       codecName,
-      codec: v.codecs,
-      bandwidth: v.bandwidth,
+      codec: v.codecs || '',
+      bandwidth,
       sizeMB,
       baseUrl: primaryUrl,
       backupUrl,
-      width: v.width,
-      height: v.height,
-      frameRate: v.frameRate || v.frame_rate || '',
+      width: Number(v.width || 0),
+      height: Number(v.height || 0),
+      frameRate: String(v.frameRate || v.frame_rate || ''),
     });
   }
 
@@ -396,39 +432,42 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
     ...(dashData?.dolby?.audio || []),
     ...(dashData?.flac?.audio ? [dashData.flac.audio] : []),
     ...(dashData?.audio || []),
-  ];
+  ].filter(Boolean) as BiliDashAudioItem[];
   const audios: AudioStreamItem[] = [];
 
   rawAudios.forEach((a, index) => {
+    if (!a) return;
+    const numId = Number(a.id);
     let name = `音频轨 ${index + 1}`;
     let qualityDesc = '标准音质';
-    if (a.id === 30280) {
+    if (numId === 30280) {
       name = '320K 极高音质';
       qualityDesc = '320Kbps';
-    } else if (a.id === 30232) {
+    } else if (numId === 30232) {
       name = '132K 高音质';
       qualityDesc = '132Kbps';
-    } else if (a.id === 30216) {
+    } else if (numId === 30216) {
       name = '64K 基础音质';
       qualityDesc = '64Kbps';
     } else if (a.codecs?.toLowerCase().includes('flac')) {
       name = 'Hi-Res 无损音频';
       qualityDesc = 'FLAC 无损';
-    } else if (a.id === 30250) {
+    } else if (numId === 30250) {
       name = '杜比全景声';
       qualityDesc = 'Dolby Atmos';
     }
 
-    const sizeMB = duration ? ((a.bandwidth * duration) / 8 / 1024 / 1024).toFixed(1) : '0';
+    const bandwidth = Number(a.bandwidth || 0);
+    const sizeMB = duration ? (((bandwidth) * duration) / 8 / 1024 / 1024).toFixed(1) : '0';
     audios.push({
-      id: a.id,
+      id: numId,
       name,
       qualityDesc,
       codec: a.codecs || 'mp4a.40.2',
-      bandwidth: a.bandwidth,
+      bandwidth,
       sizeMB,
       baseUrl: a.baseUrl || a.base_url || '',
-      backupUrl: a.backupUrl || a.backup_url,
+      backupUrl: (a.backupUrl || a.backup_url || undefined) ?? undefined,
     });
   });
 
