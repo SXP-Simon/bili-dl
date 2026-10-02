@@ -185,7 +185,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose, isMaximized = fal
               onMouseMove={handleTraceMouseMove}
               onMouseUp={handleTraceMouseUpOrLeave}
               onMouseLeave={handleTraceMouseUpOrLeave}
-              className="flex items-center bg-background rounded-lg p-0.5 border border-border/70 text-[10px] font-mono max-w-[220px] sm:max-w-[320px] overflow-x-auto scrollbar-clean cursor-grab active:cursor-grabbing select-none"
+              className="flex items-center bg-background rounded-lg p-0.5 border border-border/70 text-[10px] max-w-[220px] sm:max-w-[320px] overflow-x-auto scrollbar-clean cursor-grab active:cursor-grabbing select-none"
             >
               <button
                 onClick={() => {
@@ -278,10 +278,10 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose, isMaximized = fal
         </div>
       </div>
 
-      {/* 日志内容区域 */}
+      {/* 日志内容区域：使用全局字体渲染日志条目，避免中文字符降级为宋体 */}
       <div
         ref={logContainerRef}
-        className="flex-1 min-h-0 overflow-y-auto p-3 font-mono text-[11px] space-y-1.5 scrollbar-clean bg-background/50"
+        className="flex-1 min-h-0 overflow-y-auto p-3 text-[11px] space-y-1.5 scrollbar-clean bg-background/50"
       >
         {filteredLogs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 text-muted-foreground/60 text-xs">
@@ -305,7 +305,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose, isMaximized = fal
                 }`}
               >
                 <div className="flex items-start gap-2 leading-relaxed">
-                  <span className="text-muted-foreground/70 text-[10px] shrink-0 font-medium">
+                  <span className="text-muted-foreground/70 text-[10px] shrink-0 font-medium font-mono">
                     {log.timeStr}
                   </span>
                   {renderLevelBadge(log.level)}
@@ -316,7 +316,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose, isMaximized = fal
                     <button
                       onClick={() => setFilterTrace(filterTrace === log.traceId ? 'all' : log.traceId!)}
                       title={`点击聚焦该任务 (#${log.traceId}) 的链路日志`}
-                      className={`inline-flex items-center text-[9px] font-mono px-1.5 py-0.2 rounded font-semibold transition-all cursor-pointer shrink-0 ${
+                      className={`inline-flex items-center text-[9px] px-1.5 py-0.2 rounded font-semibold transition-all cursor-pointer shrink-0 ${
                         filterTrace === log.traceId
                           ? 'bg-primary/30 text-emerald-950 dark:text-emerald-100 border border-primary/60 shadow-2xs font-bold'
                           : 'bg-secondary/35 text-secondary-foreground hover:bg-secondary/60 border border-secondary/50'

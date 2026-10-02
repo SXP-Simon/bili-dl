@@ -20,6 +20,7 @@ interface ProgressBarProps {
   onClearCompleted?: () => void;
   // 兼容单任务旧模式
   progress?: DownloadProgress;
+  compact?: boolean;
 }
 
 function getTaskIcon(type: TaskType) {
@@ -46,6 +47,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   onRemoveTask,
   onClearCompleted,
   progress,
+  compact = false,
 }) => {
   // 如果使用多任务模式
   if (tasks.length > 0) {
@@ -53,9 +55,9 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
     const completedTasks = tasks.filter((t) => t.status === 'completed');
 
     return (
-      <div className="mt-3 p-3 rounded-2xl bg-muted/40 border border-border/80 text-foreground shadow-xs animate-toast-in">
+      <div className="mt-2.5 p-2.5 rounded-2xl bg-muted/40 border border-border/80 text-foreground shadow-xs animate-toast-in">
         {/* 顶部统计与清空按钮 */}
-        <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground mb-2 px-1">
+        <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground mb-1.5 px-1">
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
             <span>
@@ -73,8 +75,8 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
           )}
         </div>
 
-        {/* 任务列表 */}
-        <div className="space-y-2 max-h-48 overflow-y-auto pr-1 scrollbar-clean">
+        {/* 任务列表：内部唯一滚动容器，自适应 compact 模式高度 */}
+        <div className={`space-y-2 overflow-y-auto pr-1 scrollbar-clean ${compact ? 'max-h-24' : 'max-h-40'}`}>
           {tasks.map((task) => {
             const isCompleted = task.status === 'completed';
             const isError = task.status === 'error';

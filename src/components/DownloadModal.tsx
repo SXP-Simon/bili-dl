@@ -840,18 +840,15 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
               </div>
             </div>
 
-            {/* 底部进度条与多任务并发管理面板 (固定高度内部滚动) */}
+            {/* 底部进度条与多任务并发管理面板（由内部统一负责列表纵向滚动，外层杜绝二次滚动条） */}
             {((tasks && tasks.length > 0) || (progress && progress.status !== 'idle')) && (
-              <div
-                className={`flex-shrink-0 overflow-y-auto px-6 pb-2.5 bg-muted/30 border-t border-border/70 scrollbar-clean ${
-                  showLogs ? 'max-h-24' : 'max-h-44'
-                }`}
-              >
+              <div className="flex-shrink-0 px-6 pb-2.5 bg-muted/30 border-t border-border/70 overflow-hidden">
                 <ProgressBar
                   tasks={tasks}
                   onRemoveTask={onRemoveTask}
                   onClearCompleted={onClearCompleted}
                   progress={progress}
+                  compact={showLogs}
                 />
               </div>
             )}
