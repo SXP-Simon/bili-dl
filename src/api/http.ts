@@ -252,6 +252,7 @@ async function fetchChunkWithRetry(
   const chunkSize = end - start + 1;
   const settings = getDownloadSettings();
   const minSpeedKB = settings.cdnMinSpeedKB || 300;
+  const failoverDurationMs = (settings.cdnFailoverDurationSec || 8) * 1000;
   const autoFailover = settings.cdnAutoFailover !== false && urls.length > 1 && chunkSize >= 1.5 * 1024 * 1024;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -398,7 +399,7 @@ async function fetchChunkWithRetry(
               if (now - attemptStartTime >= 5000) {
                 if (currentSpeedKB < minSpeedKB) {
                   lowSpeedDurationMs += timeDiff * 1000;
-                  if (lowSpeedDurationMs >= 6000) {
+                  if (lowSpeedDurationMs >= failoverDurationMs) {
                     hasFinished = true;
                     cleanup();
                     try {

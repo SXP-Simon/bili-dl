@@ -21,6 +21,7 @@ describe('Settings & Path Resolution Unit Tests', () => {
     expect(settings.enableCdnPriority).toBe(true);
     expect(settings.cdnAutoFailover).toBe(true);
     expect(settings.cdnMinSpeedKB).toBe(300);
+    expect(settings.cdnFailoverDurationSec).toBe(8);
   });
 
   it('should save and retrieve updated settings', () => {
@@ -31,6 +32,7 @@ describe('Settings & Path Resolution Unit Tests', () => {
       enableCdnPriority: false,
       cdnAutoFailover: false,
       cdnMinSpeedKB: 500,
+      cdnFailoverDurationSec: 10,
     });
 
     const updated = getDownloadSettings();
@@ -40,6 +42,7 @@ describe('Settings & Path Resolution Unit Tests', () => {
     expect(updated.enableCdnPriority).toBe(false);
     expect(updated.cdnAutoFailover).toBe(false);
     expect(updated.cdnMinSpeedKB).toBe(500);
+    expect(updated.cdnFailoverDurationSec).toBe(10);
   });
 
   it('should reset settings back to default', () => {
@@ -50,6 +53,7 @@ describe('Settings & Path Resolution Unit Tests', () => {
       enableCdnPriority: false,
       cdnAutoFailover: false,
       cdnMinSpeedKB: 100,
+      cdnFailoverDurationSec: 15,
     });
 
     const reset = resetDownloadSettings();
@@ -58,6 +62,7 @@ describe('Settings & Path Resolution Unit Tests', () => {
     expect(getDownloadSettings().enableCdnPriority).toBe(true);
     expect(getDownloadSettings().cdnAutoFailover).toBe(true);
     expect(getDownloadSettings().cdnMinSpeedKB).toBe(300);
+    expect(getDownloadSettings().cdnFailoverDurationSec).toBe(8);
   });
 
   describe('resolveDownloadRelativePath', () => {

@@ -10,6 +10,7 @@ import {
   Zap,
   Server,
   Gauge,
+  Timer,
 } from 'lucide-react';
 import {
   getDownloadSettings,
@@ -239,6 +240,37 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
                     {speed === 300 && ' (推荐)'}
                   </button>
                 ))}
+              </div>
+
+              {/* 持续超时触发时长配置 */}
+              <div className="pt-2 border-t border-border/30 space-y-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <Timer className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
+                    <span>持续低速触发换源时长</span>
+                  </div>
+                  <span className="font-mono font-medium text-foreground">
+                    当前: {settings.cdnFailoverDurationSec} 秒
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {[5, 8, 10, 15, 20].map((sec) => (
+                    <button
+                      key={sec}
+                      type="button"
+                      onClick={() => updateSetting('cdnFailoverDurationSec', sec)}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-semibold transition-all cursor-pointer border ${
+                        settings.cdnFailoverDurationSec === sec
+                          ? 'bg-primary text-primary-foreground border-primary shadow-2xs'
+                          : 'bg-background hover:bg-muted text-muted-foreground hover:text-foreground border-border/80'
+                      }`}
+                    >
+                      {sec} 秒
+                      {sec === 8 && ' (推荐)'}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}

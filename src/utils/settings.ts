@@ -11,6 +11,7 @@ export interface DownloadSettings {
   enableCdnPriority: boolean; // 智能优选国内高速 CDN 节点 (默认 true)
   cdnAutoFailover: boolean; // 慢速自动切换备选 CDN 节点 (默认 true)
   cdnMinSpeedKB: number; // 慢速换源判定阈值 (KB/s，默认 300)
+  cdnFailoverDurationSec: number; // 慢速持续判定时间 (秒，默认 8)
 }
 
 export const DEFAULT_SETTINGS: DownloadSettings = {
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS: DownloadSettings = {
   enableCdnPriority: true,
   cdnAutoFailover: true,
   cdnMinSpeedKB: 300,
+  cdnFailoverDurationSec: 8,
 };
 
 const SETTINGS_KEY = 'bili_dl_download_settings';
