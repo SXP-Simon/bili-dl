@@ -166,7 +166,15 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
                 </div>
 
                 {action.badge && (
-                  <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-muted text-muted-foreground border border-border/60 group-hover:bg-primary/20 group-hover:text-primary transition-colors shrink-0">
+                  <span
+                    className={`text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded border transition-colors shrink-0 ${
+                      action.badge.includes('在线') || action.badge.includes('已就绪') || action.badge.includes('已连接')
+                        ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/40 shadow-2xs font-bold'
+                        : action.badge.includes('离线') || action.badge.includes('未运行') || action.badge.includes('未检测')
+                        ? 'bg-amber-500/10 text-amber-800 dark:text-amber-400 border-amber-500/30'
+                        : 'bg-muted text-muted-foreground border-border/60 group-hover:bg-primary/20 group-hover:text-primary'
+                    }`}
+                  >
                     {action.badge}
                   </span>
                 )}

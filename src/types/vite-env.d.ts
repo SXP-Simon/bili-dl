@@ -32,6 +32,7 @@ declare module '$' {
     url: string;
     headers?: Record<string, string>;
     timeout?: number;
+    data?: string | FormData | Blob | ArrayBufferView;
     responseType?: 'text' | 'arraybuffer' | 'blob' | 'json' | 'document';
     onprogress?: (event: GMXMLHttpRequestProgress) => void;
     onload?: (response: GMXMLHttpRequestResponse) => void;

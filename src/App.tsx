@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Video, Music, FolderArchive, Film } from 'lucide-react';
+import { Video, Music, FolderArchive, Film, DownloadCloud } from 'lucide-react';
 import { FloatButton } from './components/FloatButton';
 import { DownloadModal } from './components/DownloadModal';
 import { QuickActionMenu } from './components/QuickActionMenu';
@@ -11,6 +11,14 @@ import { batchDetectAndDownloadSubtitles, batchDownloadSeasonSubtitlesZip } from
 import { batchDownloadAllLowestAudios, batchDownloadAllHighestVideos, batchDownloadSeasonHighestVideos, batchDownloadSeasonLowestAudios } from './media/batchDownloader';
 import { logger } from './utils/logger';
 import { getErrorMessage, isAbortError } from './utils/error';
+import { getDownloadSettings } from './utils/settings';
+import {
+  abDownloadManager,
+  externalDownloaderRegistry,
+  type IExternalDownloader,
+  type ExternalDownloadSource,
+  type ExternalDownloaderStatus,
+} from './downloader';
 import type { MediaResourceData, VideoStreamItem, AudioStreamItem, DownloadTask, QuickActionItem, QuickMenuHeaderInfo } from './types';
 
 export const App: React.FC = () => {
@@ -31,6 +39,8 @@ export const App: React.FC = () => {
   const [mediaData, setMediaData] = useState<MediaResourceData | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
+  const [abdmStatus, setAbdmStatus] = useState<ExternalDownloaderStatus | null>(null);
+  const [isCheckingAbdm, setIsCheckingAbdm] = useState(false);
   const activeControllers = useRef<Map<string, AbortController>>(new Map());
 
   // 记录导航序列号，防止快速切集时的竞态乱序覆盖
@@ -738,6 +748,17 @@ export const App: React.FC = () => {
     setQuickMenuPos(pos);
     setIsQuickMenuOpen(true);
 
+    // 展开快捷操作菜单时，异步探测外部持久化下载器 (AB Download Manager)
+    const settings = getDownloadSettings();
+    if (settings.abdmEnabled !== false) {
+      setIsCheckingAbdm(true);
+      abDownloadManager
+        .checkAvailability({ port: settings.abdmPort, timeoutMs: 1500 })
+        .then((st) => setAbdmStatus(st))
+        .catch(() => {})
+        .finally(() => setIsCheckingAbdm(false));
+    }
+
     // 展开快捷操作菜单时，若未加载或当前数据与页面 URL 不一致，后台无感预拉取最新视频数据
     const currentBvid = getBvidFromUrl();
     if (!mediaData || mediaData.bvid !== currentBvid) {
@@ -750,6 +771,104 @@ export const App: React.FC = () => {
         .finally(() => {
           setIsSwitching(false);
         });
+    }
+  };
+
+  /**
+   * 统一外部持久化下载调度器 (遵循开闭原则 OCP，支持投递至 AB Download Manager、Aria2 RPC 等桌面端客户端)
+   */
+  const handleDownloadWithExternal = async (
+    downloaderOrId: IExternalDownloader | string,
+    targetVideo?: VideoStreamItem,
+    targetAudio?: AudioStreamItem
+  ) => {
+    const downloader =
+      typeof downloaderOrId === 'string'
+        ? externalDownloaderRegistry.get(downloaderOrId) || abDownloadManager
+        : downloaderOrId;
+
+    let currentMedia = mediaData;
+    if (!currentMedia) {
+      setIsSwitching(true);
+      try {
+        currentMedia = await fetchCurrentMediaData();
+        if (currentMedia) setMediaData(currentMedia);
+      } catch (err) {
+        showToast(`获取媒体流信息失败: ${getErrorMessage(err)}`, 'error');
+        return;
+      } finally {
+        setIsSwitching(false);
+      }
+    }
+
+    if (!currentMedia || currentMedia.videos.length === 0) {
+      showToast('未检测到有效的视频媒体资源', 'warning');
+      return;
+    }
+
+    const settings = getDownloadSettings();
+    const port = settings.abdmPort || downloader.defaultPort;
+
+    // 1. 快速探测客户端运行与端口联通状态
+    const status = await downloader.checkAvailability({ port, timeoutMs: 2000 });
+    setAbdmStatus(status);
+    if (!status.isAvailable) {
+      showToast(
+        `未检测到 ${downloader.name} (端口 ${port} 未响应)。请确认客户端已启动且在设置中启用了「浏览器插件集成」。`,
+        'warning'
+      );
+      return;
+    }
+
+    // 2. 组装媒体流 (默认选择最高画质画面 + 最佳音质音轨)
+    const video = targetVideo || currentMedia.videos[0];
+    const audio = targetAudio !== undefined ? targetAudio : (currentMedia.audios[0] || null);
+
+    const cleanTitle = (currentMedia.title || 'bilibili_video').replace(/[\\/:*?"<>|]/g, '_');
+    const sources: ExternalDownloadSource[] = [];
+
+    if (video) {
+      sources.push({
+        url: video.baseUrl,
+        filename: `${cleanTitle}_${video.qualityName}_${video.codecName}.m4s`,
+        type: 'video',
+        qualityDesc: video.qualityName,
+        headers: {
+          'Referer': 'https://www.bilibili.com/',
+          'User-Agent': navigator.userAgent,
+        },
+      });
+    }
+
+    if (audio) {
+      sources.push({
+        url: audio.baseUrl,
+        filename: `${cleanTitle}_${audio.name}.m4s`,
+        type: 'audio',
+        qualityDesc: audio.qualityDesc,
+        headers: {
+          'Referer': 'https://www.bilibili.com/',
+          'User-Agent': navigator.userAgent,
+        },
+      });
+    }
+
+    showToast(`正在向 ${downloader.name} 投递持久化下载任务...`, 'info');
+    const res = await downloader.sendDownload(
+      {
+        title: cleanTitle,
+        sources,
+        downloadPage: location.href,
+        bvid: currentMedia.bvid,
+        cid: currentMedia.cid,
+      },
+      { port }
+    );
+
+    if (res.success) {
+      showToast(`🎉 已成功推送到 ${downloader.name}！桌面端独立持久化下载，不受切换或关闭 Tab 影响。`, 'success');
+    } else {
+      showToast(`推送至 ${downloader.name} 失败: ${res.message}`, 'error');
     }
   };
 
@@ -782,90 +901,113 @@ export const App: React.FC = () => {
     const hasUgcSeason = Boolean(mediaData?.ugcSeason);
   const seasonEpisodeCount = mediaData?.ugcSeason?.episodes.length || 0;
 
-  // 抽象与配置右键快捷操作列表 (根据是否为合集自动呈现最匹配的选项)
-  const quickActions: QuickActionItem[] = hasUgcSeason
-    ? [
-        {
-          id: 'quick_season_videos_highest',
-          icon: <Film className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
-          label: `一键下载合集全部视频 (${seasonEpisodeCount}集)`,
-          loading: isBatchVideosRunning,
-          description: `批量下载合集《${mediaData?.ugcSeason?.title}》全部最高画质 MP4`,
-          badge: '合集全量',
-          onClick: async () => {
-            logger.info('QuickAction', '触发快捷下载: 一键下载合集全部最高画质');
-            await handleDownloadSeasonVideosHighest();
+  // 外部持久化下载器快捷入口 (右键菜单直观感知 15151 端口客户端连接状态)
+  const abdmActionItem: QuickActionItem = {
+    id: 'quick_abdm_download',
+    icon: <DownloadCloud className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+    label: '推送到 AB Download Manager',
+    loading: isCheckingAbdm,
+    description: abdmStatus?.isAvailable
+      ? '已连接桌面端客户端，后台持久化下载不惧切换或关闭 Tab'
+      : '未检测到客户端运行，请启动客户端并在设置中启用「浏览器插件集成」',
+    badge: isCheckingAbdm
+      ? '探测中...'
+      : abdmStatus?.isAvailable
+      ? '● 已就绪'
+      : '● 未运行',
+    onClick: async () => {
+      logger.info('QuickAction', '触发快捷投递: 推送到 AB Download Manager');
+      await handleDownloadWithExternal(abDownloadManager);
+    },
+  };
+
+  // 抽象与配置右键快捷操作列表 (根据是否为合集自动呈现最匹配的选项，外部持久化下载器排在首项)
+  const quickActions: QuickActionItem[] = [
+    abdmActionItem,
+    ...(hasUgcSeason
+      ? [
+          {
+            id: 'quick_season_videos_highest',
+            icon: <Film className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+            label: `一键下载合集全部视频 (${seasonEpisodeCount}集)`,
+            loading: isBatchVideosRunning,
+            description: `批量下载合集《${mediaData?.ugcSeason?.title}》全部最高画质 MP4`,
+            badge: '合集全量',
+            onClick: async () => {
+              logger.info('QuickAction', '触发快捷下载: 一键下载合集全部最高画质');
+              await handleDownloadSeasonVideosHighest();
+            },
           },
-        },
-        {
-          id: 'quick_season_audios_lowest',
-          icon: <Music className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
-          label: `一键提取合集全部音频 (${seasonEpisodeCount}集)`,
-          loading: isBatchAudiosRunning,
-          description: `批量抽取合集《${mediaData?.ugcSeason?.title}》全集省流音频`,
-          badge: '合集音频',
-          onClick: async () => {
-            logger.info('QuickAction', '触发快捷下载: 一键提取合集全部音频');
-            await handleDownloadSeasonAudiosLowest();
+          {
+            id: 'quick_season_audios_lowest',
+            icon: <Music className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+            label: `一键提取合集全部音频 (${seasonEpisodeCount}集)`,
+            loading: isBatchAudiosRunning,
+            description: `批量抽取合集《${mediaData?.ugcSeason?.title}》全集省流音频`,
+            badge: '合集音频',
+            onClick: async () => {
+              logger.info('QuickAction', '触发快捷下载: 一键提取合集全部音频');
+              await handleDownloadSeasonAudiosLowest();
+            },
           },
-        },
-        {
-          id: 'quick_season_subtitles',
-          icon: <FolderArchive className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
-          label: `一键打包合集全部字幕 (${seasonEpisodeCount}集)`,
-          loading: isBatchSubtitlesRunning,
-          description: `探测合集《${mediaData?.ugcSeason?.title}》全部字幕并打包 ZIP`,
-          badge: '合集ZIP',
-          onClick: async () => {
-            logger.info('QuickAction', '触发快捷下载: 一键打包合集全部字幕');
-            await handleDownloadSeasonSubtitles();
+          {
+            id: 'quick_season_subtitles',
+            icon: <FolderArchive className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+            label: `一键打包合集全部字幕 (${seasonEpisodeCount}集)`,
+            loading: isBatchSubtitlesRunning,
+            description: `探测合集《${mediaData?.ugcSeason?.title}》全部字幕并打包 ZIP`,
+            badge: '合集ZIP',
+            onClick: async () => {
+              logger.info('QuickAction', '触发快捷下载: 一键打包合集全部字幕');
+              await handleDownloadSeasonSubtitles();
+            },
           },
-        },
-      ]
-    : [
-        {
-          id: 'quick_batch_subtitles',
-          icon: <FolderArchive className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
-          label: '一键下载全部字幕',
-          loading: isBatchSubtitlesRunning,
-          description: mediaData && mediaData.pages.length > 1
-            ? `批量探测全集 ${mediaData.pages.length} P 字幕并打包 ZIP 文件夹`
-            : '提取当前视频官方/AI双语字幕 (.srt)',
-          badge: 'SRT',
-          onClick: async () => {
-            logger.info('QuickAction', '触发快捷下载: 一键下载全部字幕');
-            await handleDownloadBatchSubtitles();
+        ]
+      : [
+          {
+            id: 'quick_batch_videos_highest',
+            icon: <Video className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+            label: '一键下载全部最高质量视频',
+            loading: isBatchVideosRunning,
+            description: mediaData && mediaData.pages.length > 1
+              ? `批量下载全集 ${mediaData.pages.length} P 并无损封装含音频 MP4`
+              : '下载最高画质视频并合成含音频 MP4',
+            badge: 'MP4',
+            onClick: async () => {
+              logger.info('QuickAction', '触发快捷下载: 一键下载全部最高质量视频');
+              await handleDownloadBatchVideosHighest();
+            },
           },
-        },
-        {
-          id: 'quick_batch_audios_lowest',
-          icon: <Music className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
-          label: '一键下载全部最低质量音频',
-          loading: isBatchAudiosRunning,
-          description: mediaData && mediaData.pages.length > 1
-            ? `批量提取全集 ${mediaData.pages.length} P 最低码率音频 (省流)`
-            : '提取当前视频最低码率独立音轨 (.m4a)',
-          badge: '64K',
-          onClick: async () => {
-            logger.info('QuickAction', '触发快捷下载: 一键下载全部最低质量音频');
-            await handleDownloadBatchAudiosLowest();
+          {
+            id: 'quick_batch_audios_lowest',
+            icon: <Music className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+            label: '一键下载全部最低质量音频',
+            loading: isBatchAudiosRunning,
+            description: mediaData && mediaData.pages.length > 1
+              ? `批量提取全集 ${mediaData.pages.length} P 最低码率音频 (省流)`
+              : '提取当前视频最低码率独立音轨 (.m4a)',
+            badge: '64K',
+            onClick: async () => {
+              logger.info('QuickAction', '触发快捷下载: 一键下载全部最低质量音频');
+              await handleDownloadBatchAudiosLowest();
+            },
           },
-        },
-        {
-          id: 'quick_batch_videos_highest',
-          icon: <Video className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
-          label: '一键下载全部最高质量视频',
-          loading: isBatchVideosRunning,
-          description: mediaData && mediaData.pages.length > 1
-            ? `批量下载全集 ${mediaData.pages.length} P 并无损封装含音频 MP4`
-            : '下载最高画质视频并合成含音频 MP4',
-          badge: 'MP4',
-          onClick: async () => {
-            logger.info('QuickAction', '触发快捷下载: 一键下载全部最高质量视频');
-            await handleDownloadBatchVideosHighest();
+          {
+            id: 'quick_batch_subtitles',
+            icon: <FolderArchive className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+            label: '一键下载全部字幕',
+            loading: isBatchSubtitlesRunning,
+            description: mediaData && mediaData.pages.length > 1
+              ? `批量探测全集 ${mediaData.pages.length} P 字幕并打包 ZIP 文件夹`
+              : '提取当前视频官方/AI双语字幕 (.srt)',
+            badge: 'SRT',
+            onClick: async () => {
+              logger.info('QuickAction', '触发快捷下载: 一键下载全部字幕');
+              await handleDownloadBatchSubtitles();
+            },
           },
-        },
-      ];
+        ]),
+  ];
 
   return (
     <div className={isDark ? 'dark' : ''}>
@@ -899,6 +1041,7 @@ export const App: React.FC = () => {
           }}
           onDownloadVideo={handleDownloadVideo}
           onDownloadAudio={handleDownloadAudio}
+          onDownloadWithExternal={handleDownloadWithExternal}
           onDownloadBatchSubtitles={handleDownloadBatchSubtitles}
           onDownloadSeasonVideos={handleDownloadSeasonVideosHighest}
           onDownloadSeasonAudios={handleDownloadSeasonAudiosLowest}

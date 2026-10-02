@@ -11,6 +11,9 @@ import {
   Server,
   Gauge,
   Timer,
+  DownloadCloud,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import {
   getDownloadSettings,
@@ -18,6 +21,7 @@ import {
   resetDownloadSettings,
   type DownloadSettings,
 } from '../utils/settings';
+import { abDownloadManager } from '../downloader';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -26,6 +30,7 @@ interface SettingsPanelProps {
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToast }) => {
   const [settings, setSettings] = useState<DownloadSettings>(() => getDownloadSettings());
+  const [testStatus, setTestStatus] = useState<{ loading: boolean; message: string; ok?: boolean } | null>(null);
 
   const updateSetting = <K extends keyof DownloadSettings>(key: K, value: DownloadSettings[K]) => {
     const next = { ...settings, [key]: value };
@@ -36,7 +41,32 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
   const handleResetAll = () => {
     const defaults = resetDownloadSettings();
     setSettings(defaults);
+    setTestStatus(null);
     onShowToast('已恢复全部默认下载设置', 'info');
+  };
+
+  const handleTestAbdm = async () => {
+    const port = settings.abdmPort || 15151;
+    setTestStatus({ loading: true, message: `正在探测 127.0.0.1:${port}...` });
+    try {
+      const res = await abDownloadManager.checkAvailability({ port, timeoutMs: 2000 });
+      setTestStatus({
+        loading: false,
+        ok: res.isAvailable,
+        message: res.message,
+      });
+      if (res.isAvailable) {
+        onShowToast('AB Download Manager 连接测试成功！', 'success');
+      } else {
+        onShowToast(`连接失败: ${res.message}`, 'warning');
+      }
+    } catch (e) {
+      setTestStatus({
+        loading: false,
+        ok: false,
+        message: `测试异常: ${String(e)}`,
+      });
+    }
   };
 
   return (
@@ -271,6 +301,83 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 5. 外部持久化下载器集成 (AB Download Manager) */}
+        <div className="p-3.5 rounded-2xl bg-muted/30 border border-border/70 space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <DownloadCloud className="w-4 h-4 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
+                <span className="font-semibold text-foreground">AB Download Manager 桌面端持久化下载</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                联动外部开源下载器后台高速下载，彻底解决网页切换 Tab 或最小化时下载中断/失败的问题。
+              </p>
+            </div>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={settings.abdmEnabled}
+              onClick={() => updateSetting('abdmEnabled', !settings.abdmEnabled)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                settings.abdmEnabled ? 'bg-primary' : 'bg-muted-foreground/30'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  settings.abdmEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {settings.abdmEnabled && (
+            <div className="pt-2 pl-6 space-y-2.5 border-t border-border/30">
+              <div className="flex items-center justify-between gap-3 text-[11px]">
+                <span className="text-muted-foreground">客户端服务端口 (默认 15151)</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={settings.abdmPort}
+                    onChange={(e) => updateSetting('abdmPort', parseInt(e.target.value, 10) || 15151)}
+                    className="w-24 px-2.5 py-1 rounded-lg bg-background border border-border/80 text-foreground font-mono text-xs text-center focus:outline-none focus:ring-1 focus:ring-primary"
+                    placeholder="15151"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleTestAbdm}
+                    disabled={testStatus?.loading}
+                    className="px-2.5 py-1 rounded-lg bg-secondary/40 hover:bg-secondary text-secondary-foreground text-[10px] font-semibold border border-secondary/60 transition-colors cursor-pointer"
+                  >
+                    {testStatus?.loading ? '探测中...' : '测试连接'}
+                  </button>
+                </div>
+              </div>
+
+              {testStatus && (
+                <div
+                  className={`p-2 rounded-xl text-[10px] flex items-center gap-2 ${
+                    testStatus.ok
+                      ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20'
+                      : 'bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/20'
+                  }`}
+                >
+                  {testStatus.ok ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <XCircle className="w-3.5 h-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  )}
+                  <span>{testStatus.message}</span>
+                </div>
+              )}
+
+              <div className="text-[10.5px] text-muted-foreground/80 leading-relaxed">
+                提示：请确保电脑已安装并启动 AB Download Manager 桌面端，且在「设置 - 浏览器插件集成」中开启了「启用」，端口保持一致即可。
               </div>
             </div>
           )}

@@ -22,6 +22,8 @@ describe('Settings & Path Resolution Unit Tests', () => {
     expect(settings.cdnAutoFailover).toBe(true);
     expect(settings.cdnMinSpeedKB).toBe(300);
     expect(settings.cdnFailoverDurationSec).toBe(8);
+    expect(settings.abdmEnabled).toBe(true);
+    expect(settings.abdmPort).toBe(15151);
   });
 
   it('should save and retrieve updated settings', () => {
@@ -33,6 +35,8 @@ describe('Settings & Path Resolution Unit Tests', () => {
       cdnAutoFailover: false,
       cdnMinSpeedKB: 500,
       cdnFailoverDurationSec: 10,
+      abdmEnabled: false,
+      abdmPort: 16161,
     });
 
     const updated = getDownloadSettings();
@@ -43,6 +47,8 @@ describe('Settings & Path Resolution Unit Tests', () => {
     expect(updated.cdnAutoFailover).toBe(false);
     expect(updated.cdnMinSpeedKB).toBe(500);
     expect(updated.cdnFailoverDurationSec).toBe(10);
+    expect(updated.abdmEnabled).toBe(false);
+    expect(updated.abdmPort).toBe(16161);
   });
 
   it('should reset settings back to default', () => {
@@ -54,6 +60,8 @@ describe('Settings & Path Resolution Unit Tests', () => {
       cdnAutoFailover: false,
       cdnMinSpeedKB: 100,
       cdnFailoverDurationSec: 15,
+      abdmEnabled: false,
+      abdmPort: 18888,
     });
 
     const reset = resetDownloadSettings();
@@ -63,6 +71,8 @@ describe('Settings & Path Resolution Unit Tests', () => {
     expect(getDownloadSettings().cdnAutoFailover).toBe(true);
     expect(getDownloadSettings().cdnMinSpeedKB).toBe(300);
     expect(getDownloadSettings().cdnFailoverDurationSec).toBe(8);
+    expect(getDownloadSettings().abdmEnabled).toBe(true);
+    expect(getDownloadSettings().abdmPort).toBe(15151);
   });
 
   describe('resolveDownloadRelativePath', () => {

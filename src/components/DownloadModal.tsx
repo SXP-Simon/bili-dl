@@ -18,6 +18,7 @@ import {
   FolderArchive,
   Settings,
   Film,
+  DownloadCloud,
 } from 'lucide-react';
 import { SpotlightCard } from './SpotlightCard';
 import { TabPill } from './TabPill';
@@ -45,6 +46,7 @@ interface DownloadModalProps {
   onClose: () => void;
   onDownloadVideo: (video: VideoStreamItem, audio?: AudioStreamItem) => void;
   onDownloadAudio: (audio: AudioStreamItem) => void;
+  onDownloadWithExternal?: (downloaderId: string, video?: VideoStreamItem, audio?: AudioStreamItem) => Promise<void>;
   onDownloadBatchSubtitles?: () => Promise<void>;
   onDownloadSeasonVideos?: () => Promise<void>;
   onDownloadSeasonAudios?: () => Promise<void>;
@@ -67,6 +69,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   onClose,
   onDownloadVideo,
   onDownloadAudio,
+  onDownloadWithExternal,
   onDownloadBatchSubtitles,
   onDownloadSeasonVideos,
   onDownloadSeasonAudios,
@@ -503,6 +506,23 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                               </>
                             )}
                           </button>
+
+                          <button
+                            onClick={async () => {
+                              setActiveActionKey(`video_abdm_${v.id}_${v.codecName}`);
+                              try {
+                                await onDownloadWithExternal?.('abdm', v, bestAudio);
+                              } finally {
+                                setActiveActionKey(null);
+                              }
+                            }}
+                            disabled={isAnyProcessing}
+                            title="发送至 AB Download Manager (桌面客户端持久化下载，不受网页切换/休眠影响)"
+                            className="inline-flex items-center gap-1 px-2 py-1.5 rounded-xl text-xs font-semibold border border-border/70 hover:border-primary/60 bg-muted/20 hover:bg-primary/10 text-foreground transition-all duration-200 cursor-pointer shadow-2xs"
+                          >
+                            <DownloadCloud className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
+                            <span className="text-[11px]">ABDM</span>
+                          </button>
                         </div>
                       </SpotlightCard>
                     );
@@ -542,35 +562,54 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                           </div>
                         </div>
 
-                        <button
-                          onClick={async () => {
-                            setActiveActionKey(`audio_${a.id}`);
-                            try {
-                              await onDownloadAudio(a);
-                            } finally {
-                              setActiveActionKey(null);
-                            }
-                          }}
-                          disabled={isProcessing}
-                          title="单独提取并下载该独立音轨 (.m4a / .flac)"
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer ${
-                            isProcessing
-                              ? 'bg-primary/40 text-emerald-950 dark:text-emerald-100 border-primary/60 cursor-wait'
-                              : 'bg-primary/20 hover:bg-primary text-emerald-950 dark:text-emerald-100 hover:text-primary-foreground border-primary/40 hover:border-primary hover:shadow-xs'
-                          }`}
-                        >
-                          {isProcessing ? (
-                            <>
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-800 dark:text-emerald-200" strokeWidth={2.4} />
-                              <span>下载中...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
-                              <span>下载音频</span>
-                            </>
-                          )}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={async () => {
+                              setActiveActionKey(`audio_abdm_${a.id}`);
+                              try {
+                                await onDownloadWithExternal?.('abdm', undefined, a);
+                              } finally {
+                                setActiveActionKey(null);
+                              }
+                            }}
+                            disabled={isProcessing}
+                            title="发送音频至 AB Download Manager (桌面客户端持久化下载)"
+                            className="inline-flex items-center gap-1 px-2 py-1.5 rounded-xl text-xs font-semibold border border-border/70 hover:border-primary/60 bg-muted/20 hover:bg-primary/10 text-foreground transition-all duration-200 cursor-pointer shadow-2xs"
+                          >
+                            <DownloadCloud className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
+                            <span className="text-[11px]">ABDM</span>
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              setActiveActionKey(`audio_${a.id}`);
+                              try {
+                                await onDownloadAudio(a);
+                              } finally {
+                                setActiveActionKey(null);
+                              }
+                            }}
+                            disabled={isProcessing}
+                            title="单独提取并下载该独立音轨 (.m4a / .flac)"
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-semibold text-xs transition-all duration-200 active:scale-95 shadow-2xs cursor-pointer ${
+                              isProcessing
+                                ? 'bg-primary/40 text-emerald-950 dark:text-emerald-100 border-primary/60 cursor-wait'
+                                : 'bg-primary/20 hover:bg-primary text-emerald-950 dark:text-emerald-100 hover:text-primary-foreground border-primary/40 hover:border-primary hover:shadow-xs'
+                            }`}
+                          >
+                            {isProcessing ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-800 dark:text-emerald-200" strokeWidth={2.4} />
+                                <span>下载中...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
+                                <span>下载音频</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </SpotlightCard>
                     );
                   })}
