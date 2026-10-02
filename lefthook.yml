@@ -10,6 +10,8 @@ pre-commit:
     typecheck:
       glob: "*.{ts,tsx}"
       run: pnpm typecheck
+    test:
+      run: pnpm test
 
 ci:
   parallel: true
@@ -18,3 +20,5 @@ ci:
       run: pnpm lint
     typecheck:
       run: pnpm typecheck
+    test:
+      run: pnpm test

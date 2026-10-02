@@ -39,11 +39,17 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run Lefthook CI (Parallel Oxlint + Typecheck)
+      - name: Run Lefthook CI (Parallel Oxlint + Typecheck + Tests)
         run: pnpm lefthook run ci
 
       - name: Verify Build
         run: pnpm build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Playwright E2E Tests
+        run: pnpm test:e2e
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
