@@ -156,7 +156,8 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose, isMaximized = fal
   return (
     <div className="flex flex-col h-full bg-card border-t border-border/80 text-foreground animate-toast-in">
       {/* 日志控制栏 */}
-      <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-muted/60 border-b border-border/70 gap-2 flex-wrap sm:flex-nowrap">
+      <div className="flex-shrink-0 flex items-center justify-between px-3.5 py-1.5 bg-muted/60 border-b border-border/70 gap-2">
+        {/* 左侧：标题与计数徽章 */}
         <div className="flex items-center gap-1.5 shrink-0">
           <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-primary/20 text-primary border border-primary/30">
             <Terminal className="w-3 h-3" strokeWidth={2.2} />
@@ -176,50 +177,53 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose, isMaximized = fal
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-          {/* 任务 TraceID 快速筛选 (支持滚轮横向滑动与鼠标拖拽) */}
-          {availableTraces.length > 0 && (
-            <div
-              ref={traceScrollRef}
-              onMouseDown={handleTraceMouseDown}
-              onMouseMove={handleTraceMouseMove}
-              onMouseUp={handleTraceMouseUpOrLeave}
-              onMouseLeave={handleTraceMouseUpOrLeave}
-              className="flex items-center bg-background rounded-lg p-0.5 border border-border/70 text-[10px] max-w-[220px] sm:max-w-[320px] overflow-x-auto scrollbar-clean cursor-grab active:cursor-grabbing select-none"
+        {/* 中间：任务 TraceID 快速筛选 (自适应伸缩容器，支持滚轮横向滑动与鼠标拖拽，绝不挤压右侧操作区) */}
+        {availableTraces.length > 0 && (
+          <div
+            ref={traceScrollRef}
+            onMouseDown={handleTraceMouseDown}
+            onMouseMove={handleTraceMouseMove}
+            onMouseUp={handleTraceMouseUpOrLeave}
+            onMouseLeave={handleTraceMouseUpOrLeave}
+            className={`flex-1 min-w-0 ${
+              isMaximized ? 'max-w-[420px]' : 'max-w-[240px]'
+            } flex items-center bg-background rounded-lg p-0.5 border border-border/70 text-[10px] overflow-x-auto scrollbar-clean cursor-grab active:cursor-grabbing select-none`}
+          >
+            <button
+              onClick={() => {
+                if (!hasDraggedTrace.current) setFilterTrace('all');
+              }}
+              className={`px-1.5 py-0.5 rounded shrink-0 transition-colors cursor-pointer ${
+                filterTrace === 'all'
+                  ? 'bg-primary/20 text-emerald-950 dark:text-emerald-100 font-bold'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
             >
+              全部
+            </button>
+            {availableTraces.map((tr) => (
               <button
+                key={tr}
                 onClick={() => {
-                  if (!hasDraggedTrace.current) setFilterTrace('all');
+                  if (!hasDraggedTrace.current) {
+                    setFilterTrace(filterTrace === tr ? 'all' : tr);
+                  }
                 }}
+                title={`仅查看任务 [#${tr}] 的穿透日志`}
                 className={`px-1.5 py-0.5 rounded shrink-0 transition-colors cursor-pointer ${
-                  filterTrace === 'all'
-                    ? 'bg-primary/20 text-emerald-950 dark:text-emerald-100 font-bold'
+                  filterTrace === tr
+                    ? 'bg-primary/25 text-emerald-950 dark:text-emerald-100 font-bold'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                全部
+                #{tr}
               </button>
-              {availableTraces.map((tr) => (
-                <button
-                  key={tr}
-                  onClick={() => {
-                    if (!hasDraggedTrace.current) {
-                      setFilterTrace(filterTrace === tr ? 'all' : tr);
-                    }
-                  }}
-                  title={`仅查看任务 [#${tr}] 的穿透日志`}
-                  className={`px-1.5 py-0.5 rounded shrink-0 transition-colors cursor-pointer ${
-                    filterTrace === tr
-                      ? 'bg-primary/25 text-emerald-950 dark:text-emerald-100 font-bold'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  #{tr}
-                </button>
-              ))}
-            </div>
-          )}
+            ))}
+          </div>
+        )}
 
+        {/* 右侧：固定操作控制区 (级别筛选器、复制、清空、全屏/还原、关闭，使用 shrink-0 ml-auto，永远完整呈现) */}
+        <div className="flex items-center gap-1.5 shrink-0 ml-auto">
           {/* 级别筛选器 */}
           <div className="flex items-center bg-background rounded-lg p-0.5 border border-border/70 text-[10px]">
             {['all', 'info', 'success', 'error'].map((lvl) => (
@@ -243,11 +247,11 @@ export const LogViewer: React.FC<LogViewerProps> = ({ onClose, isMaximized = fal
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-card hover:bg-muted text-muted-foreground hover:text-foreground border border-border/70 text-[11px] font-semibold transition-all active:scale-95 cursor-pointer shadow-2xs shrink-0"
           >
             {copied ? (
-              <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
             ) : (
-              <Copy className="w-3 h-3" />
+              <Copy className="w-3 h-3 shrink-0" />
             )}
-            <span>{copied ? '已复制' : '复制'}</span>
+            <span className="whitespace-nowrap">{copied ? '已复制' : '复制'}</span>
           </button>
 
           <button
