@@ -880,7 +880,7 @@ export const App: React.FC = () => {
     );
 
     if (res.success) {
-      showToast(`🎉 已成功推送到 ${downloader.name}！桌面端独立持久化下载，不受切换或关闭 Tab 影响。`, 'success');
+      showToast(`已成功推送到 ${downloader.name}！桌面端独立持久化下载，不受切换或关闭 Tab 影响。`, 'success');
     } else {
       showToast(`推送至 ${downloader.name} 失败: ${res.message}`, 'error');
     }

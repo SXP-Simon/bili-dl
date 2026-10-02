@@ -18,6 +18,8 @@ import {
   ArrowDown,
   RotateCcw,
   ListOrdered,
+  Globe,
+  Rocket,
 } from 'lucide-react';
 import {
   getDownloadSettings,
@@ -460,24 +462,26 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
               <button
                 type="button"
                 onClick={() => updateSetting('defaultDownloaderEngine', 'internal')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                   settings.defaultDownloaderEngine !== 'external'
                     ? 'bg-primary text-primary-foreground shadow-2xs'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                🌐 浏览器内置
+                <Globe className="w-3.5 h-3.5 shrink-0" strokeWidth={2.2} />
+                <span>浏览器内置</span>
               </button>
               <button
                 type="button"
                 onClick={() => updateSetting('defaultDownloaderEngine', 'external')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                   settings.defaultDownloaderEngine === 'external'
                     ? 'bg-primary text-primary-foreground shadow-2xs'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                🚀 外部下载器
+                <Rocket className="w-3.5 h-3.5 shrink-0" strokeWidth={2.2} />
+                <span>外部下载器</span>
               </button>
             </div>
           </div>

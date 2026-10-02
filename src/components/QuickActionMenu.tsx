@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Globe, Rocket } from 'lucide-react';
 import type { QuickActionItem, QuickMenuHeaderInfo } from '../types';
 
 interface QuickActionMenuProps {
@@ -140,24 +140,26 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
             <button
               type="button"
               onClick={() => onToggleEngine('internal')}
-              className={`flex-1 py-1 rounded-md text-center font-medium transition-all cursor-pointer flex items-center justify-center gap-1 ${
+              className={`flex-1 py-1 rounded-md text-center font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 engine !== 'external'
                   ? 'bg-card text-foreground shadow-2xs font-bold'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <span>🌐 浏览器内置</span>
+              <Globe className="w-3.5 h-3.5 shrink-0" strokeWidth={2.2} />
+              <span>浏览器内置</span>
             </button>
             <button
               type="button"
               onClick={() => onToggleEngine('external')}
-              className={`flex-1 py-1 rounded-md text-center font-medium transition-all cursor-pointer flex items-center justify-center gap-1 ${
+              className={`flex-1 py-1 rounded-md text-center font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 engine === 'external'
                   ? 'bg-primary/20 text-emerald-950 dark:text-emerald-100 font-bold shadow-2xs'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <span>🚀 {activeDownloaderShortName}</span>
+              <Rocket className="w-3.5 h-3.5 shrink-0" strokeWidth={2.2} />
+              <span>{activeDownloaderShortName}</span>
               <span
                 className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                   isCheckingExternal
