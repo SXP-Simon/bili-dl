@@ -199,5 +199,51 @@ describe('Batch Downloader Unit Tests', () => {
       const customTitle = (downloadAudio as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
       expect(customTitle).toBe('合集系列名称_第2集_合集第2话');
     });
+
+    it('should immediately dispatch to external downloader per episode without buffering full batch', async () => {
+      const addedTasks: DownloadTask[] = [];
+      const updatedTasks: Record<string, Partial<DownloadTask>> = {};
+
+      const mockExternalDownloader = {
+        id: 'abdm',
+        name: 'AB Download Manager',
+        defaultPort: 15151,
+        checkAvailability: vi.fn(),
+        sendDownload: vi.fn().mockResolvedValue({ success: true, message: 'Dispatched' }),
+        resolveConfig: vi.fn(),
+      };
+
+      (fetchCurrentMediaData as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        bvid: 'BV1season001',
+        cid: 2001,
+        title: '单集原标题',
+        pages: [{ cid: 2001, page: 1, part: '第1话' }],
+        videos: [
+          { id: 80, bandwidth: 2000000, qualityName: '1080P', codecName: 'AVC', width: 1920, height: 1080, frameRate: '30', baseUrl: 'http://v.m4s' },
+        ],
+        audios: [
+          { id: 30280, bandwidth: 320000, name: '320K', qualityDesc: '320K', codec: 'mp4a', sizeMB: '5', baseUrl: 'http://a.m4s' },
+        ],
+        subtitles: [],
+      });
+
+      await batchDownloadSeasonHighestVideos(
+        '合集系列名称',
+        [mockSeasonEpisodes[0]!],
+        (t) => addedTasks.push(t),
+        (id, p) => { updatedTasks[id] = { ...updatedTasks[id], ...p }; },
+        '合集最高画质',
+        undefined,
+        { externalDownloader: mockExternalDownloader as unknown as import('../../src/downloader').IExternalDownloader, externalPort: 15151 }
+      );
+
+      // Verify that sendDownload was called immediately on the external downloader
+      expect(mockExternalDownloader.sendDownload).toHaveBeenCalledTimes(1);
+      const payload = mockExternalDownloader.sendDownload.mock.calls[0][0];
+      expect(payload.title).toBe('合集系列名称_第1集_合集第1话');
+      expect(payload.sources).toHaveLength(2); // video + audio
+      // Task should be marked as completed
+      expect(updatedTasks['season_video_BV1season001']?.status).toBe('completed');
+    });
   });
 });

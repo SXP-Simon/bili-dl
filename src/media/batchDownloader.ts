@@ -8,8 +8,7 @@ import { logger } from '../utils/logger';
 import { getErrorMessage, isAbortError } from '../utils/error';
 import {
   buildMediaDownloadSources,
-  dispatchConsolidatedExternalBatch,
-  type ExternalBatchEntry,
+  dispatchExternalDownloadTask,
   type IExternalDownloader,
 } from '../downloader';
 import type { VideoPageItem, DownloadTask, SeasonEpisodeItem } from '../types';
@@ -51,8 +50,6 @@ export async function batchDownloadAllLowestAudios(
   }
 
   // 2. 依次调度执行各分 P 的解析与下载
-  const externalBatchEntries: ExternalBatchEntry[] = [];
-
   for (let idx = 0; idx < pages.length; idx++) {
     const page = pages[idx];
     const taskId = `batch_audio_${bvid}_${page.cid}`;
@@ -98,16 +95,25 @@ export async function batchDownloadAllLowestAudios(
       });
 
       if (options?.externalDownloader) {
+        const epUrl = typeof location !== 'undefined' ? `${location.origin}/video/${bvid}?p=${page.page}` : undefined;
         const sources = buildMediaDownloadSources({
           audio: lowestAudio,
           title: pageTitle,
-          downloadPage: typeof location !== 'undefined' ? location.href : undefined,
+          downloadPage: epUrl,
         });
-        externalBatchEntries.push({ taskId, sources, title: pageTitle });
-        onTaskUpdate(taskId, {
-          status: 'pending',
-          progress: 50,
-          message: `已解析 P${page.page} 音频流，等待批量打包投递...`,
+        await dispatchExternalDownloadTask({
+          downloader: options.externalDownloader,
+          payload: {
+            title: pageTitle,
+            sources,
+            downloadPage: epUrl,
+            bvid,
+            cid: page.cid,
+          },
+          options: { port: options.externalPort },
+          taskId,
+          onTaskUpdate,
+          taskType: 'audio',
         });
         continue;
       }
@@ -145,19 +151,6 @@ export async function batchDownloadAllLowestAudios(
       }
     }
   }
-
-  // 3. 外部下载器集中式一次性投递全量解析结果 (避免每集弹出独立新建窗口)
-  if (options?.externalDownloader && externalBatchEntries.length > 0 && !signal?.aborted) {
-    await dispatchConsolidatedExternalBatch({
-      downloader: options.externalDownloader,
-      batchTitle: `${mainTitle} (全集音频共 ${externalBatchEntries.length} 集)`,
-      entries: externalBatchEntries,
-      options: { port: options.externalPort },
-      downloadPage: typeof location !== 'undefined' ? location.href : undefined,
-      bvid,
-      onTaskUpdate,
-    });
-  }
 }
 
 /**
@@ -175,8 +168,6 @@ export async function batchDownloadAllHighestVideos(
   const mainTitle = getVideoTitle();
   const total = pages.length;
   logger.info('BatchDownload', `开始批量下载全集最高质量视频 (含音频封装): 共 ${total} 集`, { bvid }, traceId);
-
-  const externalBatchEntries: ExternalBatchEntry[] = [];
 
   // 1. 预先向全局任务队列注册所有分 P 任务（全部置为 pending 排队中）
   for (const page of pages) {
@@ -249,16 +240,19 @@ export async function batchDownloadAllHighestVideos(
           title: pageTitle,
           downloadPage: epUrl,
         });
-        externalBatchEntries.push({
+        await dispatchExternalDownloadTask({
+          downloader: options.externalDownloader,
+          payload: {
+            title: pageTitle,
+            sources,
+            downloadPage: epUrl,
+            bvid,
+            cid: page.cid,
+          },
+          options: { port: options.externalPort },
           taskId,
-          title: pageTitle,
-          sources,
+          onTaskUpdate,
           taskType: 'video',
-        });
-        onTaskUpdate(taskId, {
-          status: 'pending',
-          progress: 0,
-          message: '已解析，等待全集汇总后一次性投递到外部下载器...',
         });
         continue;
       }
@@ -300,19 +294,6 @@ export async function batchDownloadAllHighestVideos(
       }
     }
   }
-
-  // 3. 外部下载器集中式一次性投递全量解析结果 (避免每集弹出独立新建窗口)
-  if (options?.externalDownloader && externalBatchEntries.length > 0 && !signal?.aborted) {
-    await dispatchConsolidatedExternalBatch({
-      downloader: options.externalDownloader,
-      batchTitle: `${mainTitle} (全集视频共 ${externalBatchEntries.length} 集)`,
-      entries: externalBatchEntries,
-      options: { port: options.externalPort },
-      downloadPage: typeof location !== 'undefined' ? location.href : undefined,
-      bvid,
-      onTaskUpdate,
-    });
-  }
 }
 
 /**
@@ -330,8 +311,6 @@ export async function batchDownloadSeasonHighestVideos(
   const safeSeasonTitle = seasonTitle.replace(/[\\/:*?"<>|]/g, '_').trim();
   const total = episodes.length;
   logger.info('BatchDownload', `开始批量下载合集全部最高画质: ${safeSeasonTitle} (共 ${total} 集)`, null, traceId);
-
-  const externalBatchEntries: ExternalBatchEntry[] = [];
 
   // 1. 预先向全局任务队列注册所有剧集任务
   for (const ep of episodes) {
@@ -402,16 +381,19 @@ export async function batchDownloadSeasonHighestVideos(
           title: episodeFileName,
           downloadPage: epUrl,
         });
-        externalBatchEntries.push({
+        await dispatchExternalDownloadTask({
+          downloader: options.externalDownloader,
+          payload: {
+            title: episodeFileName,
+            sources,
+            downloadPage: epUrl,
+            bvid: ep.bvid,
+            cid: ep.cid,
+          },
+          options: { port: options.externalPort },
           taskId,
-          title: episodeFileName,
-          sources,
+          onTaskUpdate,
           taskType: 'video',
-        });
-        onTaskUpdate(taskId, {
-          status: 'pending',
-          progress: 0,
-          message: '已解析，等待合集汇总后一次性投递到外部下载器...',
         });
         continue;
       }
@@ -453,18 +435,6 @@ export async function batchDownloadSeasonHighestVideos(
       }
     }
   }
-
-  // 3. 外部下载器集中式一次性投递全量解析结果 (避免每集弹出独立新建窗口)
-  if (options?.externalDownloader && externalBatchEntries.length > 0 && !signal?.aborted) {
-    await dispatchConsolidatedExternalBatch({
-      downloader: options.externalDownloader,
-      batchTitle: `${safeSeasonTitle} (合集视频共 ${externalBatchEntries.length} 集)`,
-      entries: externalBatchEntries,
-      options: { port: options.externalPort },
-      downloadPage: typeof location !== 'undefined' ? location.href : undefined,
-      onTaskUpdate,
-    });
-  }
 }
 
 /**
@@ -482,8 +452,6 @@ export async function batchDownloadSeasonLowestAudios(
   const safeSeasonTitle = seasonTitle.replace(/[\\/:*?"<>|]/g, '_').trim();
   const total = episodes.length;
   logger.info('BatchDownload', `开始批量下载合集全部音频: ${safeSeasonTitle} (共 ${total} 集)`, null, traceId);
-
-  const externalBatchEntries: ExternalBatchEntry[] = [];
 
   // 1. 预先向全局任务队列注册所有剧集任务
   for (const ep of episodes) {
@@ -550,16 +518,19 @@ export async function batchDownloadSeasonLowestAudios(
           title: episodeFileName,
           downloadPage: epUrl,
         });
-        externalBatchEntries.push({
+        await dispatchExternalDownloadTask({
+          downloader: options.externalDownloader,
+          payload: {
+            title: episodeFileName,
+            sources,
+            downloadPage: epUrl,
+            bvid: ep.bvid,
+            cid: ep.cid,
+          },
+          options: { port: options.externalPort },
           taskId,
-          title: episodeFileName,
-          sources,
+          onTaskUpdate,
           taskType: 'audio',
-        });
-        onTaskUpdate(taskId, {
-          status: 'pending',
-          progress: 0,
-          message: '已解析，等待合集汇总后一次性投递到外部下载器...',
         });
         continue;
       }
@@ -596,17 +567,5 @@ export async function batchDownloadSeasonLowestAudios(
         onTaskUpdate(taskId, { status: 'error', message: `音频下载失败: ${msg}` });
       }
     }
-  }
-
-  // 3. 外部下载器集中式一次性投递全量解析结果 (避免每集弹出独立新建窗口)
-  if (options?.externalDownloader && externalBatchEntries.length > 0 && !signal?.aborted) {
-    await dispatchConsolidatedExternalBatch({
-      downloader: options.externalDownloader,
-      batchTitle: `${safeSeasonTitle} (合集音频共 ${externalBatchEntries.length} 集)`,
-      entries: externalBatchEntries,
-      options: { port: options.externalPort },
-      downloadPage: typeof location !== 'undefined' ? location.href : undefined,
-      onTaskUpdate,
-    });
   }
 }
