@@ -1,0 +1,39 @@
+name: 💡 功能建议 (Feature Request)
+description: 为 bili-dl 提出新特性、交互改进或格式支持建议
+title: '[Feature]: '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢为 bili-dl 提出建设性想法！请详细描述您期望的新功能或体验改进。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 痛点背景 (Problem & Motivation)
+      description: 当前是否存在什么不便，或者为什么需要这个新特性？
+      placeholder: 例如：在下载某些多 P 课程或长篇视频时，希望能...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 期望方案 (Proposed Solution)
+      description: 您希望 bili-dl 如何实现该功能？具体的交互设计或实现设想是什么？
+      placeholder: 详细描述期望的按钮位置、交互流程、输出格式或参数配置
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 替代方案 (Alternatives Considered)
+      description: 您是否考虑过其他现有的解决方式或插件？为什么它们不够满足需求？
+
+  - type: textarea
+    id: context
+    attributes:
+      label: 补充信息与示例 (Additional Context & Mockups)
+      description: 任何相关的参考链接、截图、UI 草图或 API 说明

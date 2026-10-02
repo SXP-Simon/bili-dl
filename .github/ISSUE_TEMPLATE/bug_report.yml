@@ -1,0 +1,85 @@
+name: 🐛 Bug 报告 (Bug Report)
+description: 提交使用过程中遇到的问题、解析失败或报错
+title: '[Bug]: '
+labels: ['bug', 'triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈问题！在提交 Bug 报告前，请确认已升级至最新版本，并已尝试清除脚本缓存或排查是否由第三方去广告/美化脚本冲突引起。
+
+  - type: input
+    id: version
+    attributes:
+      label: 脚本版本 (bili-dl Version)
+      description: 当前安装的 bili-dl 版本号（可在悬浮面板顶部查看）
+      placeholder: 例如 v1.3.4
+    validations:
+      required: true
+
+  - type: dropdown
+    id: userscript_manager
+    attributes:
+      label: 油猴脚本管理器 (Userscript Manager)
+      description: 您正在使用的脚本管理扩展
+      options:
+        - Tampermonkey (篡改猴)
+        - ScriptCat (脚本猫)
+        - Violentmonkey (暴力猴)
+        - 其他 (Other)
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: 浏览器环境 (Browser & OS)
+      description: 浏览器名称、版本以及操作系统
+      placeholder: 例如 Chrome 134 / Edge 134 / Windows 11 / macOS Sequoia
+    validations:
+      required: true
+
+  - type: input
+    id: video_url
+    attributes:
+      label: 问题视频链接 (Video URL / BVID)
+      description: 出现异常或解析失败的 B 站视频/番剧完整链接
+      placeholder: 例如 https://www.bilibili.com/video/BV1...
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述 (Description)
+      description: 清晰详细地描述遇到的具体异常
+      placeholder: 详细描述点击了什么、发生了什么、以及预期的正常效果
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重现步骤 (Steps to Reproduce)
+      description: 重现该问题的具体操作步骤
+      value: |
+        1. 打开视频页面 '...'
+        2. 点击悬浮球 '...'
+        3. 选择 '...' 进行下载
+        4. 出现错误 '...'
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 诊断日志 (Console / Diagnostic Logs)
+      description: 点击面板顶部的「日志」按钮复制的诊断日志，或浏览器 F12 控制台报错信息
+      render: shell
+      placeholder: 粘贴 [Bili-DL] 开头的相关日志输出
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截图或录屏 (Screenshots / Recordings)
+      description: 拖拽或粘贴可协助定位问题的错误截图
