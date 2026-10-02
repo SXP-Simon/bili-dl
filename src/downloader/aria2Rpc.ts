@@ -58,12 +58,13 @@ export class Aria2RpcDownloader implements IExternalDownloader {
               });
             }
           },
-          onerror: () => {
+          onerror: (err?: GMXMLHttpRequestError) => {
+            const reason = err?.error ? `: ${err.error}` : '';
             resolve({
               isAvailable: false,
               name: this.name,
               port,
-              message: `未检测到 Aria2 服务运行 (端口 ${port})`,
+              message: `未检测到 Aria2 服务运行 (端口 ${port}${reason})`,
               lastChecked: Date.now(),
             });
           },

@@ -54,12 +54,13 @@ export class ABDownloadManager implements IExternalDownloader {
               });
             }
           },
-          onerror: () => {
+          onerror: (err?: GMXMLHttpRequestError) => {
+            const reason = err?.error ? `: ${err.error}` : '';
             resolve({
               isAvailable: false,
               name: this.name,
               port,
-              message: `未检测到客户端运行 (端口 ${port} 连接被拒)`,
+              message: `未检测到客户端运行 (端口 ${port} 连接被拒${reason})`,
               lastChecked: Date.now(),
             });
           },

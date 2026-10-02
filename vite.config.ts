@@ -40,6 +40,8 @@ export default defineConfig({
           'akamaized.net',
           'xycdn.com',
           'mcdn.bilivideo.cn',
+          '127.0.0.1',
+          'localhost',
           'self'
         ]
       },
