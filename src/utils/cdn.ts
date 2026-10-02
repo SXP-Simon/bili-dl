@@ -97,14 +97,18 @@ export function getCdnNodeId(url: string): string | null {
     if (host.includes('akamai') || host.includes('akamaized') || host.includes('fastly')) {
       return 'oversea';
     }
-    // 3. 国内头部对象存储与专线
+    // 3. 头部对象存储与专线
     for (const rule of CDN_NODE_RULES) {
       if (rule.id === 'pcdn' || rule.id === 'oversea' || rule.id === 'bili') continue;
       if (rule.patterns.some((p) => host.includes(p))) {
         return rule.id;
       }
     }
-    // 4. 官方标准 bilivideo 节点
+    // 4. 通用海外节点标识
+    if (host.includes('ov.') || host.includes('-ov')) {
+      return 'oversea';
+    }
+    // 5. 官方标准 bilivideo 节点
     if (host.includes('bilivideo.com') || host.includes('bilivideo.cn')) {
       return 'bili';
     }
@@ -128,6 +132,7 @@ export function getCdnNodeLabel(url: string): string {
     if (host.includes('mcdn')) return `PCDN 节点 (${host})`;
     if (host.includes('akamai') || host.includes('akamaized')) return `Akamai 海外 (${host})`;
     if (host.includes('fastly')) return `Fastly 海外 (${host})`;
+    if (host.includes('ov.') || host.includes('-ov')) return `海外节点 (${host})`;
     if (host.includes('bilivideo.com') || host.includes('bilivideo.cn')) return `标准 bilivideo (${host})`;
     return host;
   } catch {
@@ -145,7 +150,23 @@ export function getCdnPriorityScore(url: string, customOrder?: string[]): number
   const index = order.indexOf(nodeId);
   if (index === -1) return 30;
   // 越靠前得分越高
-  return Math.max(1, (order.length - index) * 10);
+  let score = Math.max(1, (order.length - index) * 10);
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    // 属于同等级厂商时，国内原生骨干节点优先于受限的海外 ov 节点
+    if (
+      host.includes('cosov') ||
+      host.includes('aliov') ||
+      host.includes('hwov') ||
+      host.includes('bosov') ||
+      host.includes('bsov') ||
+      host.includes('ov.') ||
+      host.includes('-ov')
+    ) {
+      score -= 2;
+    }
+  } catch {}
+  return score;
 }
 
 /**
@@ -157,6 +178,45 @@ export function sortCdnUrls(urls: string[], customOrder?: string[]): string[] {
 }
 
 /**
+ * 当分配到了受限海外节点 (例如 mirrorcosov / mirroraliov 等) 时，
+ * 自动衍生可用的国内 UPOS 骨干节点备选 (B站全 UPOS 节点共享 path 与签名密钥)
+ */
+export function expandCdnCandidates(rawUrls: string[]): string[] {
+  const result: string[] = [];
+  for (const url of rawUrls) {
+    if (!url) continue;
+    result.push(url);
+    try {
+      const u = new URL(url);
+      const host = u.hostname.toLowerCase();
+      // 如果分配到了海外限制节点 (如 mirrorcosov / mirroraliov 等)，自动衍生国内骨干优质节点
+      if (
+        host.includes('cosov') ||
+        host.includes('aliov') ||
+        host.includes('hwov') ||
+        host.includes('bosov') ||
+        host.includes('bsov') ||
+        host.includes('ov.')
+      ) {
+        const domesticHosts = [
+          'upos-sz-mirrorcos.bilivideo.com',
+          'upos-sz-mirrorali.bilivideo.com',
+          'upos-sz-mirrorhw.bilivideo.com',
+          'upos-sz-mirror08c.bilivideo.com',
+          'upos-sz-upcdnws.bilivideo.com',
+        ];
+        for (const dh of domesticHosts) {
+          if (dh !== host) {
+            result.push(url.replace(host, dh));
+          }
+        }
+      }
+    } catch {}
+  }
+  return Array.from(new Set(result));
+}
+
+/**
  * 统一获取排好序的 CDN URL 列表（内置多分片并发下载与外部持久化下载器共用此逻辑）
  */
 export function getPrioritizedCdnUrls(
@@ -165,8 +225,9 @@ export function getPrioritizedCdnUrls(
   settings?: { enableCdnPriority?: boolean; cdnPriorityOrder?: string[] }
 ): string[] {
   const rawUrls = [baseUrl, ...(backupUrls || [])].filter(Boolean);
+  const expanded = expandCdnCandidates(rawUrls);
   if (settings?.enableCdnPriority === false) {
-    return Array.from(new Set(rawUrls));
+    return expanded;
   }
-  return sortCdnUrls(rawUrls, settings?.cdnPriorityOrder);
+  return sortCdnUrls(expanded, settings?.cdnPriorityOrder);
 }

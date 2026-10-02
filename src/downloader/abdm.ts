@@ -7,6 +7,7 @@ import type {
 } from './types';
 import { logger } from '../utils/logger';
 import { getErrorMessage } from '../utils/error';
+import { getBilibiliCookieHeader } from '../utils/cookie';
 
 /**
  * AB Download Manager (ABDM) 外部桌面下载器适配器
@@ -96,84 +97,93 @@ export class ABDownloadManager implements IExternalDownloader {
   }
 
   /**
-   * 将音视频等媒体流发送至 ABDM 客户端 /add 接口
+   * 将音视频等媒体流发送至 ABDM 客户端
+   * 采用 /start-headless-download 原生直达队列接口：
+   * 1. 规避 /add 交互弹窗导致 headers 丢失 (引发 B 站 CDN 403 Forbidden) 的已知问题 (ABDM #649)
+   * 2. 规避 /add 重新探测链接覆盖 suggestedName (ABDM #905)，确保保留用户视频标题与清晰度命名
    */
   public async sendDownload(
     payload: ExternalDownloadPayload,
-    options?: { port?: number }
+    options?: { port?: number; dir?: string }
   ): Promise<{ success: boolean; message: string; details?: unknown }> {
     const port = options?.port || this.defaultPort;
-    const targetUrl = `http://127.0.0.1:${port}/add`;
+    const headlessUrl = `http://127.0.0.1:${port}/start-headless-download`;
     const defaultPage = payload.downloadPage || (typeof location !== 'undefined' ? location.href : 'https://www.bilibili.com/');
-    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Mozilla/5.0';
-    const cookie = typeof document !== 'undefined' && document.cookie ? document.cookie : '';
+    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+    const cookie = await getBilibiliCookieHeader();
+    const standardReferer = 'https://www.bilibili.com/';
 
-    // 格式化符合 ABDM REST-API.yml 的请求体 (数组形式)
-    const requestBody = payload.sources.map((src) => ({
-      link: src.url,
-      headers: {
-        'Referer': src.downloadPage || defaultPage,
-        'Origin': 'https://www.bilibili.com',
-        'User-Agent': userAgent,
-        ...(cookie ? { 'Cookie': cookie } : {}),
-        ...src.headers,
-      },
-      downloadPage: src.downloadPage || defaultPage,
-    }));
-
-    if (requestBody.length === 0) {
+    const sources = payload.sources || [];
+    if (sources.length === 0) {
       return { success: false, message: '没有有效的媒体下载链接可投递' };
     }
 
     logger.info(
       'ABDM',
-      `正在向 AB Download Manager (127.0.0.1:${port}) 推送下载任务: ${payload.title} (共 ${requestBody.length} 个流)`
+      `正在向 AB Download Manager (127.0.0.1:${port}) 推送下载任务: ${payload.title} (共 ${sources.length} 个流)`
     );
 
-    return new Promise((resolve) => {
-      try {
+    const postSingleSource = (src: import('./types').ExternalDownloadSource) => {
+      const headers: Record<string, string> = {
+        'Referer': standardReferer,
+        'Origin': 'https://www.bilibili.com',
+        'User-Agent': userAgent,
+        ...(cookie ? { 'Cookie': cookie } : {}),
+        ...src.headers,
+      };
+
+      const body = {
+        downloadSource: {
+          link: src.url,
+          headers,
+          downloadPage: src.downloadPage || defaultPage,
+        },
+        name: src.filename,
+        folder: options?.dir || undefined,
+        queueId: 0,
+      };
+
+      return new Promise<{ status: number; text: string }>((resolve, reject) => {
         GM_xmlhttpRequest({
           method: 'POST',
-          url: targetUrl,
+          url: headlessUrl,
           headers: {
             'Content-Type': 'application/json',
           },
-          data: JSON.stringify(requestBody),
-          timeout: 5000,
+          data: JSON.stringify(body),
+          timeout: 8000,
           onload: (res: GMXMLHttpRequestResponse) => {
             if (res.status >= 200 && res.status < 300) {
-              logger.success(
-                'ABDM',
-                `已成功投递至 AB Download Manager: ${payload.title} (共 ${requestBody.length} 个流任务进入桌面队列)`
-              );
-              resolve({
-                success: true,
-                message: `成功推送到 AB Download Manager (共 ${requestBody.length} 个流任务)`,
-                details: res.responseText,
-              });
+              resolve({ status: res.status, text: res.responseText || '' });
             } else {
-              const errMsg = `ABDM 服务端拒绝 (HTTP ${res.status}): ${res.statusText || res.responseText || '未知错误'}`;
-              logger.warn('ABDM', errMsg);
-              resolve({ success: false, message: errMsg });
+              reject(new Error(`HTTP ${res.status}: ${res.statusText || res.responseText || 'ABDM 拒绝接收'}`));
             }
           },
           onerror: (err: GMXMLHttpRequestError) => {
-            const msg = `网络请求失败: ${err.error || '无法连接到 127.0.0.1:' + port}`;
-            logger.warn('ABDM', msg);
-            resolve({ success: false, message: msg });
+            reject(new Error(err?.error || `无法连接到 127.0.0.1:${port}`));
           },
           ontimeout: () => {
-            const msg = `推送超时: AB Download Manager (127.0.0.1:${port}) 未在 5s 内确认`;
-            logger.warn('ABDM', msg);
-            resolve({ success: false, message: msg });
+            reject(new Error(`端口 ${port} 请求超时`));
           },
         });
-      } catch (err) {
-        const msg = `投递异常: ${getErrorMessage(err)}`;
-        logger.error('ABDM', msg);
-        resolve({ success: false, message: msg });
-      }
-    });
+      });
+    };
+
+    try {
+      await Promise.all(sources.map((s) => postSingleSource(s)));
+      logger.success(
+        'ABDM',
+        `已成功投递至 AB Download Manager: ${payload.title} (共 ${sources.length} 个流任务直接进入队列)`
+      );
+      return {
+        success: true,
+        message: `成功推送到 AB Download Manager (共 ${sources.length} 个流任务)`,
+      };
+    } catch (err) {
+      const msg = `投递失败: ${getErrorMessage(err)}`;
+      logger.warn('ABDM', msg);
+      return { success: false, message: msg };
+    }
   }
 }
 

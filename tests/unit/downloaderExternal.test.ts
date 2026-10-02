@@ -95,13 +95,20 @@ describe('External Downloader Architecture Unit Tests (OCP)', () => {
   });
 
   describe('ABDownloadManager sendDownload', () => {
-    it('should format payload matching ABDM REST-API.yml schema', async () => {
-      let capturedPayload: unknown = null;
-      let capturedUrl = '';
+    it('should format payload matching ABDM REST-API.yml schema via /start-headless-download', async () => {
+      const capturedCalls: Array<{
+        url: string;
+        body: {
+          downloadSource: { link: string; headers: Record<string, string>; downloadPage: string };
+          name: string;
+        };
+      }> = [];
 
       vi.mocked(GM_xmlhttpRequest).mockImplementation((opts) => {
-        capturedUrl = opts.url;
-        capturedPayload = JSON.parse(opts.data as string);
+        capturedCalls.push({
+          url: opts.url,
+          body: JSON.parse(opts.data as string),
+        });
         setTimeout(() => {
           opts.onload?.({
             status: 200,
@@ -132,14 +139,13 @@ describe('External Downloader Architecture Unit Tests (OCP)', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(capturedUrl).toBe('http://127.0.0.1:15151/add');
-      expect(Array.isArray(capturedPayload)).toBe(true);
-      const items = capturedPayload as Array<{ link: string; headers: Record<string, string>; downloadPage: string }>;
-      expect(items).toHaveLength(2);
-      expect(items[0].link).toBe('https://cn-upcdn.bilivideo.com/video.m4s');
-      expect(items[0].headers.Referer).toBe('https://www.bilibili.com/video/BV1test');
-      expect(items[0].downloadPage).toBe('https://www.bilibili.com/video/BV1test');
-      expect(items[1].link).toBe('https://cn-upcdn.bilivideo.com/audio.m4s');
+      expect(capturedCalls).toHaveLength(2);
+      expect(capturedCalls[0].url).toBe('http://127.0.0.1:15151/start-headless-download');
+      expect(capturedCalls[0].body.downloadSource.link).toBe('https://cn-upcdn.bilivideo.com/video.m4s');
+      expect(capturedCalls[0].body.downloadSource.headers.Referer).toBe('https://www.bilibili.com/');
+      expect(capturedCalls[0].body.name).toBe('test_video.m4s');
+      expect(capturedCalls[1].url).toBe('http://127.0.0.1:15151/start-headless-download');
+      expect(capturedCalls[1].body.name).toBe('test_audio.m4s');
     });
   });
 

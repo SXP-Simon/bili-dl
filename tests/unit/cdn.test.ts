@@ -20,6 +20,8 @@ describe('CDN Priority & Quality Utilities', () => {
     expect(getCdnNodeId('https://upos-sz-upcdnws.bilivideo.com/video.m4s')).toBe('ws');
     expect(getCdnNodeId('https://xy1x2x3.mcdn.bilivideo.cn:8082/video.m4s')).toBe('pcdn');
     expect(getCdnNodeId('https://upos-sz-mirrorakamai.bilivideo.com/video.m4s')).toBe('oversea');
+    expect(getCdnNodeId('https://upos-sz-mirrorcosov.bilivideo.com/video.m4s')).toBe('cos');
+    expect(getCdnNodeId('https://upos-sz-mirroraliov.bilivideo.com/video.m4s')).toBe('ali');
     expect(getCdnNodeId('https://cn-gdfs-cmcc-01.bilivideo.com/video.m4s')).toBe('bili');
     expect(getCdnNodeId('https://unknown-domain.example.com/video.m4s')).toBeNull();
   });
@@ -28,6 +30,9 @@ describe('CDN Priority & Quality Utilities', () => {
     const label = getCdnNodeLabel('https://upos-sz-mirrorcos.bilivideo.com/video.m4s');
     expect(label).toContain('腾讯云 COS');
     expect(label).toContain('upos-sz-mirrorcos.bilivideo.com');
+
+    const overseaLabel = getCdnNodeLabel('https://upos-hz-mirrorakam.akamaized.net/video.m4s');
+    expect(overseaLabel).toContain('Akamai 海外');
   });
 
   it('should calculate priority scores respecting custom CDN order', () => {
@@ -91,5 +96,14 @@ describe('CDN Priority & Quality Utilities', () => {
     expect(normalized[0]).toBe('ali');
     expect(normalized.length).toBe(DEFAULT_CDN_ORDER.length);
     expect(normalized).toContain('cos');
+  });
+
+  it('should automatically synthesize domestic UPOS mirrors when baseUrl is overseas mirrorcosov', () => {
+    const overseasUrl = 'https://upos-sz-mirrorcosov.bilivideo.com/upgcxcode/14/69/840546914/840546914-1-30077.m4s?e=123';
+    const prioritized = getPrioritizedCdnUrls(overseasUrl, []);
+    // Domestic mirrorcos should be synthesized and prioritized at #1
+    expect(prioritized[0]).toContain('upos-sz-mirrorcos.bilivideo.com');
+    // Overseas mirrorcosov should be lower than domestic mirrorcos
+    expect(prioritized.indexOf(overseasUrl)).toBeGreaterThan(0);
   });
 });

@@ -7,6 +7,7 @@ import type {
 } from './types';
 import { logger } from '../utils/logger';
 import { getErrorMessage } from '../utils/error';
+import { getBilibiliCookieHeader } from '../utils/cookie';
 
 /**
  * Aria2 / Motrix JSON-RPC 外部下载器适配器 (支持 6800 / 16800 端口)
@@ -105,15 +106,13 @@ export class Aria2RpcDownloader implements IExternalDownloader {
   ): Promise<{ success: boolean; message: string; details?: unknown }> {
     const port = options?.port || this.defaultPort;
     const url = `http://127.0.0.1:${port}/jsonrpc`;
-    const defaultPage = payload.downloadPage || (typeof location !== 'undefined' ? location.href : 'https://www.bilibili.com/');
     const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Mozilla/5.0';
-    const cookie = typeof document !== 'undefined' && document.cookie ? document.cookie : '';
+    const cookie = await getBilibiliCookieHeader();
 
     let successCount = 0;
     for (const src of payload.sources) {
-      const referer = src.downloadPage || defaultPage;
       const headerList = [
-        `Referer: ${referer}`,
+        'Referer: https://www.bilibili.com/',
         'Origin: https://www.bilibili.com',
         `User-Agent: ${userAgent}`,
       ];

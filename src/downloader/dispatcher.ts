@@ -24,11 +24,11 @@ export function buildMediaDownloadSources(params: BuildMediaSourcesParams): Exte
   const safeTitle = title.replace(/[\\/:*?"<>|]/g, '_');
   const sources: ExternalDownloadSource[] = [];
 
-  const referer = downloadPage || (typeof location !== 'undefined' ? location.href : 'https://www.bilibili.com/');
+  const pageUrl = downloadPage || (typeof location !== 'undefined' ? location.href : 'https://www.bilibili.com/');
   const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Mozilla/5.0';
   const cookie = typeof document !== 'undefined' && document.cookie ? document.cookie : '';
   const baseHeaders: Record<string, string> = {
-    'Referer': referer,
+    'Referer': 'https://www.bilibili.com/',
     'Origin': 'https://www.bilibili.com',
     'User-Agent': userAgent,
     ...(cookie ? { 'Cookie': cookie } : {}),
@@ -42,7 +42,7 @@ export function buildMediaDownloadSources(params: BuildMediaSourcesParams): Exte
       filename: `${safeTitle}_${video.qualityName}_${video.codecName}.m4s`,
       type: 'video',
       qualityDesc: video.qualityName,
-      downloadPage: referer,
+      downloadPage: pageUrl,
       headers: { ...baseHeaders },
     });
   }
@@ -56,7 +56,7 @@ export function buildMediaDownloadSources(params: BuildMediaSourcesParams): Exte
       filename: `${safeTitle}_${audio.name}.${ext}`,
       type: 'audio',
       qualityDesc: audio.name || audio.qualityDesc,
-      downloadPage: referer,
+      downloadPage: pageUrl,
       headers: { ...baseHeaders },
     });
   }

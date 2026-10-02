@@ -28,7 +28,8 @@ export default defineConfig({
           'GM_xmlhttpRequest',
           'GM_setValue',
           'GM_getValue',
-          'GM_setClipboard'
+          'GM_setClipboard',
+          'GM_cookie'
         ],
         connect: [
           'bilibili.com',
