@@ -1,5 +1,11 @@
-import { GM_xmlhttpRequest } from '$';
+import {
+  GM_xmlhttpRequest,
+  type GMXMLHttpRequestProgress,
+  type GMXMLHttpRequestResponse,
+  type GMXMLHttpRequestError,
+} from '$';
 import { logger } from '../utils/logger';
+import { getErrorMessage, isAbortError } from '../utils/error';
 
 export interface RequestProgressCallback {
   (loaded: number, total: number, speed?: string): void;
@@ -30,7 +36,7 @@ export async function requestBuffer(
         'Referer': 'https://www.bilibili.com/',
         'User-Agent': navigator.userAgent,
       },
-      onprogress: (event: any) => {
+      onprogress: (event: GMXMLHttpRequestProgress) => {
         if (!hasFinished && onProgress && event.lengthComputable) {
           const now = Date.now();
           const timeDiff = (now - lastTime) / 1000;
@@ -45,7 +51,7 @@ export async function requestBuffer(
           onProgress(event.loaded, event.total, speedStr);
         }
       },
-      onload: (response: any) => {
+      onload: (response: GMXMLHttpRequestResponse) => {
         hasFinished = true;
         if (response.status >= 200 && response.status < 300) {
           resolve(response.response as ArrayBuffer);
@@ -53,7 +59,7 @@ export async function requestBuffer(
           reject(new Error(`HTTP ${response.status}: ${response.statusText}`));
         }
       },
-      onerror: (err: any) => {
+      onerror: (err: GMXMLHttpRequestError) => {
         hasFinished = true;
         reject(new Error(err.error || 'Network error'));
       },
@@ -66,7 +72,7 @@ export async function requestBuffer(
           if (!hasFinished) {
             hasFinished = true;
             try {
-              (req as any)?.abort?.();
+              req.abort();
             } catch {}
             reject(new DOMException('Download aborted by user', 'AbortError'));
           }
@@ -112,7 +118,7 @@ async function probeContentLength(urls: string[]): Promise<number> {
           'User-Agent': navigator.userAgent,
           'Range': 'bytes=0-0',
         },
-        onload: (res: any) => {
+        onload: (res: GMXMLHttpRequestResponse) => {
           const headers = res.responseHeaders || '';
           const contentRange = headers.match(/content-range:\s*bytes\s+\d+-\d+\/(\d+)/i);
           if (contentRange && contentRange[1]) {
@@ -194,7 +200,7 @@ async function fetchChunkWithRetry(
   streamLabel?: string,
   signal?: AbortSignal
 ): Promise<Uint8Array> {
-  let lastError: any = null;
+  let lastError: unknown = null;
   const streamPrefix = streamLabel ? `[${streamLabel}] ` : '';
 
   const chunkSize = end - start + 1;
@@ -204,7 +210,7 @@ async function fetchChunkWithRetry(
       throw new DOMException('Download aborted by user', 'AbortError');
     }
 
-    const targetUrl = urls[(attempt - 1) % urls.length];
+    const targetUrl = urls[(attempt - 1) % urls.length] || urls[0] || '';
     const currentNodeLabel = getCdnNodeLabel(targetUrl);
 
     // 申请全局并发配额槽位（排队保证不超出 IP 阈值）
@@ -241,13 +247,13 @@ async function fetchChunkWithRetry(
             'User-Agent': navigator.userAgent,
             'Range': `bytes=${start}-${end}`,
           },
-          onprogress: (event: any) => {
+          onprogress: (event: GMXMLHttpRequestProgress) => {
             if (!hasFinished) {
               lastActivityTime = Date.now();
               onChunkProgress(event.loaded || 0);
             }
           },
-          onload: (response: any) => {
+          onload: (response: GMXMLHttpRequestResponse) => {
             if (hasFinished) return;
             hasFinished = true;
             cleanup();
@@ -265,7 +271,7 @@ async function fetchChunkWithRetry(
             cleanup();
             reject(new Error(`分片 ${start}-${end} 传输耗时超出保护阈值 (${(dynamicTimeout / 1000).toFixed(0)}s)`));
           },
-          onerror: (err: any) => {
+          onerror: (err: GMXMLHttpRequestError) => {
             if (hasFinished) return;
             hasFinished = true;
             cleanup();
@@ -282,7 +288,7 @@ async function fetchChunkWithRetry(
                 hasFinished = true;
                 cleanup();
                 try {
-                  (req as any)?.abort?.();
+                  req.abort();
                 } catch {}
                 reject(new DOMException('Download aborted by user', 'AbortError'));
               }
@@ -303,7 +309,7 @@ async function fetchChunkWithRetry(
             hasFinished = true;
             cleanup();
             try {
-              (req as any)?.abort?.();
+              req.abort();
             } catch {}
             reject(new Error(`分片 ${start}-${end} 数据传输停滞卡死 (20s 无新数据响应)`));
           }
@@ -312,17 +318,18 @@ async function fetchChunkWithRetry(
 
       release();
       return result;
-    } catch (err: any) {
+    } catch (err: unknown) {
       release();
-      if (signal?.aborted || (err as any)?.name === 'AbortError') {
+      if (signal?.aborted || isAbortError(err)) {
         throw new DOMException('Download aborted by user', 'AbortError');
       }
       lastError = err;
-      const nextTargetUrl = urls[attempt % urls.length];
+      const nextTargetUrl = urls[attempt % urls.length] || urls[0] || '';
       const nextNodeLabel = getCdnNodeLabel(nextTargetUrl);
+      const errMsg = getErrorMessage(err);
       logger.warn(
         'Range',
-        `${streamPrefix}分片 [${start}-${end}] 在节点【${currentNodeLabel}】第 ${attempt}/${retries} 次尝试失败，正在无缝切换至备用节点【${nextNodeLabel}】: ${err.message}`,
+        `${streamPrefix}分片 [${start}-${end}] 在节点【${currentNodeLabel}】第 ${attempt}/${retries} 次尝试失败，正在无缝切换至备用节点【${nextNodeLabel}】: ${errMsg}`,
         null,
         traceId
       );
@@ -334,7 +341,10 @@ async function fetchChunkWithRetry(
     }
   }
 
-  throw lastError || new Error(`Chunk ${start}-${end} download failed after ${retries} attempts`);
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+  throw new Error(`Chunk ${start}-${end} download failed after ${retries} attempts: ${String(lastError)}`);
 }
 
 /**
@@ -461,13 +471,14 @@ export async function requestChunkedBuffer(
     }
     logger.success('Range', `${streamPrefix}分片数据传输完毕: ${(totalBytes / 1024 / 1024).toFixed(1)} MB 全部就绪`, null, traceId);
     return finalBuffer.buffer as ArrayBuffer;
-  } catch (err: any) {
+  } catch (err: unknown) {
     clearInterval(timer);
-    if (signal?.aborted || (err as any)?.name === 'AbortError') {
+    if (signal?.aborted || isAbortError(err)) {
       logger.warn('Range', `${streamPrefix}分片下载已主动取消并释放连接`, null, traceId);
       throw new DOMException('Download aborted by user', 'AbortError');
     }
-    logger.error('Range', `${streamPrefix}多连接分片下载失败: ${err.message}`, err, traceId);
+    const errMsg = getErrorMessage(err);
+    logger.error('Range', `${streamPrefix}多连接分片下载失败: ${errMsg}`, err, traceId);
     throw err;
   }
 }
@@ -475,7 +486,7 @@ export async function requestChunkedBuffer(
 /**
  * 获取 JSON 接口数据
  */
-export async function requestJson<T = any>(url: string): Promise<T> {
+export async function requestJson<T = unknown>(url: string): Promise<T> {
   return new Promise((resolve, reject) => {
     GM_xmlhttpRequest({
       method: 'GET',
@@ -484,7 +495,7 @@ export async function requestJson<T = any>(url: string): Promise<T> {
       headers: {
         'Referer': 'https://www.bilibili.com/',
       },
-      onload: (res: any) => {
+      onload: (res: GMXMLHttpRequestResponse) => {
         if (res.status >= 200 && res.status < 300) {
           const data = typeof res.response === 'string' ? JSON.parse(res.response) : res.response;
           resolve(data as T);
@@ -492,7 +503,7 @@ export async function requestJson<T = any>(url: string): Promise<T> {
           reject(new Error(`HTTP ${res.status}: ${res.statusText}`));
         }
       },
-      onerror: (err: any) => reject(new Error(err.error || 'Request JSON error')),
+      onerror: (err: GMXMLHttpRequestError) => reject(new Error(err.error || 'Request JSON error')),
     });
   });
 }

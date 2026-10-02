@@ -108,7 +108,7 @@ export interface LogEntry {
   tag: string;
   message: string;
   traceId?: string;
-  details?: any;
+  details?: unknown;
 }
 
 export interface QuickMenuHeaderInfo {

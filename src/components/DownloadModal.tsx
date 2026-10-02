@@ -23,6 +23,7 @@ import { SpotlightCard } from './SpotlightCard';
 import { TabPill } from './TabPill';
 import { ProgressBar } from './ProgressBar';
 import { EpisodePicker } from './EpisodePicker';
+import { getErrorMessage } from '../utils/error';
 import { SeasonPicker } from './SeasonPicker';
 import { LogViewer } from './LogViewer';
 import { SettingsPanel } from './SettingsPanel';
@@ -112,8 +113,9 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
       const blob = await fetchDanmakuAss(data.cid, data.title, traceId);
       saveBlobAsFile(blob, `${data.title}-弹幕.ass`, data.title);
       onShowToast('弹幕文件已转换完成并保存', 'success');
-    } catch (err: any) {
-      onShowToast(`弹幕导出失败: ${err.message}`, 'error');
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      onShowToast(`弹幕导出失败: ${msg}`, 'error');
     }
   };
 
@@ -123,8 +125,9 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
       const blob = await fetchSubtitleSrt(subUrl, traceId);
       saveBlobAsFile(blob, `${data.title}-${lanDoc}字幕.srt`, data.title);
       onShowToast(`${lanDoc}字幕已保存为 SRT 格式`, 'success');
-    } catch (err: any) {
-      onShowToast(`字幕导出失败: ${err.message}`, 'error');
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      onShowToast(`字幕导出失败: ${msg}`, 'error');
     }
   };
 

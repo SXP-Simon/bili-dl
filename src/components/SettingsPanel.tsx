@@ -21,6 +21,7 @@ import {
   clearCachedDirectoryHandle,
   type DownloadSettings,
 } from '../utils/settings';
+import { getErrorMessage } from '../utils/error';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -63,8 +64,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
         setHasDirHandle(true);
         onShowToast(`已成功授权本地磁盘目录: ${res.name}`, 'success');
       }
-    } catch (err: any) {
-      onShowToast(`授权目录失败: ${err.message}`, 'error');
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      onShowToast(`授权目录失败: ${msg}`, 'error');
     }
   };
 

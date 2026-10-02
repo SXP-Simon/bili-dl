@@ -10,6 +10,7 @@ import { fetchSubtitleSrt } from './media/subtitle';
 import { batchDetectAndDownloadSubtitles, batchDownloadSeasonSubtitlesZip } from './media/batchSubtitle';
 import { batchDownloadAllLowestAudios, batchDownloadAllHighestVideos, batchDownloadSeasonHighestVideos, batchDownloadSeasonLowestAudios } from './media/batchDownloader';
 import { logger } from './utils/logger';
+import { getErrorMessage, isAbortError } from './utils/error';
 import type { MediaResourceData, VideoStreamItem, AudioStreamItem, DownloadTask, QuickActionItem, QuickMenuHeaderInfo } from './types';
 
 export const App: React.FC = () => {
@@ -34,6 +35,7 @@ export const App: React.FC = () => {
 
   // 记录导航序列号，防止快速切集时的竞态乱序覆盖
   const navEpochRef = useRef(0);
+  const handleOpenModalRef = useRef<() => void>(() => {});
 
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
@@ -107,7 +109,7 @@ export const App: React.FC = () => {
 
         // 若当前面板处于打开状态，自动为新视频重新解析
         if (isModalOpenRef.current) {
-          handleOpenModal();
+          handleOpenModalRef.current();
         } else {
           // 预拉取新页面视频数据并校验 epoch 避免竞态
           fetchCurrentMediaData()
@@ -213,8 +215,9 @@ export const App: React.FC = () => {
       } else {
         showToast('未能解析到当前视频资源，请确认处于播放页面', 'error');
       }
-    } catch (err: any) {
-      showToast(`解析失败: ${err.message}`, 'error');
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      showToast(`解析失败: ${msg}`, 'error');
     } finally {
       setLoading(false);
       setLoadingCid(null);
@@ -222,6 +225,9 @@ export const App: React.FC = () => {
       setIsSwitching(false);
     }
   };
+  useEffect(() => {
+    handleOpenModalRef.current = handleOpenModal;
+  });
 
     const handleSelectEpisode = (cid: number) => {
     handleOpenModal(cid, mediaData?.bvid);
@@ -270,19 +276,20 @@ export const App: React.FC = () => {
       if (!controller.signal.aborted) {
         showToast(`MP4 无损封装完成 (${taskTitle})`, 'success');
       }
-    } catch (err: any) {
-      if (controller.signal.aborted || err?.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (controller.signal.aborted || isAbortError(err)) {
         updateTaskProgress(taskId, {
           status: 'cancelled',
           message: '已手动取消下载',
         });
         showToast(`任务已取消 (${taskTitle})`, 'info');
       } else {
+        const msg = getErrorMessage(err);
         updateTaskProgress(taskId, {
           status: 'error',
-          message: `下载失败: ${err.message}`,
+          message: `下载失败: ${msg}`,
         });
-        showToast(`下载失败: ${err.message}`, 'error');
+        showToast(`下载失败: ${msg}`, 'error');
       }
     } finally {
       activeControllers.current.delete(taskId);
@@ -329,19 +336,20 @@ export const App: React.FC = () => {
         const ext = isFlac ? 'flac' : 'm4a';
         showToast(`音频已保存为 .${ext} 文件 (${taskTitle})`, 'success');
       }
-    } catch (err: any) {
-      if (controller.signal.aborted || err?.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (controller.signal.aborted || isAbortError(err)) {
         updateTaskProgress(taskId, {
           status: 'cancelled',
           message: '已手动取消下载',
         });
         showToast(`音频任务已取消 (${taskTitle})`, 'info');
       } else {
+        const msg = getErrorMessage(err);
         updateTaskProgress(taskId, {
           status: 'error',
-          message: `下载失败: ${err.message}`,
+          message: `下载失败: ${msg}`,
         });
-        showToast(`音频下载失败: ${err.message}`, 'error');
+        showToast(`音频下载失败: ${msg}`, 'error');
       }
     } finally {
       activeControllers.current.delete(taskId);
@@ -442,23 +450,24 @@ export const App: React.FC = () => {
         updateTaskProgress(taskId, {
           status: 'completed',
           progress: 100,
-          message: `打包完成: 提取到 ${res.found} 集字幕 (${res.fileName})`,
+          message: `打包完成: 提取到 ${res.foundCount} 集字幕`,
         });
-        showToast(`全集字幕已成功打包并保存 (${res.found}/${res.total} 集)`, 'success');
+        showToast(`全集字幕已成功打包并保存 (${res.foundCount}/${data.pages.length} 集)`, 'success');
       }
-    } catch (err: any) {
-      if (controller.signal.aborted || err?.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (controller.signal.aborted || isAbortError(err)) {
         updateTaskProgress(taskId, {
           status: 'cancelled',
           message: '已手动取消字幕打包',
         });
         showToast('全集字幕打包任务已取消', 'info');
       } else {
+        const msg = getErrorMessage(err);
         updateTaskProgress(taskId, {
           status: 'error',
-          message: `打包失败: ${err.message}`,
+          message: `打包失败: ${msg}`,
         });
-        showToast(`全集字幕打包失败: ${err.message}`, 'error');
+        showToast(`全集字幕打包失败: ${msg}`, 'error');
       }
     } finally {
       activeControllers.current.delete(taskId);
@@ -511,23 +520,24 @@ export const App: React.FC = () => {
         updateTaskProgress(taskId, {
           status: 'completed',
           progress: 100,
-          message: `合集字幕打包完成: 提取到 ${res.found} 集 (${res.fileName})`,
+          message: `合集字幕打包完成: 提取到 ${res.foundCount} 集`,
         });
-        showToast(`合集字幕已成功打包并保存 (${res.found}/${res.total} 集)`, 'success');
+        showToast(`合集字幕已成功打包并保存 (${res.foundCount}/${season.episodes.length} 集)`, 'success');
       }
-    } catch (err: any) {
-      if (controller.signal.aborted || err?.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (controller.signal.aborted || isAbortError(err)) {
         updateTaskProgress(taskId, {
           status: 'cancelled',
           message: '已手动取消合集字幕打包',
         });
         showToast('合集字幕打包任务已取消', 'info');
       } else {
+        const msg = getErrorMessage(err);
         updateTaskProgress(taskId, {
           status: 'error',
-          message: `打包失败: ${err.message}`,
+          message: `打包失败: ${msg}`,
         });
-        showToast(`合集字幕打包失败: ${err.message}`, 'error');
+        showToast(`合集字幕打包失败: ${msg}`, 'error');
       }
     } finally {
       activeControllers.current.delete(taskId);
@@ -561,11 +571,12 @@ export const App: React.FC = () => {
       if (!controller.signal.aborted) {
         showToast(`合集全部 ${season.episodes.length} 集音频下载已完成`, 'success');
       }
-    } catch (err: any) {
-      if (controller.signal.aborted || err?.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (controller.signal.aborted || isAbortError(err)) {
         showToast('合集音频下载任务已取消', 'info');
       } else {
-        showToast(`合集音频下载失败: ${err.message}`, 'error');
+        const msg = getErrorMessage(err);
+        showToast(`合集音频下载失败: ${msg}`, 'error');
       }
     } finally {
       activeControllers.current.delete(taskId);
@@ -599,11 +610,12 @@ export const App: React.FC = () => {
       if (!controller.signal.aborted) {
         showToast(`合集全部 ${season.episodes.length} 集视频合成任务已完成`, 'success');
       }
-    } catch (err: any) {
-      if (controller.signal.aborted || err?.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (controller.signal.aborted || isAbortError(err)) {
         showToast('合集视频下载任务已取消', 'info');
       } else {
-        showToast(`合集视频合成失败: ${err.message}`, 'error');
+        const msg = getErrorMessage(err);
+        showToast(`合集视频合成失败: ${msg}`, 'error');
       }
     } finally {
       activeControllers.current.delete(taskId);
@@ -646,11 +658,12 @@ export const App: React.FC = () => {
       if (!controller.signal.aborted) {
         showToast(`全集 ${data.pages.length} P 音频批量下载任务已完成`, 'success');
       }
-    } catch (err: any) {
-      if (controller.signal.aborted || err?.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (controller.signal.aborted || isAbortError(err)) {
         showToast('全集音频下载任务已取消', 'info');
       } else {
-        showToast(`批量音频下载失败: ${err.message}`, 'error');
+        const msg = getErrorMessage(err);
+        showToast(`批量音频下载失败: ${msg}`, 'error');
       }
     } finally {
       activeControllers.current.delete(taskId);
@@ -694,11 +707,12 @@ export const App: React.FC = () => {
       if (!controller.signal.aborted) {
         showToast(`全集 ${data.pages.length} P 视频批量合成任务已完成`, 'success');
       }
-    } catch (err: any) {
-      if (controller.signal.aborted || err?.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (controller.signal.aborted || isAbortError(err)) {
         showToast('全集视频下载任务已取消', 'info');
       } else {
-        showToast(`批量视频合成失败: ${err.message}`, 'error');
+        const msg = getErrorMessage(err);
+        showToast(`批量视频合成失败: ${msg}`, 'error');
       }
     } finally {
       activeControllers.current.delete(taskId);
@@ -706,7 +720,7 @@ export const App: React.FC = () => {
   };
 
   const handleFloatButtonContextMenu = (
-    e: React.MouseEvent,
+    _e: React.MouseEvent,
     pos: {
       x: number;
       y: number;

@@ -164,7 +164,7 @@ export function md5(str: string): string {
 
 let cachedWbiKeys: { imgKey: string; subKey: string; expiresAt: number } | null = null;
 
-function getMixinKey(orig: string): string {
+export function getMixinKey(orig: string): string {
   let result = '';
   for (let i = 0; i < 32; i++) {
     const idx = mixinKeyEncTab[i];
@@ -173,6 +173,17 @@ function getMixinKey(orig: string): string {
     }
   }
   return result;
+}
+
+import { BiliNavResponseSchema } from '../types/schemas';
+
+interface WindowWithInitialState extends Window {
+  __INITIAL_STATE__?: {
+    wbi_img?: {
+      img_url?: string;
+      sub_url?: string;
+    };
+  };
 }
 
 /**
@@ -185,8 +196,8 @@ export async function getWbiKeys(): Promise<{ imgKey: string; subKey: string }> 
   }
 
   // 1. 尝试从页面注入的全局状态获取
-  const anyWindow = window as any;
-  const pageWbi = anyWindow.__INITIAL_STATE__?.wbi_img;
+  const win = window as unknown as WindowWithInitialState;
+  const pageWbi = win.__INITIAL_STATE__?.wbi_img;
   if (pageWbi?.img_url && pageWbi?.sub_url) {
     const imgKey = pageWbi.img_url.slice(pageWbi.img_url.lastIndexOf('/') + 1, pageWbi.img_url.lastIndexOf('.'));
     const subKey = pageWbi.sub_url.slice(pageWbi.sub_url.lastIndexOf('/') + 1, pageWbi.sub_url.lastIndexOf('.'));
@@ -198,15 +209,17 @@ export async function getWbiKeys(): Promise<{ imgKey: string; subKey: string }> 
 
   // 2. 通过 nav 接口动态获取
   try {
-    const res = await requestJson<any>('https://api.bilibili.com/x/web-interface/nav');
-    if (res?.data?.wbi_img?.img_url && res?.data?.wbi_img?.sub_url) {
-      const imgUrl = res.data.wbi_img.img_url;
-      const subUrl = res.data.wbi_img.sub_url;
-      const imgKey = imgUrl.slice(imgUrl.lastIndexOf('/') + 1, imgUrl.lastIndexOf('.'));
-      const subKey = subUrl.slice(subUrl.lastIndexOf('/') + 1, subUrl.lastIndexOf('.'));
-      if (imgKey && subKey) {
-        cachedWbiKeys = { imgKey, subKey, expiresAt: now + 3600 * 1000 * 12 };
-        return { imgKey, subKey };
+    const rawRes = await requestJson<unknown>('https://api.bilibili.com/x/web-interface/nav');
+    const parsed = BiliNavResponseSchema.safeParse(rawRes);
+    if (parsed.success) {
+      const wbiImg = parsed.data.data?.wbi_img;
+      if (wbiImg?.img_url && wbiImg?.sub_url) {
+        const imgKey = wbiImg.img_url.slice(wbiImg.img_url.lastIndexOf('/') + 1, wbiImg.img_url.lastIndexOf('.'));
+        const subKey = wbiImg.sub_url.slice(wbiImg.sub_url.lastIndexOf('/') + 1, wbiImg.sub_url.lastIndexOf('.'));
+        if (imgKey && subKey) {
+          cachedWbiKeys = { imgKey, subKey, expiresAt: now + 3600 * 1000 * 12 };
+          return { imgKey, subKey };
+        }
       }
     }
   } catch {}
@@ -221,12 +234,12 @@ export async function getWbiKeys(): Promise<{ imgKey: string; subKey: string }> 
 /**
  * 将请求参数进行 WBI 签名加密并返回标准化 Query String
  */
-export async function signWbiQuery(params: Record<string, any>): Promise<string> {
+export async function signWbiQuery(params: Record<string, string | number | boolean | undefined | null>): Promise<string> {
   const { imgKey, subKey } = await getWbiKeys();
   const mixinKey = getMixinKey(imgKey + subKey);
   const currTime = Math.floor(Date.now() / 1000);
 
-  const payload: Record<string, any> = { ...params, wts: currTime };
+  const payload: Record<string, unknown> = { ...params, wts: currTime };
   const sortedKeys = Object.keys(payload).sort();
   const queryParts: string[] = [];
 

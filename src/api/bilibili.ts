@@ -1,6 +1,18 @@
 import { requestJson } from './http';
 import { logger } from '../utils/logger';
 import { signWbiQuery } from '../utils/wbi';
+import { getErrorMessage } from '../utils/error';
+import {
+  BiliPageListResponseSchema,
+  BiliAiSummaryResponseSchema,
+  BiliSeasonArchivesResponseSchema,
+  BiliPlayUrlResponseSchema,
+  BiliPlayerResponseSchema,
+  type BiliDashData,
+  type BiliDashVideoItem,
+  type BiliDashAudioItem,
+  type BiliSubtitleItem,
+} from '../types/schemas';
 import type {
   MediaResourceData,
   VideoStreamItem,
@@ -10,6 +22,44 @@ import type {
   UgcSeasonData,
   SeasonEpisodeItem,
 } from '../types';
+
+interface InitialStateEpisode {
+  id?: number;
+  aid?: number;
+  bvid: string;
+  cid?: number;
+  title: string;
+  arc?: { pic?: string; duration?: number };
+}
+
+interface InitialStateUgcSeason {
+  id?: number | string;
+  mid?: number | string;
+  title?: string;
+  cover?: string;
+  sections?: Array<{
+    episodes?: InitialStateEpisode[];
+  }>;
+}
+
+interface WindowWithBiliGlobals extends Window {
+  __INITIAL_STATE__?: {
+    bvid?: string;
+    videoData?: {
+      bvid?: string;
+      pic?: string;
+      owner?: { mid?: number | string };
+      ugc_season?: InitialStateUgcSeason;
+    };
+    epInfo?: { bvid?: string };
+  };
+  __playinfo__?: {
+    data?: {
+      dash?: BiliDashData;
+      duration?: number;
+    };
+  };
+}
 
 const QUALITY_MAP: Record<number, string> = {
   127: '8K 超高清',
@@ -25,27 +75,31 @@ const QUALITY_MAP: Record<number, string> = {
   16: '360P 流畅',
 };
 
+function getBiliWindow(): WindowWithBiliGlobals {
+  return window as unknown as WindowWithBiliGlobals;
+}
+
 export function getBvidFromUrl(): string | null {
   const match = location.pathname.match(/(BV[a-zA-Z0-9]+)/i);
-  if (match) return match[1];
+  if (match && match[1]) return match[1];
   const queryBvid = new URLSearchParams(location.search).get('bvid');
   if (queryBvid) return queryBvid;
-  const anyWindow = window as any;
-  if (anyWindow.__INITIAL_STATE__?.videoData?.bvid) {
-    return anyWindow.__INITIAL_STATE__.videoData.bvid;
+  const win = getBiliWindow();
+  if (win.__INITIAL_STATE__?.videoData?.bvid) {
+    return win.__INITIAL_STATE__.videoData.bvid;
   }
-  if (anyWindow.__INITIAL_STATE__?.bvid) {
-    return anyWindow.__INITIAL_STATE__.bvid;
+  if (win.__INITIAL_STATE__?.bvid) {
+    return win.__INITIAL_STATE__.bvid;
   }
-  if (anyWindow.__INITIAL_STATE__?.epInfo?.bvid) {
-    return anyWindow.__INITIAL_STATE__.epInfo.bvid;
+  if (win.__INITIAL_STATE__?.epInfo?.bvid) {
+    return win.__INITIAL_STATE__.epInfo.bvid;
   }
   return null;
 }
 
 export function getEpisodeIdFromUrl(): string | null {
   const match = location.pathname.match(/\/bangumi\/play\/(ep\d+|ss\d+)/);
-  return match ? match[1] : null;
+  return match && match[1] ? match[1] : null;
 }
 
 export function getVideoTitle(): string {
@@ -61,22 +115,23 @@ export function getVideoCover(): string {
   const meta = document.querySelector('meta[property="og:image"]');
   if (meta) {
     const content = meta.getAttribute('content');
-    if (content) return content.split('@')[0];
+    if (content) return content.split('@')[0] || '';
   }
-  const anyWindow = window as any;
-  if (anyWindow.__INITIAL_STATE__?.videoData?.pic) {
-    return anyWindow.__INITIAL_STATE__.videoData.pic;
+  const win = getBiliWindow();
+  if (win.__INITIAL_STATE__?.videoData?.pic) {
+    return win.__INITIAL_STATE__.videoData.pic;
   }
   return '';
 }
 
 export async function fetchVideoPages(bvid: string): Promise<VideoPageItem[]> {
   try {
-    const res = await requestJson<{ code: number; data: VideoPageItem[] }>(
+    const res = await requestJson<unknown>(
       `https://api.bilibili.com/x/player/pagelist?bvid=${bvid}`
     );
-    if (res.code === 0 && Array.isArray(res.data)) {
-      return res.data;
+    const parsed = BiliPageListResponseSchema.safeParse(res);
+    if (parsed.success && parsed.data.code === 0 && Array.isArray(parsed.data.data)) {
+      return parsed.data.data;
     }
   } catch {}
   return [];
@@ -84,15 +139,18 @@ export async function fetchVideoPages(bvid: string): Promise<VideoPageItem[]> {
 
 export async function fetchAiSummary(bvid: string, cid: number): Promise<string | undefined> {
   try {
-    const res = await requestJson<any>(
+    const res = await requestJson<unknown>(
       `https://api.bilibili.com/x/web-interface/view/conclusion/get?bvid=${bvid}&cid=${cid}`
     );
-    if (res.code === 0 && res.data?.model_result?.summary) {
-      let md = `### 视频 AI 提炼总结\n\n${res.data.model_result.summary}\n\n`;
-      if (res.data.model_result.outline?.length) {
+    const parsed = BiliAiSummaryResponseSchema.safeParse(res);
+    if (parsed.success && parsed.data.code === 0 && parsed.data.data?.model_result?.summary) {
+      const modelResult = parsed.data.data.model_result;
+      let md = `### 视频 AI 提炼总结\n\n${modelResult.summary}\n\n`;
+      if (modelResult.outline && modelResult.outline.length > 0) {
         md += `#### 章节大纲\n`;
-        res.data.model_result.outline.forEach((item: any) => {
-          md += `- **${item.title}** (${item.timestamp}): ${item.part_outline?.map((p: any) => p.content).join('; ') || ''}\n`;
+        modelResult.outline.forEach((item) => {
+          const parts = item.part_outline?.map((p) => p.content).filter(Boolean).join('; ') || '';
+          md += `- **${item.title}** (${item.timestamp}): ${parts}\n`;
         });
       }
       return md;
@@ -110,15 +168,15 @@ export async function fetchAiSummary(bvid: string, cid: number): Promise<string 
  * 4. DOM 泛选择器兜底 (.video-pod__list)
  */
 export async function fetchUgcSeasonData(_currentBvid?: string): Promise<UgcSeasonData | undefined> {
-  const anyWindow = window as any;
+  const win = getBiliWindow();
   let seasonId: number | null = null;
   let mid: number | null = null;
-  const initialUgcSeason = anyWindow.__INITIAL_STATE__?.videoData?.ugc_season;
+  const initialUgcSeason = win.__INITIAL_STATE__?.videoData?.ugc_season;
 
   // 1. 从 __INITIAL_STATE__ 中提取
   if (initialUgcSeason?.id) {
     seasonId = Number(initialUgcSeason.id);
-    mid = Number(initialUgcSeason.mid || anyWindow.__INITIAL_STATE__?.videoData?.owner?.mid);
+    mid = Number(initialUgcSeason.mid || win.__INITIAL_STATE__?.videoData?.owner?.mid);
   }
 
   // 2. 从页面 DOM 链接提取 (即使 class 被 BewlyBewly 等插件修改，通过 href 关键路径即可精准抓取)
@@ -127,16 +185,16 @@ export async function fetchUgcSeasonData(_currentBvid?: string): Promise<UgcSeas
     for (const a of links) {
       const href = a.href || '';
       const listMatch = href.match(/space\.bilibili\.com\/(\d+)\/lists\/(\d+)/);
-      if (listMatch) {
+      if (listMatch && listMatch[1] && listMatch[2]) {
         mid = Number(listMatch[1]);
         seasonId = Number(listMatch[2]);
         break;
       }
       const sidMatch = href.match(/sid=(\d+)/);
-      if (sidMatch) {
+      if (sidMatch && sidMatch[1]) {
         seasonId = Number(sidMatch[1]);
         const midMatch = href.match(/mid=(\d+)/);
-        if (midMatch) mid = Number(midMatch[1]);
+        if (midMatch && midMatch[1]) mid = Number(midMatch[1]);
         break;
       }
     }
@@ -145,7 +203,7 @@ export async function fetchUgcSeasonData(_currentBvid?: string): Promise<UgcSeas
   // 3. 从当前 URL 提取
   if (!seasonId) {
     const listMatch = location.href.match(/space\.bilibili\.com\/(\d+)\/lists\/(\d+)/);
-    if (listMatch) {
+    if (listMatch && listMatch[1] && listMatch[2]) {
       mid = Number(listMatch[1]);
       seasonId = Number(listMatch[2]);
     }
@@ -155,11 +213,12 @@ export async function fetchUgcSeasonData(_currentBvid?: string): Promise<UgcSeas
   if (seasonId && mid) {
     try {
       const url = `https://api.bilibili.com/x/polymer/web-space/seasons_archives_list?mid=${mid}&season_id=${seasonId}&page_num=1&page_size=100`;
-      const res = await requestJson<any>(url);
-      if (res?.code === 0 && res?.data) {
-        const archives = res.data.archives || [];
-        const meta = res.data.meta || {};
-        const episodes: SeasonEpisodeItem[] = archives.map((item: any, idx: number) => ({
+      const rawRes = await requestJson<unknown>(url);
+      const parsed = BiliSeasonArchivesResponseSchema.safeParse(rawRes);
+      if (parsed.success && parsed.data.code === 0 && parsed.data.data) {
+        const archives = parsed.data.data.archives || [];
+        const meta = parsed.data.data.meta;
+        const episodes: SeasonEpisodeItem[] = archives.map((item, idx) => ({
           id: item.aid || idx + 1,
           bvid: item.bvid,
           cid: item.cid,
@@ -169,25 +228,27 @@ export async function fetchUgcSeasonData(_currentBvid?: string): Promise<UgcSeas
           pageIndex: idx + 1,
         }));
 
-        logger.info('API', `成功通过官方接口解析合集: ${meta.name || '合集'} (共 ${episodes.length} 集)`);
+        logger.info('API', `成功通过官方接口解析合集: ${meta?.name || '合集'} (共 ${episodes.length} 集)`);
         return {
           id: seasonId,
           mid,
-          title: meta.name || initialUgcSeason?.title || '合集视频',
-          cover: meta.cover || initialUgcSeason?.cover,
-          epCount: meta.total || episodes.length,
+          title: meta?.name || initialUgcSeason?.title || '合集视频',
+          cover: meta?.cover || initialUgcSeason?.cover,
+          epCount: meta?.total || episodes.length,
           episodes,
         };
       }
-    } catch (e: any) {
-      logger.warn('API', `合集 API 请求失败: ${e.message}，尝试使用首屏数据兜底`);
+    } catch (e: unknown) {
+      const msg = getErrorMessage(e);
+      logger.warn('API', `合集 API 请求失败: ${msg}，尝试使用首屏数据兜底`);
     }
   }
 
   // 5. 若 API 失败或无法获取 mid，但 initialUgcSeason 中已有 sections[0].episodes，直接解析
-  if (initialUgcSeason?.sections?.[0]?.episodes) {
-    const eps = initialUgcSeason.sections[0].episodes;
-    const episodes: SeasonEpisodeItem[] = eps.map((item: any, idx: number) => ({
+  const firstSection = initialUgcSeason?.sections?.[0];
+  if (firstSection?.episodes && firstSection.episodes.length > 0) {
+    const eps = firstSection.episodes;
+    const episodes: SeasonEpisodeItem[] = eps.map((item, idx) => ({
       id: item.id || idx + 1,
       bvid: item.bvid,
       cid: item.cid,
@@ -197,10 +258,10 @@ export async function fetchUgcSeasonData(_currentBvid?: string): Promise<UgcSeas
       pageIndex: idx + 1,
     }));
     return {
-      id: Number(initialUgcSeason.id),
-      mid: Number(initialUgcSeason.mid || 0),
-      title: initialUgcSeason.title || '合集视频',
-      cover: initialUgcSeason.cover,
+      id: Number(initialUgcSeason?.id || 0),
+      mid: Number(initialUgcSeason?.mid || 0),
+      title: initialUgcSeason?.title || '合集视频',
+      cover: initialUgcSeason?.cover,
       epCount: episodes.length,
       episodes,
     };
@@ -241,7 +302,7 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
   const pages = await fetchVideoPages(bvid);
   const currentP = new URLSearchParams(location.search).get('p');
   const pageIndex = currentP ? parseInt(currentP, 10) - 1 : 0;
-  const cid = targetCid || (pages[pageIndex]?.cid || pages[0]?.cid);
+  const cid = targetCid || pages[pageIndex]?.cid || pages[0]?.cid;
 
   if (!cid) return null;
 
@@ -259,18 +320,26 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
   }
 
   // 1. 请求 DASH 格式播放流
-  let dashData: any = null;
+  let dashData: BiliDashData | undefined;
+  let totalDuration = 0;
+
   try {
     const api = `https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=120&fnval=4048&fourk=1&otype=json`;
-    const res = await requestJson<any>(api);
-    dashData = res?.data || res?.result;
+    const res = await requestJson<unknown>(api);
+    const parsed = BiliPlayUrlResponseSchema.safeParse(res);
+    if (parsed.success) {
+      const playUrlData = parsed.data.data || parsed.data.result;
+      dashData = playUrlData?.dash;
+      totalDuration = playUrlData?.duration || playUrlData?.dash?.duration || 0;
+    }
   } catch {}
 
   // 2. DOM 兜底
-  if (!dashData?.dash) {
-    const anyWindow = window as any;
-    if (anyWindow.__playinfo__?.data?.dash) {
-      dashData = anyWindow.__playinfo__.data;
+  if (!dashData) {
+    const win = getBiliWindow();
+    if (win.__playinfo__?.data?.dash) {
+      dashData = win.__playinfo__.data.dash;
+      totalDuration = win.__playinfo__.data.duration || dashData?.duration || 0;
     } else {
       for (const script of Array.from(document.scripts)) {
         const text = script.textContent || '';
@@ -278,7 +347,9 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
           const match = text.match(/window\.__playinfo__\s*=\s*(\{.*?\});/);
           if (match && match[1]) {
             try {
-              dashData = JSON.parse(match[1])?.data;
+              const parsed = JSON.parse(match[1]) as { data?: { dash?: BiliDashData; duration?: number } };
+              dashData = parsed?.data?.dash;
+              totalDuration = parsed?.data?.duration || dashData?.duration || 0;
               break;
             } catch {}
           }
@@ -287,21 +358,24 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
     }
   }
 
-  const duration = dashData?.dash?.duration || dashData?.duration || 0;
+  const duration = totalDuration || dashData?.duration || 0;
 
   // 3. 解析视频流
-  const rawVideos: any[] = dashData?.dash?.video || [];
+  const rawVideos: BiliDashVideoItem[] = dashData?.video || [];
   const videos: VideoStreamItem[] = [];
   const seenVideoIds = new Set<string>();
 
   for (const v of rawVideos) {
     const codec = (v.codecs || '').toLowerCase();
-    const codecName: 'AVC' | 'HEVC' | 'AV1' = codec.includes('avc') ? 'AVC' : (codec.includes('hev') ? 'HEVC' : 'AV1');
+    const codecName: 'AVC' | 'HEVC' | 'AV1' = codec.includes('avc') ? 'AVC' : codec.includes('hev') ? 'HEVC' : 'AV1';
     const key = `${v.id}_${codecName}`;
     if (seenVideoIds.has(key)) continue;
     seenVideoIds.add(key);
 
-    const sizeMB = duration ? (v.bandwidth * duration / 8 / 1024 / 1024).toFixed(1) : '0';
+    const sizeMB = duration ? ((v.bandwidth * duration) / 8 / 1024 / 1024).toFixed(1) : '0';
+    const primaryUrl = v.baseUrl || v.base_url || '';
+    const backupUrl = v.backupUrl || v.backup_url;
+
     videos.push({
       id: v.id,
       qualityName: QUALITY_MAP[v.id] || `${v.id}P`,
@@ -309,32 +383,43 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
       codec: v.codecs,
       bandwidth: v.bandwidth,
       sizeMB,
-      baseUrl: v.baseUrl || v.base_url,
-      backupUrl: v.backupUrl || v.backup_url,
+      baseUrl: primaryUrl,
+      backupUrl,
       width: v.width,
       height: v.height,
-      frameRate: v.frameRate || v.frame_rate,
+      frameRate: v.frameRate || v.frame_rate || '',
     });
   }
 
   // 4. 解析音频流
-  const rawAudios: any[] = [
-    ...(dashData?.dash?.dolby?.audio || []),
-    ...(dashData?.dash?.flac?.audio ? [dashData.dash.flac.audio] : []),
-    ...(dashData?.dash?.audio || []),
+  const rawAudios: BiliDashAudioItem[] = [
+    ...(dashData?.dolby?.audio || []),
+    ...(dashData?.flac?.audio ? [dashData.flac.audio] : []),
+    ...(dashData?.audio || []),
   ];
   const audios: AudioStreamItem[] = [];
 
   rawAudios.forEach((a, index) => {
     let name = `音频轨 ${index + 1}`;
     let qualityDesc = '标准音质';
-    if (a.id === 30280) { name = '320K 极高音质'; qualityDesc = '320Kbps'; }
-    else if (a.id === 30232) { name = '132K 高音质'; qualityDesc = '132Kbps'; }
-    else if (a.id === 30216) { name = '64K 基础音质'; qualityDesc = '64Kbps'; }
-    else if (a.codecs?.toLowerCase().includes('flac')) { name = 'Hi-Res 无损音频'; qualityDesc = 'FLAC 无损'; }
-    else if (a.id === 30250) { name = '杜比全景声'; qualityDesc = 'Dolby Atmos'; }
+    if (a.id === 30280) {
+      name = '320K 极高音质';
+      qualityDesc = '320Kbps';
+    } else if (a.id === 30232) {
+      name = '132K 高音质';
+      qualityDesc = '132Kbps';
+    } else if (a.id === 30216) {
+      name = '64K 基础音质';
+      qualityDesc = '64Kbps';
+    } else if (a.codecs?.toLowerCase().includes('flac')) {
+      name = 'Hi-Res 无损音频';
+      qualityDesc = 'FLAC 无损';
+    } else if (a.id === 30250) {
+      name = '杜比全景声';
+      qualityDesc = 'Dolby Atmos';
+    }
 
-    const sizeMB = duration ? (a.bandwidth * duration / 8 / 1024 / 1024).toFixed(1) : '0';
+    const sizeMB = duration ? ((a.bandwidth * duration) / 8 / 1024 / 1024).toFixed(1) : '0';
     audios.push({
       id: a.id,
       name,
@@ -342,48 +427,57 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
       codec: a.codecs || 'mp4a.40.2',
       bandwidth: a.bandwidth,
       sizeMB,
-      baseUrl: a.baseUrl || a.base_url,
+      baseUrl: a.baseUrl || a.base_url || '',
       backupUrl: a.backupUrl || a.backup_url,
     });
   });
 
-  // 5. 获取官方双语字幕 (采用 WBI 签名请求 /x/player/wbi/v2，彻底防止旧版 v2 接口 CDN 缓存导致的分 P 字幕串扰)
+  // 5. 获取官方双语字幕 (采用 WBI 签名请求 /x/player/wbi/v2)
   const subtitles: SubtitleItem[] = [];
   try {
     const signedQuery = await signWbiQuery({ bvid, cid });
-    const subRes = await requestJson<any>(`https://api.bilibili.com/x/player/wbi/v2?${signedQuery}`);
-    const rawList = subRes?.data?.subtitle?.subtitles || subRes?.data?.subtitle?.list || [];
-    if (Array.isArray(rawList) && rawList.length > 0) {
-      for (const sub of rawList) {
-        if (sub.subtitle_url || sub.url) {
-          subtitles.push({
-            id: Number(sub.id) || Number(sub.id_str) || Math.random(),
-            lan: sub.lan || sub.lang || 'zh-CN',
-            lan_doc: sub.lan_doc || sub.lang_doc || sub.lan || '官方字幕',
-            subtitle_url: sub.subtitle_url || sub.url,
-          });
-        }
+    const rawSubRes = await requestJson<unknown>(`https://api.bilibili.com/x/player/wbi/v2?${signedQuery}`);
+    const parsed = BiliPlayerResponseSchema.safeParse(rawSubRes);
+    const rawList: BiliSubtitleItem[] =
+      parsed.success
+        ? parsed.data.data?.subtitle?.subtitles || parsed.data.data?.subtitle?.list || []
+        : [];
+
+    for (const sub of rawList) {
+      const subUrl = sub.subtitle_url || sub.url;
+      if (subUrl) {
+        subtitles.push({
+          id: Number(sub.id) || Number(sub.id_str) || Math.random(),
+          lan: sub.lan || sub.lang || 'zh-CN',
+          lan_doc: sub.lan_doc || sub.lang_doc || sub.lan || '官方字幕',
+          subtitle_url: subUrl,
+        });
       }
     }
-  } catch (wbiErr: any) {
-    logger.warn('API', 'WBI 播放器信息请求失败，尝试降级请求', { error: wbiErr?.message || String(wbiErr) });
+  } catch (wbiErr: unknown) {
+    const msg = getErrorMessage(wbiErr);
+    logger.warn('API', 'WBI 播放器信息请求失败，尝试降级请求', { error: msg });
   }
 
   // 若 WBI 未能获取且 subtitles 仍为空，尝试旧版 player/v2 兼容
   if (subtitles.length === 0) {
     try {
-      const fallbackRes = await requestJson<any>(`https://api.bilibili.com/x/player/v2?bvid=${bvid}&cid=${cid}`);
-      const fallbackList = fallbackRes?.data?.subtitle?.subtitles || fallbackRes?.data?.subtitle?.list || [];
-      if (Array.isArray(fallbackList)) {
-        for (const sub of fallbackList) {
-          if (sub.subtitle_url || sub.url) {
-            subtitles.push({
-              id: Number(sub.id) || Number(sub.id_str) || Math.random(),
-              lan: sub.lan || sub.lang || 'zh-CN',
-              lan_doc: sub.lan_doc || sub.lang_doc || sub.lan || '官方字幕',
-              subtitle_url: sub.subtitle_url || sub.url,
-            });
-          }
+      const fallbackRes = await requestJson<unknown>(`https://api.bilibili.com/x/player/v2?bvid=${bvid}&cid=${cid}`);
+      const parsedFallback = BiliPlayerResponseSchema.safeParse(fallbackRes);
+      const fallbackList: BiliSubtitleItem[] =
+        parsedFallback.success
+          ? parsedFallback.data.data?.subtitle?.subtitles || parsedFallback.data.data?.subtitle?.list || []
+          : [];
+
+      for (const sub of fallbackList) {
+        const subUrl = sub.subtitle_url || sub.url;
+        if (subUrl) {
+          subtitles.push({
+            id: Number(sub.id) || Number(sub.id_str) || Math.random(),
+            lan: sub.lan || sub.lang || 'zh-CN',
+            lan_doc: sub.lan_doc || sub.lang_doc || sub.lan || '官方字幕',
+            subtitle_url: subUrl,
+          });
         }
       }
     } catch {}

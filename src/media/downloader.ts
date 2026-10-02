@@ -2,12 +2,17 @@ import { GM_download } from '$';
 import { requestChunkedBuffer } from '../api/http';
 import { muxMp4 } from './muxer';
 import { logger } from '../utils/logger';
+import { getErrorMessage, isAbortError } from '../utils/error';
 import {
   getDownloadSettings,
   getOrRestoreDirectoryHandle,
   resolveDownloadRelativePath,
 } from '../utils/settings';
 import type { VideoStreamItem, AudioStreamItem, DownloadProgress } from '../types';
+
+interface WritableFileHandle extends FileSystemFileHandle {
+  createWritable(): Promise<FileSystemWritableFileStream>;
+}
 
 function fallbackAnchorDownload(url: string, filename: string): void {
   const a = document.createElement('a');
@@ -46,13 +51,14 @@ export async function saveBlobAsFile(blob: Blob, filename: string, videoTitle?: 
       }
 
       const fileHandle = await targetDir.getFileHandle(filename, { create: true });
-      const writable = await (fileHandle as any).createWritable();
+      const writable = await (fileHandle as unknown as WritableFileHandle).createWritable();
       await writable.write(blob);
       await writable.close();
       logger.info('Downloader', `文件已直接写入本地磁盘: ${dirHandle.name}/${filename}`);
       return;
-    } catch (fsErr: any) {
-      logger.warn('Downloader', '本地目录直接写入失败，降级到下载器保存', { error: fsErr?.message });
+    } catch (fsErr: unknown) {
+      const msg = getErrorMessage(fsErr);
+      logger.warn('Downloader', '本地目录直接写入失败，降级到下载器保存', { error: msg });
     }
   }
 
@@ -245,8 +251,8 @@ export async function downloadAndMuxMp4(
       progress: 100,
       message: '下载与混流完成，已保存到本地',
     });
-  } catch (err: any) {
-    if (signal?.aborted || err?.name === 'AbortError') {
+  } catch (err: unknown) {
+    if (signal?.aborted || isAbortError(err)) {
       logger.warn('Downloader', `下载任务已由用户手动取消: ${title}`, null, finalTraceId);
       onProgress({
         status: 'cancelled',
@@ -255,11 +261,12 @@ export async function downloadAndMuxMp4(
       });
       return;
     }
-    logger.error('Downloader', `下载失败: ${err.message}`, err, finalTraceId);
+    const msg = getErrorMessage(err);
+    logger.error('Downloader', `下载失败: ${msg}`, err, finalTraceId);
     onProgress({
       status: 'error',
       progress: 0,
-      message: `下载失败: ${err.message}`,
+      message: `下载失败: ${msg}`,
     });
     throw err;
   }
@@ -324,8 +331,8 @@ export async function downloadAudio(
       progress: 100,
       message: `音频下载完成，已保存为 .${ext} 文件`,
     });
-  } catch (err: any) {
-    if (signal?.aborted || err?.name === 'AbortError') {
+  } catch (err: unknown) {
+    if (signal?.aborted || isAbortError(err)) {
       logger.warn('Downloader', `音频任务已由用户手动取消: ${filename}`, null, finalTraceId);
       onProgress({
         status: 'cancelled',
@@ -334,11 +341,12 @@ export async function downloadAudio(
       });
       return;
     }
-    logger.error('Downloader', `音频下载失败: ${err.message}`, err, finalTraceId);
+    const msg = getErrorMessage(err);
+    logger.error('Downloader', `音频下载失败: ${msg}`, err, finalTraceId);
     onProgress({
       status: 'error',
       progress: 0,
-      message: `音频下载失败: ${err.message}`,
+      message: `音频下载失败: ${msg}`,
     });
     throw err;
   }

@@ -8,6 +8,9 @@ import { createZipArchive, type ZipFileInput } from '../utils/zip';
 import { saveBlobAsFile } from './downloader';
 import { logger } from '../utils/logger';
 import { fetchVideoPages } from '../api/bilibili';
+import { convertSubtitleJsonToSrt } from './subtitle';
+import { BiliPlayerResponseSchema, type BiliSubtitleItem } from '../types/schemas';
+import { getErrorMessage } from '../utils/error';
 import type { VideoPageItem, SeasonEpisodeItem } from '../types';
 
 export interface BatchSubtitleProgress {
@@ -17,66 +20,32 @@ export interface BatchSubtitleProgress {
   message: string;
 }
 
-const formatSrtTime = (seconds: number) => {
-  const totalMs = Math.max(0, Math.round(seconds * 1000));
-  const ms = (totalMs % 1000).toString().padStart(3, '0');
-  const totalSec = Math.floor(totalMs / 1000);
-  const s = (totalSec % 60).toString().padStart(2, '0');
-  const m = (Math.floor(totalSec / 60) % 60).toString().padStart(2, '0');
-  const h = Math.floor(totalSec / 3600).toString().padStart(2, '0');
-  return `${h}:${m}:${s},${ms}`;
-};
-
-function convertJsonToSrt(rawJson: any): string {
-  const rawList = Array.isArray(rawJson)
-    ? rawJson
-    : Array.isArray(rawJson?.body)
-    ? rawJson.body
-    : Array.isArray(rawJson?.list)
-    ? rawJson.list
-    : Array.isArray(rawJson?.lines)
-    ? rawJson.lines
-    : [];
-
-  let srt = '';
-  let validIndex = 1;
-
-  rawList.forEach((item: any) => {
-    const from = typeof item.from === 'number' ? item.from : parseFloat(item.from) || 0;
-    const to = typeof item.to === 'number' ? item.to : parseFloat(item.to) || (from + 2);
-    const content = (item.content || item.text || item.words || '').trim();
-    if (content) {
-      srt += `${validIndex}\n`;
-      srt += `${formatSrtTime(from)} --> ${formatSrtTime(to)}\n`;
-      srt += `${content}\n\n`;
-      validIndex++;
-    }
-  });
-
-  return srt;
-}
-
 /**
  * 一键探测所有分 P 视频存在的字幕，并按命名规范打包到以视频标题为文件夹的 ZIP 压缩包中下载
  */
-export async function batchDetectAndDownloadSubtitles(
+export async function batchDownloadSubtitles(
   bvid: string,
   videoTitle: string,
   pages: VideoPageItem[],
   onProgress?: (progress: BatchSubtitleProgress) => void,
-  traceId = '全集字幕打包',
+  traceId?: string,
   signal?: AbortSignal
-): Promise<{ total: number; found: number; blob: Blob; fileName: string }> {
+): Promise<{ zipBlob: Blob; foundCount: number }> {
+  if (!pages || pages.length === 0) {
+    throw new Error('当前视频未获取到有效分 P 列表');
+  }
+
   const cleanTitle = videoTitle.replace(/[\\/:*?"<>|]/g, '_').trim();
   const folderName = `${cleanTitle}_全集字幕`;
   const total = pages.length;
-  const zipFiles: ZipFileInput[] = [];
-  let foundCount = 0;
   let processedCount = 0;
+  let foundCount = 0;
+
+  const zipFiles: ZipFileInput[] = [];
 
   logger.info(
     'BatchSubtitle',
-    `开始全集字幕批量探测: ${cleanTitle} (共 ${total} 集)`,
+    `开始批量检索分 P 字幕 (共 ${total} 集)...`,
     { bvid, total },
     traceId
   );
@@ -85,10 +54,12 @@ export async function batchDetectAndDownloadSubtitles(
     current: 0,
     total,
     found: 0,
-    message: `准备探测 ${total} 个分集的字幕...`,
+    message: `正在探测分 P 字幕 (0/${total})...`,
   });
 
+  // 限制同时并发检索数，避免频繁触发 B 站风控 WBI 限制
   const BATCH_SIZE = 3;
+
   for (let i = 0; i < pages.length; i += BATCH_SIZE) {
     if (signal?.aborted) break;
 
@@ -101,19 +72,23 @@ export async function batchDetectAndDownloadSubtitles(
 
         try {
           const signedQuery = await signWbiQuery({ bvid, cid: page.cid });
-          const subRes = await requestJson<any>(`https://api.bilibili.com/x/player/wbi/v2?${signedQuery}`);
-          const rawSubList = subRes?.data?.subtitle?.subtitles || subRes?.data?.subtitle?.list || [];
+          const rawSubRes = await requestJson<unknown>(`https://api.bilibili.com/x/player/wbi/v2?${signedQuery}`);
+          const parsed = BiliPlayerResponseSchema.safeParse(rawSubRes);
+          const rawSubList: BiliSubtitleItem[] =
+            parsed.success
+              ? parsed.data.data?.subtitle?.subtitles || parsed.data.data?.subtitle?.list || []
+              : [];
 
-          if (Array.isArray(rawSubList) && rawSubList.length > 0) {
+          if (rawSubList.length > 0) {
             const targetSub =
-              rawSubList.find((s: any) => (s.lan || s.lang || '').includes('zh')) ||
+              rawSubList.find((s) => (s.lan || s.lang || '').includes('zh')) ||
               rawSubList[0];
 
             if (targetSub?.subtitle_url || targetSub?.url) {
-              const subUrl = targetSub.subtitle_url || targetSub.url;
+              const subUrl = targetSub.subtitle_url || targetSub.url || '';
               const finalSubUrl = subUrl.startsWith('//') ? `https:${subUrl}` : subUrl;
-              const subJson = await requestJson<any>(finalSubUrl);
-              const srtText = convertJsonToSrt(subJson);
+              const subJson = await requestJson<unknown>(finalSubUrl);
+              const srtText = convertSubtitleJsonToSrt(subJson);
 
               if (srtText.trim()) {
                 const lanDoc = targetSub.lan_doc || targetSub.lang_doc || targetSub.lan || '中文';
@@ -133,10 +108,11 @@ export async function batchDetectAndDownloadSubtitles(
               }
             }
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const msg = getErrorMessage(err);
           logger.warn(
             'BatchSubtitle',
-            `[${pageLabel}] 字幕探测未获取到内容: ${err?.message || err}`,
+            `[${pageLabel}] 字幕探测未获取到内容: ${msg}`,
             null,
             traceId
           );
@@ -154,69 +130,74 @@ export async function batchDetectAndDownloadSubtitles(
   }
 
   if (signal?.aborted) {
-    throw new DOMException('已取消全集字幕打包任务', 'AbortError');
+    throw new DOMException('Download aborted by user', 'AbortError');
   }
 
   if (zipFiles.length === 0) {
-    throw new Error('未能在该视频的任何分 P 中探测到可提取的官方或 AI 字幕');
+    throw new Error('检索完成，该视频所有分 P 均未发现任何官方/外挂字幕');
   }
 
   onProgress?.({
     current: total,
     total,
     found: foundCount,
-    message: `正在封装并生成 ZIP 归档文件夹 (${foundCount} 集)...`,
+    message: `正在打包 ${zipFiles.length} 份字幕至 ZIP 压缩包...`,
   });
 
+  logger.info('BatchSubtitle', `打包生成 ZIP 压缩包: 共 ${zipFiles.length} 个文件`, null, traceId);
   const zipBlob = createZipArchive(zipFiles);
-  const outFileName = `${cleanTitle}_全集字幕(${foundCount}P).zip`;
 
-  saveBlobAsFile(zipBlob, outFileName, cleanTitle);
+  const zipFileName = `${cleanTitle}_全集字幕.zip`;
+  await saveBlobAsFile(zipBlob, zipFileName, videoTitle);
 
   logger.success(
     'BatchSubtitle',
-    `全集字幕打包完成并已触发下载: 共 ${foundCount} 集 (${(zipBlob.size / 1024).toFixed(1)} KB)`,
-    { zipFileName: outFileName, count: foundCount },
+    `批量字幕导出成功: 共打包 ${zipFiles.length} 个字幕文件 (${(zipBlob.size / 1024).toFixed(1)} KB)`,
+    null,
     traceId
   );
 
-  return {
-    total,
-    found: foundCount,
-    blob: zipBlob,
-    fileName: outFileName,
-  };
+  return { zipBlob, foundCount };
 }
 
 /**
- * 一键探测合集/系列 (Season/Series) 所有视频的字幕并打包为 ZIP
+ * 合集 (Season / Series) 全量字幕一键批量探测、格式转换与 ZIP 文件夹打包下载
  */
-export async function batchDownloadSeasonSubtitlesZip(
+export async function batchDownloadSeasonSubtitles(
   seasonTitle: string,
   episodes: SeasonEpisodeItem[],
   onProgress?: (progress: BatchSubtitleProgress) => void,
-  traceId = '合集字幕打包',
+  traceId?: string,
   signal?: AbortSignal
-): Promise<{ total: number; found: number; blob: Blob; fileName: string }> {
+): Promise<{ zipBlob: Blob; foundCount: number }> {
+  if (!episodes || episodes.length === 0) {
+    throw new Error('合集列表为空');
+  }
+
   const cleanTitle = seasonTitle.replace(/[\\/:*?"<>|]/g, '_').trim();
   const folderName = `${cleanTitle}_合集字幕`;
   const total = episodes.length;
-  if (total === 0) return { total: 0, found: 0, blob: new Blob([]), fileName: '' };
+  let processedCount = 0;
+  let foundCount = 0;
 
   const zipFiles: ZipFileInput[] = [];
-  let foundCount = 0;
-  let processedCount = 0;
 
-  logger.info('BatchSubtitle', `开始批量探测合集字幕: 共 ${total} 集`, { seasonTitle, folderName }, traceId);
+  logger.info(
+    'BatchSubtitle',
+    `开始批量检索合集字幕 (共 ${total} 集)...`,
+    { seasonTitle, total },
+    traceId
+  );
 
   onProgress?.({
     current: 0,
     total,
     found: 0,
-    message: `准备探测合集 ${total} 个剧集的字幕...`,
+    message: `正在探测合集字幕 (0/${total})...`,
   });
 
   const CONCURRENCY = 3;
+
   for (let i = 0; i < episodes.length; i += CONCURRENCY) {
     if (signal?.aborted) break;
 
@@ -236,19 +217,23 @@ export async function batchDownloadSeasonSubtitlesZip(
 
           if (targetCid) {
             const signedQuery = await signWbiQuery({ bvid: ep.bvid, cid: targetCid });
-            const subRes = await requestJson<any>(`https://api.bilibili.com/x/player/wbi/v2?${signedQuery}`);
-            const rawSubList = subRes?.data?.subtitle?.subtitles || subRes?.data?.subtitle?.list || [];
+            const rawSubRes = await requestJson<unknown>(`https://api.bilibili.com/x/player/wbi/v2?${signedQuery}`);
+            const parsed = BiliPlayerResponseSchema.safeParse(rawSubRes);
+            const rawSubList: BiliSubtitleItem[] =
+              parsed.success
+                ? parsed.data.data?.subtitle?.subtitles || parsed.data.data?.subtitle?.list || []
+                : [];
 
-            if (Array.isArray(rawSubList) && rawSubList.length > 0) {
+            if (rawSubList.length > 0) {
               const targetSub =
-                rawSubList.find((s: any) => (s.lan || s.lang || '').includes('zh')) ||
+                rawSubList.find((s) => (s.lan || s.lang || '').includes('zh')) ||
                 rawSubList[0];
 
               if (targetSub?.subtitle_url || targetSub?.url) {
-                const subUrl = targetSub.subtitle_url || targetSub.url;
+                const subUrl = targetSub.subtitle_url || targetSub.url || '';
                 const finalSubUrl = subUrl.startsWith('//') ? `https:${subUrl}` : subUrl;
-                const subJson = await requestJson<any>(finalSubUrl);
-                const srtText = convertJsonToSrt(subJson);
+                const subJson = await requestJson<unknown>(finalSubUrl);
+                const srtText = convertSubtitleJsonToSrt(subJson);
 
                 if (srtText.trim()) {
                   const lanDoc = targetSub.lan_doc || targetSub.lang_doc || targetSub.lan || '中文';
@@ -269,10 +254,11 @@ export async function batchDownloadSeasonSubtitlesZip(
               }
             }
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const msg = getErrorMessage(err);
           logger.warn(
             'BatchSubtitle',
-            `[${pageLabel}] 字幕探测未获取到内容: ${err?.message || err}`,
+            `[${pageLabel}] 字幕探测未获取到内容: ${msg}`,
             null,
             traceId
           );
@@ -290,36 +276,35 @@ export async function batchDownloadSeasonSubtitlesZip(
   }
 
   if (signal?.aborted) {
-    throw new DOMException('已取消合集字幕打包任务', 'AbortError');
+    throw new DOMException('Download aborted by user', 'AbortError');
   }
 
   if (zipFiles.length === 0) {
-    throw new Error('未在任何合集选集中探测到可用字幕内容');
+    throw new Error('检索完成，该合集所有剧集均未发现任何字幕');
   }
 
   onProgress?.({
     current: total,
     total,
     found: foundCount,
-    message: `正在封装并生成 ZIP 归档文件夹 (${foundCount} 集)...`,
+    message: `正在打包 ${zipFiles.length} 份字幕至 ZIP 压缩包...`,
   });
 
+  logger.info('BatchSubtitle', `打包生成合集 ZIP 压缩包: 共 ${zipFiles.length} 个文件`, null, traceId);
   const zipBlob = createZipArchive(zipFiles);
-  const outFileName = `${cleanTitle}_合集字幕(${foundCount}集).zip`;
 
-  saveBlobAsFile(zipBlob, outFileName, cleanTitle);
+  const zipFileName = `${cleanTitle}_全套字幕.zip`;
+  await saveBlobAsFile(zipBlob, zipFileName, seasonTitle);
 
   logger.success(
     'BatchSubtitle',
-    `合集字幕打包完成并已触发下载: 共 ${foundCount} 集 (${(zipBlob.size / 1024).toFixed(1)} KB)`,
-    { zipFileName: outFileName, count: foundCount },
+    `合集字幕导出成功: 共打包 ${zipFiles.length} 个字幕文件 (${(zipBlob.size / 1024).toFixed(1)} KB)`,
+    null,
     traceId
   );
 
-  return {
-    total,
-    found: foundCount,
-    blob: zipBlob,
-    fileName: outFileName,
-  };
+  return { zipBlob, foundCount };
 }
+
+export const batchDetectAndDownloadSubtitles = batchDownloadSubtitles;
+export const batchDownloadSeasonSubtitlesZip = batchDownloadSeasonSubtitles;

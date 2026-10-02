@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Download, Loader2, GripVertical, CheckCircle2, AlertCircle, ArrowUpRight } from 'lucide-react';
 import type { DownloadTask } from '../types';
 
@@ -17,7 +17,22 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
   onClick,
   onContextMenu,
 }) => {
-  const [position, setPosition] = useState<{ x?: number; y?: number }>({});
+  const [position, setPosition] = useState<{ x?: number; y?: number }>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('bili_dl_btn_pos');
+        if (saved) {
+          const parsed = JSON.parse(saved) as { x?: number; y?: number };
+          if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
+            const clampedX = Math.max(12, Math.min(window.innerWidth - 160, parsed.x));
+            const clampedY = Math.max(12, Math.min(window.innerHeight - 50, parsed.y));
+            return { x: clampedX, y: clampedY };
+          }
+        }
+      }
+    } catch {}
+    return {};
+  });
   const [isDragging, setIsDragging] = useState(false);
   const [tiltAngle, setTiltAngle] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
@@ -36,25 +51,9 @@ export const FloatButton: React.FC<FloatButtonProps> = ({
 
   const lastPosRef = useRef<{ x: number; y: number; time: number }>({ x: 0, y: 0, time: 0 });
   const velocityRef = useRef<{ vx: number; vy: number }>({ vx: 0, vy: 0 });
-  const currentPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const currentPosRef = useRef<{ x: number; y: number }>({ x: position.x || 0, y: position.y || 0 });
   const buttonRef = useRef<HTMLDivElement>(null);
   const wasDraggedRef = useRef(false);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('bili_dl_btn_pos');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
-          // Clamp within viewport in case window size changed
-          const clampedX = Math.max(12, Math.min(window.innerWidth - 160, parsed.x));
-          const clampedY = Math.max(12, Math.min(window.innerHeight - 50, parsed.y));
-          setPosition({ x: clampedX, y: clampedY });
-          currentPosRef.current = { x: clampedX, y: clampedY };
-        }
-      }
-    } catch {}
-  }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;

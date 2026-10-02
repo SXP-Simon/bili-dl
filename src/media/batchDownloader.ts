@@ -5,6 +5,7 @@
 import { fetchCurrentMediaData, getVideoTitle } from '../api/bilibili';
 import { downloadAudio, downloadAndMuxMp4 } from './downloader';
 import { logger } from '../utils/logger';
+import { getErrorMessage, isAbortError } from '../utils/error';
 import type { VideoPageItem, DownloadTask, SeasonEpisodeItem } from '../types';
 
 /**
@@ -96,18 +97,22 @@ export async function batchDownloadAllLowestAudios(
         `P${page.page}-最低音频`,
         signal
       );
-    } catch (err: any) {
-      if (signal?.aborted || err?.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (signal?.aborted || isAbortError(err)) {
         onTaskUpdate(taskId, { status: 'cancelled', message: '已取消下载' });
         for (let j = idx + 1; j < pages.length; j++) {
-          onTaskUpdate(`batch_audio_${bvid}_${pages[j].cid}`, {
-            status: 'cancelled',
-            message: '已取消下载',
-          });
+          const nextP = pages[j];
+          if (nextP) {
+            onTaskUpdate(`batch_audio_${bvid}_${nextP.cid}`, {
+              status: 'cancelled',
+              message: '已取消下载',
+            });
+          }
         }
         break;
       } else {
-        onTaskUpdate(taskId, { status: 'error', message: `下载失败: ${err.message}` });
+        const msg = getErrorMessage(err);
+        onTaskUpdate(taskId, { status: 'error', message: `下载失败: ${msg}` });
       }
     }
   }
@@ -206,18 +211,22 @@ export async function batchDownloadAllHighestVideos(
         `P${page.page}-${highestVideo.codecName}`,
         signal
       );
-    } catch (err: any) {
-      if (signal?.aborted || err?.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (signal?.aborted || isAbortError(err)) {
         onTaskUpdate(taskId, { status: 'cancelled', message: '已取消下载' });
         for (let j = idx + 1; j < pages.length; j++) {
-          onTaskUpdate(`batch_video_${bvid}_${pages[j].cid}`, {
-            status: 'cancelled',
-            message: '已取消下载',
-          });
+          const nextP = pages[j];
+          if (nextP) {
+            onTaskUpdate(`batch_video_${bvid}_${nextP.cid}`, {
+              status: 'cancelled',
+              message: '已取消下载',
+            });
+          }
         }
         break;
       } else {
-        onTaskUpdate(taskId, { status: 'error', message: `合成下载失败: ${err.message}` });
+        const msg = getErrorMessage(err);
+        onTaskUpdate(taskId, { status: 'error', message: `合成下载失败: ${msg}` });
       }
     }
   }
@@ -314,18 +323,22 @@ export async function batchDownloadSeasonHighestVideos(
         `合集第${ep.pageIndex}集-${highestVideo.codecName}`,
         signal
       );
-    } catch (err: any) {
-      if (signal?.aborted || err?.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (signal?.aborted || isAbortError(err)) {
         onTaskUpdate(taskId, { status: 'cancelled', message: '已取消下载' });
         for (let j = idx + 1; j < episodes.length; j++) {
-          onTaskUpdate(`season_video_${episodes[j].bvid}`, {
-            status: 'cancelled',
-            message: '已取消下载',
-          });
+          const nextEp = episodes[j];
+          if (nextEp) {
+            onTaskUpdate(`season_video_${nextEp.bvid}`, {
+              status: 'cancelled',
+              message: '已取消下载',
+            });
+          }
         }
         break;
       } else {
-        onTaskUpdate(taskId, { status: 'error', message: `合成下载失败: ${err.message}` });
+        const msg = getErrorMessage(err);
+        onTaskUpdate(taskId, { status: 'error', message: `合成下载失败: ${msg}` });
       }
     }
   }
@@ -418,18 +431,22 @@ export async function batchDownloadSeasonLowestAudios(
         `合集第${ep.pageIndex}集-音频`,
         signal
       );
-    } catch (err: any) {
-      if (signal?.aborted || err?.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (signal?.aborted || isAbortError(err)) {
         onTaskUpdate(taskId, { status: 'cancelled', message: '已取消下载' });
         for (let j = idx + 1; j < episodes.length; j++) {
-          onTaskUpdate(`season_audio_${episodes[j].bvid}`, {
-            status: 'cancelled',
-            message: '已取消下载',
-          });
+          const nextEp = episodes[j];
+          if (nextEp) {
+            onTaskUpdate(`season_audio_${nextEp.bvid}`, {
+              status: 'cancelled',
+              message: '已取消下载',
+            });
+          }
         }
         break;
       } else {
-        onTaskUpdate(taskId, { status: 'error', message: `音频下载失败: ${err.message}` });
+        const msg = getErrorMessage(err);
+        onTaskUpdate(taskId, { status: 'error', message: `音频下载失败: ${msg}` });
       }
     }
   }

@@ -127,23 +127,35 @@ export function saveDownloadSettings(settings: DownloadSettings): void {
   } catch {}
 }
 
+interface FileSystemAccessWindow {
+  showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>;
+}
+
+interface PermissionAwareHandle {
+  queryPermission?: (descriptor?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
+  requestPermission?: (descriptor?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
+}
+
 /**
  * 唤起本地磁盘文件夹选择器 (File System Access API)，并持久化到 IndexedDB
  */
 export async function pickLocalDirectory(): Promise<{ handle: FileSystemDirectoryHandle; name: string } | null> {
-  if (typeof (window as any).showDirectoryPicker !== 'function') {
+  const fsaWindow = window as unknown as FileSystemAccessWindow;
+  if (typeof fsaWindow.showDirectoryPicker !== 'function') {
     throw new Error('当前浏览器不支持 File System Access API 目录选择功能');
   }
 
   try {
-    const handle = await (window as any).showDirectoryPicker({
+    const handle = await fsaWindow.showDirectoryPicker({
       mode: 'readwrite',
     });
     cachedDirHandle = handle;
     await saveDirectoryHandleToIDB(handle);
     return { handle, name: handle.name };
-  } catch (err: any) {
-    if (err.name === 'AbortError') return null;
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'AbortError') {
+      return null;
+    }
     throw err;
   }
 }
@@ -161,12 +173,13 @@ export async function getOrRestoreDirectoryHandle(requestIfPrompt = false): Prom
   }
   if (cachedDirHandle) {
     try {
-      const perm = await (cachedDirHandle as any).queryPermission?.({ mode: 'readwrite' });
+      const permHandle = cachedDirHandle as unknown as PermissionAwareHandle;
+      const perm = await permHandle.queryPermission?.({ mode: 'readwrite' });
       if (perm === 'granted') {
         return cachedDirHandle;
       }
       if (perm === 'prompt' && requestIfPrompt) {
-        const reqPerm = await (cachedDirHandle as any).requestPermission?.({ mode: 'readwrite' });
+        const reqPerm = await permHandle.requestPermission?.({ mode: 'readwrite' });
         if (reqPerm === 'granted') return cachedDirHandle;
       }
       return cachedDirHandle;

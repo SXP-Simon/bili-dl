@@ -7,7 +7,7 @@ class Logger {
   private maxLogs = 500;
   private listeners: Set<LogListener> = new Set();
 
-  public log(level: LogLevel, tag: string, message: string, details?: any, traceId?: string): void {
+  public log(level: LogLevel, tag: string, message: string, details?: unknown, traceId?: string): void {
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now
       .getMinutes()
@@ -46,23 +46,23 @@ class Logger {
     this.notify();
   }
 
-  public info(tag: string, message: string, details?: any, traceId?: string): void {
+  public info(tag: string, message: string, details?: unknown, traceId?: string): void {
     this.log('info', tag, message, details, traceId);
   }
 
-  public success(tag: string, message: string, details?: any, traceId?: string): void {
+  public success(tag: string, message: string, details?: unknown, traceId?: string): void {
     this.log('success', tag, message, details, traceId);
   }
 
-  public warn(tag: string, message: string, details?: any, traceId?: string): void {
+  public warn(tag: string, message: string, details?: unknown, traceId?: string): void {
     this.log('warn', tag, message, details, traceId);
   }
 
-  public error(tag: string, message: string, details?: any, traceId?: string): void {
+  public error(tag: string, message: string, details?: unknown, traceId?: string): void {
     this.log('error', tag, message, details, traceId);
   }
 
-  public debug(tag: string, message: string, details?: any, traceId?: string): void {
+  public debug(tag: string, message: string, details?: unknown, traceId?: string): void {
     this.log('debug', tag, message, details, traceId);
   }
 
