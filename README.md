@@ -24,13 +24,49 @@
 </p>
 
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/gh/SXP-Simon/bili-dl@master/image.png" alt="bilidl-demo">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/demo-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="./assets/demo-light.png" />
+    <img src="./assets/demo-light.png" alt="Bili-DL Preview" width="100%" />
+  </picture>
+  <br>
   <b>极简 · 清爽 · 高性能</b><br>
-  基于 React 19 + TypeScript 7 + Tailwind CSS v4 构建的现代化 B 站资源下载油猴脚本。<br>
-  支持 4K/1080P 前端无损秒级合成 MP4、独立音频提取、弹幕转 ASS、官方字幕转 SRT 及多 P 批量导出。
+  基于 React 19 + TypeScript 7 + Tailwind CSS v4 构建的现代化 B 站全能媒体下载油猴脚本。<br>
+  支持 4K/1080P 前端无损秒级合成 MP4、独立音频提取、弹幕转 ASS、官方字幕转 SRT、多 P/合集批量导出及外部下载器无缝直连。
 </p>
 
 </div>
+
+---
+
+## 📸 界面预览 (深浅色模式自适应)
+
+<table align="center" width="100%">
+  <thead>
+    <tr>
+      <th align="center" width="50%">☀️ 浅色模式 (Light Mode)</th>
+      <th align="center" width="50%">🌙 深色模式 (Dark Mode)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td align="center" width="50%" valign="top">
+        <img src="./assets/demo-light.png" alt="主下载面板 - 浅色模式" width="100%">
+      </td>
+      <td align="center" width="50%" valign="top">
+        <img src="./assets/demo-dark.png" alt="主下载面板 - 深色模式" width="100%">
+      </td>
+    </tr>
+    <tr>
+      <td align="center" width="50%" valign="top">
+        <img src="./assets/setting-light.png" alt="偏好与下载器设置 - 浅色模式" width="100%">
+      </td>
+      <td align="center" width="50%" valign="top">
+        <img src="./assets/setting-dark.png" alt="偏好与下载器设置 - 深色模式" width="100%">
+      </td>
+    </tr>
+  </tbody>
+</table>
 
 ---
 
