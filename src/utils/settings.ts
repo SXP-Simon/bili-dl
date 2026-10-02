@@ -20,6 +20,7 @@ export interface DownloadSettings {
   abdmPort: number; // AB Download Manager 监听端口 (默认 15151)
   aria2Port: number; // Aria2 监听端口 (默认 6800)
   aria2Secret?: string; // Aria2 RPC 访问密钥
+  downloadersConfig?: Record<string, { port?: number; secret?: string; [key: string]: unknown }>; // 可扩展下载器配置存储字典
   abdmEnabled?: boolean; // 兼容旧字段
 }
 

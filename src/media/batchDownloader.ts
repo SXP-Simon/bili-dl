@@ -6,10 +6,12 @@ import { fetchCurrentMediaData, getVideoTitle } from '../api/bilibili';
 import { downloadAudio, downloadAndMuxMp4 } from './downloader';
 import { logger } from '../utils/logger';
 import { getErrorMessage, isAbortError } from '../utils/error';
-import { getPrioritizedCdnUrls } from '../utils/cdn';
-import { getDownloadSettings } from '../utils/settings';
+import {
+  buildMediaDownloadSources,
+  dispatchExternalDownloadTask,
+  type IExternalDownloader,
+} from '../downloader';
 import type { VideoPageItem, DownloadTask, SeasonEpisodeItem } from '../types';
-import type { IExternalDownloader, ExternalDownloadSource } from '../downloader';
 
 export interface BatchDownloadOptions {
   externalDownloader?: IExternalDownloader;
@@ -93,48 +95,21 @@ export async function batchDownloadAllLowestAudios(
       });
 
       if (options?.externalDownloader) {
-        const ext = options.externalDownloader;
-        onTaskUpdate(taskId, {
-          status: 'downloading_audio',
-          progress: 50,
-          message: `正在推送到 ${ext.name}...`,
-        });
-
-        const currentSettings = getDownloadSettings();
-        const audioUrls = getPrioritizedCdnUrls(lowestAudio.baseUrl, lowestAudio.backupUrl, currentSettings);
-        const safeTitle = pageTitle.replace(/[\\/:*?"<>|]/g, '_');
-        const res = await ext.sendDownload(
-          {
+        const sources = buildMediaDownloadSources({ audio: lowestAudio, title: pageTitle });
+        await dispatchExternalDownloadTask({
+          downloader: options.externalDownloader,
+          payload: {
             title: pageTitle,
-            sources: [
-              {
-                url: audioUrls[0] || lowestAudio.baseUrl,
-                urls: audioUrls,
-                filename: `${safeTitle}_${lowestAudio.name}.m4a`,
-                type: 'audio',
-                qualityDesc: lowestAudio.name,
-              },
-            ],
+            sources,
             downloadPage: typeof location !== 'undefined' ? location.href : undefined,
             bvid,
             cid: page.cid,
           },
-          { port: options.externalPort }
-        );
-
-        if (res.success) {
-          onTaskUpdate(taskId, {
-            status: 'completed',
-            progress: 100,
-            message: `已推送到 ${ext.name}`,
-          });
-        } else {
-          onTaskUpdate(taskId, {
-            status: 'error',
-            message: `推送到 ${ext.name} 失败: ${res.message}`,
-          });
-        }
-        await new Promise((r) => setTimeout(r, 150));
+          options: { port: options.externalPort },
+          taskId,
+          onTaskUpdate,
+          taskType: 'audio',
+        });
         continue;
       }
 
@@ -253,60 +228,21 @@ export async function batchDownloadAllHighestVideos(
       });
 
       if (options?.externalDownloader) {
-        const ext = options.externalDownloader;
-        onTaskUpdate(taskId, {
-          status: 'downloading_video',
-          progress: 50,
-          message: `正在推送到 ${ext.name}...`,
-        });
-
-        const currentSettings = getDownloadSettings();
-        const safeTitle = pageTitle.replace(/[\\/:*?"<>|]/g, '_');
-        const videoUrls = getPrioritizedCdnUrls(highestVideo.baseUrl, highestVideo.backupUrl, currentSettings);
-        const sources: ExternalDownloadSource[] = [
-          {
-            url: videoUrls[0] || highestVideo.baseUrl,
-            urls: videoUrls,
-            filename: `${safeTitle}_${highestVideo.qualityName}_${highestVideo.codecName}.m4s`,
-            type: 'video',
-            qualityDesc: highestVideo.qualityName,
-          },
-        ];
-        if (bestAudio) {
-          const audioUrls = getPrioritizedCdnUrls(bestAudio.baseUrl, bestAudio.backupUrl, currentSettings);
-          sources.push({
-            url: audioUrls[0] || bestAudio.baseUrl,
-            urls: audioUrls,
-            filename: `${safeTitle}_${bestAudio.name}.m4s`,
-            type: 'audio',
-            qualityDesc: bestAudio.name,
-          });
-        }
-
-        const res = await ext.sendDownload(
-          {
+        const sources = buildMediaDownloadSources({ video: highestVideo, audio: bestAudio, title: pageTitle });
+        await dispatchExternalDownloadTask({
+          downloader: options.externalDownloader,
+          payload: {
             title: pageTitle,
             sources,
             downloadPage: typeof location !== 'undefined' ? location.href : undefined,
             bvid,
             cid: page.cid,
           },
-          { port: options.externalPort }
-        );
-
-        if (res.success) {
-          onTaskUpdate(taskId, {
-            status: 'completed',
-            progress: 100,
-            message: `已推送到 ${ext.name}`,
-          });
-        } else {
-          onTaskUpdate(taskId, {
-            status: 'error',
-            message: `推送到 ${ext.name} 失败: ${res.message}`,
-          });
-        }
-        await new Promise((r) => setTimeout(r, 150));
+          options: { port: options.externalPort },
+          taskId,
+          onTaskUpdate,
+          taskType: 'video',
+        });
         continue;
       }
 
@@ -427,59 +363,21 @@ export async function batchDownloadSeasonHighestVideos(
       });
 
       if (options?.externalDownloader) {
-        const ext = options.externalDownloader;
-        onTaskUpdate(taskId, {
-          status: 'downloading_video',
-          progress: 50,
-          message: `正在推送到 ${ext.name}...`,
-        });
-
-        const currentSettings = getDownloadSettings();
-        const videoUrls = getPrioritizedCdnUrls(highestVideo.baseUrl, highestVideo.backupUrl, currentSettings);
-        const sources: ExternalDownloadSource[] = [
-          {
-            url: videoUrls[0] || highestVideo.baseUrl,
-            urls: videoUrls,
-            filename: `${episodeFileName}_${highestVideo.qualityName}_${highestVideo.codecName}.m4s`,
-            type: 'video',
-            qualityDesc: highestVideo.qualityName,
-          },
-        ];
-        if (bestAudio) {
-          const audioUrls = getPrioritizedCdnUrls(bestAudio.baseUrl, bestAudio.backupUrl, currentSettings);
-          sources.push({
-            url: audioUrls[0] || bestAudio.baseUrl,
-            urls: audioUrls,
-            filename: `${episodeFileName}_${bestAudio.name}.m4s`,
-            type: 'audio',
-            qualityDesc: bestAudio.name,
-          });
-        }
-
-        const res = await ext.sendDownload(
-          {
+        const sources = buildMediaDownloadSources({ video: highestVideo, audio: bestAudio, title: episodeFileName });
+        await dispatchExternalDownloadTask({
+          downloader: options.externalDownloader,
+          payload: {
             title: episodeFileName,
             sources,
             downloadPage: typeof location !== 'undefined' ? location.href : undefined,
             bvid: ep.bvid,
             cid: ep.cid,
           },
-          { port: options.externalPort }
-        );
-
-        if (res.success) {
-          onTaskUpdate(taskId, {
-            status: 'completed',
-            progress: 100,
-            message: `已推送到 ${ext.name}`,
-          });
-        } else {
-          onTaskUpdate(taskId, {
-            status: 'error',
-            message: `推送到 ${ext.name} 失败: ${res.message}`,
-          });
-        }
-        await new Promise((r) => setTimeout(r, 150));
+          options: { port: options.externalPort },
+          taskId,
+          onTaskUpdate,
+          taskType: 'video',
+        });
         continue;
       }
 
@@ -597,47 +495,21 @@ export async function batchDownloadSeasonLowestAudios(
       });
 
       if (options?.externalDownloader) {
-        const ext = options.externalDownloader;
-        onTaskUpdate(taskId, {
-          status: 'downloading_audio',
-          progress: 50,
-          message: `正在推送到 ${ext.name}...`,
-        });
-
-        const currentSettings = getDownloadSettings();
-        const audioUrls = getPrioritizedCdnUrls(lowestAudio.baseUrl, lowestAudio.backupUrl, currentSettings);
-        const res = await ext.sendDownload(
-          {
+        const sources = buildMediaDownloadSources({ audio: lowestAudio, title: episodeFileName });
+        await dispatchExternalDownloadTask({
+          downloader: options.externalDownloader,
+          payload: {
             title: episodeFileName,
-            sources: [
-              {
-                url: audioUrls[0] || lowestAudio.baseUrl,
-                urls: audioUrls,
-                filename: `${episodeFileName}_${lowestAudio.name}.m4a`,
-                type: 'audio',
-                qualityDesc: lowestAudio.name,
-              },
-            ],
+            sources,
             downloadPage: typeof location !== 'undefined' ? location.href : undefined,
             bvid: ep.bvid,
             cid: ep.cid,
           },
-          { port: options.externalPort }
-        );
-
-        if (res.success) {
-          onTaskUpdate(taskId, {
-            status: 'completed',
-            progress: 100,
-            message: `已推送到 ${ext.name}`,
-          });
-        } else {
-          onTaskUpdate(taskId, {
-            status: 'error',
-            message: `推送到 ${ext.name} 失败: ${res.message}`,
-          });
-        }
-        await new Promise((r) => setTimeout(r, 150));
+          options: { port: options.externalPort },
+          taskId,
+          onTaskUpdate,
+          taskType: 'audio',
+        });
         continue;
       }
 

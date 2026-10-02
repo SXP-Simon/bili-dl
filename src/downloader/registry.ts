@@ -1,6 +1,7 @@
-import type { IExternalDownloader } from './types';
+import type { IExternalDownloader, DownloaderRuntimeOptions } from './types';
 import { abDownloadManager } from './abdm';
 import { aria2RpcDownloader } from './aria2Rpc';
+import { getDownloadSettings, type DownloadSettings } from '../utils/settings';
 
 /**
  * 外部下载器统一注册中心 (遵循开放封闭原则 OCP，易于平滑扩展 IDM、Motrix、FDM 等)
@@ -51,6 +52,46 @@ export class ExternalDownloaderRegistry {
       if (found) return found;
     }
     return this.getDefault();
+  }
+
+  /**
+   * 解析任意指定下载器的配置端口
+   */
+  public getDownloaderPort(
+    downloaderOrId: IExternalDownloader | string,
+    settings?: DownloadSettings
+  ): number {
+    const s = settings || getDownloadSettings();
+    const downloader = typeof downloaderOrId === 'string' ? this.getActive(downloaderOrId) : downloaderOrId;
+    const cfg = downloader.resolveConfig ? downloader.resolveConfig(s) : { port: downloader.defaultPort };
+    return cfg.port || downloader.defaultPort;
+  }
+
+  /**
+   * 统一获取当前生效的下载器上下文与运行时状态 (解耦消费端对下载器 ID、端口等内部属性的硬编码)
+   */
+  public getActiveContext(settings?: DownloadSettings): {
+    downloader: IExternalDownloader;
+    config: DownloaderRuntimeOptions;
+    port: number;
+    isExternal: boolean;
+  } {
+    const resolvedSettings = settings || getDownloadSettings();
+    const downloader = this.getActive(resolvedSettings.externalDownloaderId);
+    const config = downloader.resolveConfig
+      ? downloader.resolveConfig(resolvedSettings)
+      : { port: downloader.defaultPort };
+    const port = config.port || downloader.defaultPort;
+    const isExternal =
+      resolvedSettings.defaultDownloaderEngine === 'external' ||
+      resolvedSettings.externalDownloaderEnabled === true;
+
+    return {
+      downloader,
+      config,
+      port,
+      isExternal,
+    };
   }
 }
 

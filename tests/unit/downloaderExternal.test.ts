@@ -3,7 +3,12 @@ import {
   externalDownloaderRegistry,
   abDownloadManager,
   ABDownloadManager,
+  buildMediaDownloadSources,
+  dispatchExternalDownloadTask,
+  type IExternalDownloader,
 } from '../../src/downloader';
+import type { DownloadSettings } from '../../src/utils/settings';
+import type { VideoStreamItem, AudioStreamItem } from '../../src/types';
 import { GM_xmlhttpRequest } from '$';
 
 vi.mock('$', () => ({
@@ -136,4 +141,84 @@ describe('External Downloader Architecture Unit Tests (OCP)', () => {
       expect(items[1].link).toBe('https://cn-upcdn.bilivideo.com/audio.m4s');
     });
   });
+
+  describe('Registry getActiveContext and getDownloaderPort', () => {
+    it('should resolve port and context dynamically without hardcoded branching', () => {
+      const customSettings = {
+        externalDownloaderId: 'aria2_rpc' as const,
+        aria2Port: 6812,
+        aria2Secret: 'my-token',
+        externalDownloaderEnabled: true,
+      };
+
+      const ctx = externalDownloaderRegistry.getActiveContext(customSettings as unknown as DownloadSettings);
+      expect(ctx.downloader.id).toBe('aria2_rpc');
+      expect(ctx.port).toBe(6812);
+      expect(ctx.config.secret).toBe('my-token');
+      expect(ctx.isExternal).toBe(true);
+
+      const resolvedPort = externalDownloaderRegistry.getDownloaderPort('aria2_rpc', customSettings as unknown as DownloadSettings);
+      expect(resolvedPort).toBe(6812);
+    });
+  });
+
+  describe('buildMediaDownloadSources and dispatchExternalDownloadTask', () => {
+    it('should prioritize CDN URLs according to cdnPriorityOrder settings', () => {
+      const sources = buildMediaDownloadSources({
+        video: {
+          baseUrl: 'https://cn-upcdn.bilivideo.com/v.m4s',
+          backupUrl: ['https://xy123x.mcdn.bilivideo.cn/v.m4s'],
+          qualityName: '1080P',
+          codecName: 'HEVC',
+        } as unknown as VideoStreamItem,
+        audio: {
+          baseUrl: 'https://cn-upcdn.bilivideo.com/a.m4s',
+          backupUrl: ['https://xy123x.mcdn.bilivideo.cn/a.m4s'],
+          name: '高品质音轨',
+        } as unknown as AudioStreamItem,
+        title: '测试视频',
+        settings: { cdnPriorityOrder: ['pcdn', 'bili'] } as unknown as DownloadSettings,
+      });
+
+      expect(sources).toHaveLength(2);
+      // Because mcdn is prioritized first, video url should be the mcdn URL
+      expect(sources[0].url).toContain('mcdn.bilivideo.cn');
+      expect(sources[0].urls?.[0]).toContain('mcdn.bilivideo.cn');
+      expect(sources[0].urls?.[1]).toContain('cn-upcdn.bilivideo.com');
+
+      // Audio url should also prioritize mcdn
+      expect(sources[1].url).toContain('mcdn.bilivideo.cn');
+    });
+
+    it('should dispatch download task and update task status via dispatchExternalDownloadTask', async () => {
+      const mockDownloader = {
+        id: 'mock_dl',
+        name: 'Mock DL',
+        defaultPort: 9999,
+        checkAvailability: vi.fn(),
+        sendDownload: vi.fn().mockResolvedValue({ success: true, message: 'Dispatched successfully' }),
+        resolveConfig: vi.fn().mockReturnValue({ port: 9999 }),
+      };
+
+      const onTaskUpdate = vi.fn();
+      await dispatchExternalDownloadTask({
+        downloader: mockDownloader as unknown as IExternalDownloader,
+        payload: {
+          title: '测试推送',
+          sources: [{ url: 'https://test.com/v.m4s', filename: 'v.mp4', type: 'video' }],
+        },
+        taskId: 'test-task-1',
+        taskType: 'video',
+        onTaskUpdate,
+        delayMs: 0,
+      });
+
+      expect(mockDownloader.sendDownload).toHaveBeenCalledTimes(1);
+      expect(onTaskUpdate).toHaveBeenCalledWith('test-task-1', expect.objectContaining({
+        status: 'completed',
+        progress: 100,
+      }));
+    });
+  });
 });
+

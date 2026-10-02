@@ -70,17 +70,34 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
     onShowToast('已恢复 CDN 节点官方默认推荐排序', 'info');
   };
 
+  const handleUpdateActivePort = (newPort: number) => {
+    const defaultPort = activeDownloader.defaultPort || 15151;
+    const val = Number.isNaN(newPort) ? defaultPort : newPort;
+    const nextConfigs = { ...settings.downloadersConfig };
+    nextConfigs[activeDownloader.id] = {
+      ...nextConfigs[activeDownloader.id],
+      port: val,
+    };
+    const nextSettings: DownloadSettings = {
+      ...settings,
+      downloadersConfig: nextConfigs,
+    };
+    if (activeDownloader.id === 'abdm') {
+      nextSettings.abdmPort = val;
+    } else if (activeDownloader.id === 'aria2_rpc') {
+      nextSettings.aria2Port = val;
+    }
+    setSettings(nextSettings);
+    saveDownloadSettings(nextSettings);
+  };
+
   const handleTestConnection = async () => {
-    const port =
-      activeDownloader.id === 'abdm'
-        ? settings.abdmPort
-        : activeDownloader.id === 'aria2_rpc'
-        ? settings.aria2Port
-        : activeDownloader.defaultPort;
+    const port = externalDownloaderRegistry.getDownloaderPort(activeDownloader, settings);
+    const options = activeDownloader.resolveConfig ? activeDownloader.resolveConfig(settings) : { port };
 
     setTestStatus({ loading: true, message: `正在探测 127.0.0.1:${port}...` });
     try {
-      const res = await activeDownloader.checkAvailability({ port, timeoutMs: 2000 });
+      const res = await activeDownloader.checkAvailability({ ...options, port, timeoutMs: 2000 });
       setTestStatus({
         loading: false,
         ok: res.isAvailable,
@@ -508,12 +525,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
                 <div className="grid grid-cols-2 gap-2">
                   {registeredDownloaders.map((downloader) => {
                     const isSelected = (settings.externalDownloaderId || 'abdm') === downloader.id;
-                    const port =
-                      downloader.id === 'abdm'
-                        ? settings.abdmPort
-                        : downloader.id === 'aria2_rpc'
-                        ? settings.aria2Port
-                        : downloader.defaultPort;
+                    const port = externalDownloaderRegistry.getDownloaderPort(downloader, settings);
 
                     return (
                       <button
@@ -552,20 +564,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
-                    value={
-                      activeDownloader.id === 'abdm'
-                        ? settings.abdmPort
-                        : activeDownloader.id === 'aria2_rpc'
-                        ? settings.aria2Port
-                        : activeDownloader.defaultPort
-                    }
+                    value={externalDownloaderRegistry.getDownloaderPort(activeDownloader, settings)}
                     onChange={(e) => {
                       const val = parseInt(e.target.value, 10);
-                      if (activeDownloader.id === 'abdm') {
-                        updateSetting('abdmPort', val || 15151);
-                      } else if (activeDownloader.id === 'aria2_rpc') {
-                        updateSetting('aria2Port', val || 6800);
-                      }
+                      handleUpdateActivePort(val);
                     }}
                     className="w-24 px-2.5 py-1 rounded-lg bg-background border border-border/80 text-foreground font-mono text-xs text-center focus:outline-none focus:ring-1 focus:ring-primary"
                   />

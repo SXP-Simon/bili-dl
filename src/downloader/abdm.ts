@@ -3,6 +3,7 @@ import type {
   IExternalDownloader,
   ExternalDownloaderStatus,
   ExternalDownloadPayload,
+  DownloaderRuntimeOptions,
 } from './types';
 import { logger } from '../utils/logger';
 import { getErrorMessage } from '../utils/error';
@@ -18,6 +19,13 @@ export class ABDownloadManager implements IExternalDownloader {
   public readonly shortName = 'ABDM';
   public readonly description = '现代化开源多线程下载管理器 (支持持久化离线后台下载)';
   public readonly defaultPort = 15151;
+
+  public resolveConfig(settings: import('../utils/settings').DownloadSettings): DownloaderRuntimeOptions {
+    const customPort = settings.downloadersConfig?.['abdm']?.port ?? settings.abdmPort;
+    return {
+      port: customPort || this.defaultPort,
+    };
+  }
 
   /**
    * 探测 ABDM 客户端是否在运行 (健康检查)

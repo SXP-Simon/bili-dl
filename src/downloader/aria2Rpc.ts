@@ -3,6 +3,7 @@ import type {
   IExternalDownloader,
   ExternalDownloaderStatus,
   ExternalDownloadPayload,
+  DownloaderRuntimeOptions,
 } from './types';
 import { logger } from '../utils/logger';
 import { getErrorMessage } from '../utils/error';
@@ -16,6 +17,13 @@ export class Aria2RpcDownloader implements IExternalDownloader {
   public readonly shortName = 'Aria2';
   public readonly description = 'Aria2 / Motrix 远程 RPC 下载引擎';
   public readonly defaultPort = 6800;
+
+  public resolveConfig(settings: import('../utils/settings').DownloadSettings): DownloaderRuntimeOptions {
+    const cfg = settings.downloadersConfig?.['aria2_rpc'];
+    const port = cfg?.port ?? settings.aria2Port ?? this.defaultPort;
+    const secret = cfg?.secret ?? settings.aria2Secret ?? '';
+    return { port, secret };
+  }
 
   public async checkAvailability(options?: {
     timeoutMs?: number;

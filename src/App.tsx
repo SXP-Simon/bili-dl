@@ -12,11 +12,10 @@ import { batchDownloadAllLowestAudios, batchDownloadAllHighestVideos, batchDownl
 import { logger } from './utils/logger';
 import { getErrorMessage, isAbortError } from './utils/error';
 import { getDownloadSettings, saveDownloadSettings } from './utils/settings';
-import { getPrioritizedCdnUrls } from './utils/cdn';
 import {
   externalDownloaderRegistry,
+  buildMediaDownloadSources,
   type IExternalDownloader,
-  type ExternalDownloadSource,
   type ExternalDownloaderStatus,
 } from './downloader';
 import type { MediaResourceData, VideoStreamItem, AudioStreamItem, DownloadTask, QuickActionItem, QuickMenuHeaderInfo } from './types';
@@ -39,8 +38,8 @@ export const App: React.FC = () => {
   const [mediaData, setMediaData] = useState<MediaResourceData | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
-  const [abdmStatus, setAbdmStatus] = useState<ExternalDownloaderStatus | null>(null);
-  const [isCheckingAbdm, setIsCheckingAbdm] = useState(false);
+  const [downloaderStatus, setDownloaderStatus] = useState<ExternalDownloaderStatus | null>(null);
+  const [isCheckingDownloader, setIsCheckingDownloader] = useState(false);
   const [downloadEngine, setDownloadEngine] = useState<'internal' | 'external'>(() => {
     const s = getDownloadSettings();
     return s.defaultDownloaderEngine || 'internal';
@@ -574,6 +573,42 @@ export const App: React.FC = () => {
     }
   };
 
+  /**
+   * 统一后台任务执行器：封装生命周期 AbortController 管理、统一 Toast 状态播报与异常捕获
+   */
+  const runManagedTask = async (params: {
+    taskId: string;
+    startToast?: string;
+    successToast?: string;
+    cancelToast?: string;
+    failPrefix: string;
+    execute: (signal: AbortSignal) => Promise<void>;
+  }) => {
+    const { taskId, startToast, successToast, cancelToast, failPrefix, execute } = params;
+    const controller = new AbortController();
+    activeControllers.current.set(taskId, controller);
+
+    if (startToast) {
+      showToast(startToast, 'info');
+    }
+
+    try {
+      await execute(controller.signal);
+      if (!controller.signal.aborted && successToast) {
+        showToast(successToast, 'success');
+      }
+    } catch (err: unknown) {
+      if (controller.signal.aborted || isAbortError(err)) {
+        if (cancelToast) showToast(cancelToast, 'info');
+      } else {
+        const msg = getErrorMessage(err);
+        showToast(`${failPrefix}: ${msg}`, 'error');
+      }
+    } finally {
+      activeControllers.current.delete(taskId);
+    }
+  };
+
   // 一键下载合集/系列 (Season) 全部剧集最低质量音频
   const handleDownloadSeasonAudiosLowest = async (customData?: MediaResourceData) => {
     const data = await getFreshMediaData(customData);
@@ -583,55 +618,30 @@ export const App: React.FC = () => {
     }
 
     const season = data.ugcSeason;
-    const currentSettings = getDownloadSettings();
-    const isExternal = downloadEngine === 'external';
-    const activeExtDownloader = externalDownloaderRegistry.getActive(currentSettings.externalDownloaderId);
-    const activePort =
-      activeExtDownloader.id === 'abdm'
-        ? currentSettings.abdmPort
-        : activeExtDownloader.id === 'aria2_rpc'
-        ? currentSettings.aria2Port
-        : activeExtDownloader.defaultPort;
+    const { downloader, port, isExternal } = externalDownloaderRegistry.getActiveContext();
+    const count = season.episodes.length;
 
-    const controller = new AbortController();
-    const taskId = `season_audios_${season.id}`;
-    activeControllers.current.set(taskId, controller);
-
-    showToast(
-      isExternal
-        ? `已将合集全部 ${season.episodes.length} 集音频推送到 ${activeExtDownloader.name}`
-        : `已将合集全部 ${season.episodes.length} 集音频加入下载队列`,
-      'info'
-    );
-
-    try {
-      await batchDownloadSeasonLowestAudios(
-        season.title,
-        season.episodes,
-        upsertTask,
-        updateTaskProgress,
-        `合集音频-${season.id}`,
-        controller.signal,
-        isExternal ? { externalDownloader: activeExtDownloader, externalPort: activePort } : undefined
-      );
-      if (!controller.signal.aborted) {
-        showToast(
-          isExternal
-            ? `合集全部 ${season.episodes.length} 集音频已成功推送到 ${activeExtDownloader.name}`
-            : `合集全部 ${season.episodes.length} 集音频下载已完成`,
-          'success'
-        );
-      }
-    } catch (err: unknown) {
-      if (controller.signal.aborted || isAbortError(err)) {
-        showToast('合集音频下载任务已取消', 'info');
-      } else {
-        const msg = getErrorMessage(err);
-        showToast(`合集音频下载失败: ${msg}`, 'error');
-      }
-    } finally {
-      activeControllers.current.delete(taskId);
-    }
+    await runManagedTask({
+      taskId: `season_audios_${season.id}`,
+      startToast: isExternal
+        ? `已将合集全部 ${count} 集音频推送到 ${downloader.name}`
+        : `已将合集全部 ${count} 集音频加入下载队列`,
+      successToast: isExternal
+        ? `合集全部 ${count} 集音频已成功推送到 ${downloader.name}`
+        : `合集全部 ${count} 集音频下载已完成`,
+      cancelToast: '合集音频下载任务已取消',
+      failPrefix: '合集音频下载失败',
+      execute: (signal) =>
+        batchDownloadSeasonLowestAudios(
+          season.title,
+          season.episodes,
+          upsertTask,
+          updateTaskProgress,
+          `合集音频-${season.id}`,
+          signal,
+          isExternal ? { externalDownloader: downloader, externalPort: port } : undefined
+        ),
+    });
   };
 
   // 一键下载合集/系列 (Season) 全部剧集最高画质视频并合成 MP4
@@ -643,55 +653,30 @@ export const App: React.FC = () => {
     }
 
     const season = data.ugcSeason;
-    const currentSettings = getDownloadSettings();
-    const isExternal = downloadEngine === 'external';
-    const activeExtDownloader = externalDownloaderRegistry.getActive(currentSettings.externalDownloaderId);
-    const activePort =
-      activeExtDownloader.id === 'abdm'
-        ? currentSettings.abdmPort
-        : activeExtDownloader.id === 'aria2_rpc'
-        ? currentSettings.aria2Port
-        : activeExtDownloader.defaultPort;
+    const { downloader, port, isExternal } = externalDownloaderRegistry.getActiveContext();
+    const count = season.episodes.length;
 
-    const controller = new AbortController();
-    const taskId = `season_videos_${season.id}`;
-    activeControllers.current.set(taskId, controller);
-
-    showToast(
-      isExternal
-        ? `已将合集全部 ${season.episodes.length} 集最高画质推送到 ${activeExtDownloader.name}`
-        : `已将合集全部 ${season.episodes.length} 集最高画质加入合成队列`,
-      'info'
-    );
-
-    try {
-      await batchDownloadSeasonHighestVideos(
-        season.title,
-        season.episodes,
-        upsertTask,
-        updateTaskProgress,
-        `合集视频-${season.id}`,
-        controller.signal,
-        isExternal ? { externalDownloader: activeExtDownloader, externalPort: activePort } : undefined
-      );
-      if (!controller.signal.aborted) {
-        showToast(
-          isExternal
-            ? `合集全部 ${season.episodes.length} 集视频已成功推送到 ${activeExtDownloader.name}`
-            : `合集全部 ${season.episodes.length} 集视频合成任务已完成`,
-          'success'
-        );
-      }
-    } catch (err: unknown) {
-      if (controller.signal.aborted || isAbortError(err)) {
-        showToast('合集视频下载任务已取消', 'info');
-      } else {
-        const msg = getErrorMessage(err);
-        showToast(`合集视频合成失败: ${msg}`, 'error');
-      }
-    } finally {
-      activeControllers.current.delete(taskId);
-    }
+    await runManagedTask({
+      taskId: `season_videos_${season.id}`,
+      startToast: isExternal
+        ? `已将合集全部 ${count} 集最高画质推送到 ${downloader.name}`
+        : `已将合集全部 ${count} 集最高画质加入合成队列`,
+      successToast: isExternal
+        ? `合集全部 ${count} 集视频已成功推送到 ${downloader.name}`
+        : `合集全部 ${count} 集视频合成任务已完成`,
+      cancelToast: '合集视频下载任务已取消',
+      failPrefix: '合集视频合成失败',
+      execute: (signal) =>
+        batchDownloadSeasonHighestVideos(
+          season.title,
+          season.episodes,
+          upsertTask,
+          updateTaskProgress,
+          `合集视频-${season.id}`,
+          signal,
+          isExternal ? { externalDownloader: downloader, externalPort: port } : undefined
+        ),
+    });
   };
 
   const handleDownloadBatchAudiosLowest = async (customData?: MediaResourceData) => {
@@ -701,22 +686,14 @@ export const App: React.FC = () => {
       return;
     }
 
-    const currentSettings = getDownloadSettings();
-    const isExternal = downloadEngine === 'external';
-    const activeExtDownloader = externalDownloaderRegistry.getActive(currentSettings.externalDownloaderId);
-    const activePort =
-      activeExtDownloader.id === 'abdm'
-        ? currentSettings.abdmPort
-        : activeExtDownloader.id === 'aria2_rpc'
-        ? currentSettings.aria2Port
-        : activeExtDownloader.defaultPort;
+    const { downloader, port, isExternal } = externalDownloaderRegistry.getActiveContext();
 
     if (data.pages.length <= 1) {
       // 单 P 视频：根据下载引擎分流
       const lowestAudio = [...data.audios].sort((a, b) => a.bandwidth - b.bandwidth)[0] || data.audios[data.audios.length - 1];
       if (lowestAudio) {
         if (isExternal) {
-          await handleDownloadWithExternal(activeExtDownloader, undefined, lowestAudio);
+          await handleDownloadWithExternal(downloader, undefined, lowestAudio);
         } else {
           await handleDownloadAudio(lowestAudio, data.title);
         }
@@ -726,45 +703,28 @@ export const App: React.FC = () => {
       return;
     }
 
-    const controller = new AbortController();
-    const taskId = `batch_audios_${data.bvid}`;
-    activeControllers.current.set(taskId, controller);
-
-    showToast(
-      isExternal
-        ? `已将 ${data.pages.length} 集音频推送到 ${activeExtDownloader.name}`
-        : `已将 ${data.pages.length} 集最低音质音频加入下载队列`,
-      'info'
-    );
-
-    try {
-      await batchDownloadAllLowestAudios(
-        data.bvid,
-        data.pages,
-        upsertTask,
-        updateTaskProgress,
-        `全集音频-${data.bvid}`,
-        controller.signal,
-        isExternal ? { externalDownloader: activeExtDownloader, externalPort: activePort } : undefined
-      );
-      if (!controller.signal.aborted) {
-        showToast(
-          isExternal
-            ? `全集 ${data.pages.length} P 音频已全部推送到 ${activeExtDownloader.name}`
-            : `全集 ${data.pages.length} P 音频批量下载任务已完成`,
-          'success'
-        );
-      }
-    } catch (err: unknown) {
-      if (controller.signal.aborted || isAbortError(err)) {
-        showToast('全集音频下载任务已取消', 'info');
-      } else {
-        const msg = getErrorMessage(err);
-        showToast(`批量音频下载失败: ${msg}`, 'error');
-      }
-    } finally {
-      activeControllers.current.delete(taskId);
-    }
+    const count = data.pages.length;
+    await runManagedTask({
+      taskId: `batch_audios_${data.bvid}`,
+      startToast: isExternal
+        ? `已将 ${count} 集音频推送到 ${downloader.name}`
+        : `已将 ${count} 集最低音质音频加入下载队列`,
+      successToast: isExternal
+        ? `全集 ${count} P 音频已全部推送到 ${downloader.name}`
+        : `全集 ${count} P 音频批量下载任务已完成`,
+      cancelToast: '全集音频下载任务已取消',
+      failPrefix: '批量音频下载失败',
+      execute: (signal) =>
+        batchDownloadAllLowestAudios(
+          data.bvid,
+          data.pages,
+          upsertTask,
+          updateTaskProgress,
+          `全集音频-${data.bvid}`,
+          signal,
+          isExternal ? { externalDownloader: downloader, externalPort: port } : undefined
+        ),
+    });
   };
 
   const handleDownloadBatchVideosHighest = async (customData?: MediaResourceData) => {
@@ -774,15 +734,7 @@ export const App: React.FC = () => {
       return;
     }
 
-    const currentSettings = getDownloadSettings();
-    const isExternal = downloadEngine === 'external';
-    const activeExtDownloader = externalDownloaderRegistry.getActive(currentSettings.externalDownloaderId);
-    const activePort =
-      activeExtDownloader.id === 'abdm'
-        ? currentSettings.abdmPort
-        : activeExtDownloader.id === 'aria2_rpc'
-        ? currentSettings.aria2Port
-        : activeExtDownloader.defaultPort;
+    const { downloader, port, isExternal } = externalDownloaderRegistry.getActiveContext();
 
     if (data.pages.length <= 1) {
       // 单 P 视频：根据下载引擎分流
@@ -790,7 +742,7 @@ export const App: React.FC = () => {
       const bestAudio = data.audios[0];
       if (highestVideo) {
         if (isExternal) {
-          await handleDownloadWithExternal(activeExtDownloader, highestVideo, bestAudio);
+          await handleDownloadWithExternal(downloader, highestVideo, bestAudio);
         } else {
           await handleDownloadVideo(highestVideo, bestAudio, data.title);
         }
@@ -800,45 +752,28 @@ export const App: React.FC = () => {
       return;
     }
 
-    const controller = new AbortController();
-    const taskId = `batch_videos_${data.bvid}`;
-    activeControllers.current.set(taskId, controller);
-
-    showToast(
-      isExternal
-        ? `已将 ${data.pages.length} 集最高画质推送到 ${activeExtDownloader.name}`
-        : `已将 ${data.pages.length} 集最高画质 MP4 加入合成队列`,
-      'info'
-    );
-
-    try {
-      await batchDownloadAllHighestVideos(
-        data.bvid,
-        data.pages,
-        upsertTask,
-        updateTaskProgress,
-        `全集视频-${data.bvid}`,
-        controller.signal,
-        isExternal ? { externalDownloader: activeExtDownloader, externalPort: activePort } : undefined
-      );
-      if (!controller.signal.aborted) {
-        showToast(
-          isExternal
-            ? `全集 ${data.pages.length} P 视频已成功全部推送到 ${activeExtDownloader.name}`
-            : `全集 ${data.pages.length} P 视频批量合成任务已完成`,
-          'success'
-        );
-      }
-    } catch (err: unknown) {
-      if (controller.signal.aborted || isAbortError(err)) {
-        showToast('全集视频下载任务已取消', 'info');
-      } else {
-        const msg = getErrorMessage(err);
-        showToast(`批量视频合成失败: ${msg}`, 'error');
-      }
-    } finally {
-      activeControllers.current.delete(taskId);
-    }
+    const count = data.pages.length;
+    await runManagedTask({
+      taskId: `batch_videos_${data.bvid}`,
+      startToast: isExternal
+        ? `已将 ${count} 集最高画质推送到 ${downloader.name}`
+        : `已将 ${count} 集最高画质 MP4 加入合成队列`,
+      successToast: isExternal
+        ? `全集 ${count} P 视频已成功全部推送到 ${downloader.name}`
+        : `全集 ${count} P 视频批量合成任务已完成`,
+      cancelToast: '全集视频下载任务已取消',
+      failPrefix: '批量视频合成失败',
+      execute: (signal) =>
+        batchDownloadAllHighestVideos(
+          data.bvid,
+          data.pages,
+          upsertTask,
+          updateTaskProgress,
+          `全集视频-${data.bvid}`,
+          signal,
+          isExternal ? { externalDownloader: downloader, externalPort: port } : undefined
+        ),
+    });
   };
 
   const handleFloatButtonContextMenu = (
@@ -854,21 +789,15 @@ export const App: React.FC = () => {
 
     // 展开快捷操作菜单时，异步探测用户配置的外部持久化下载器
     const settings = getDownloadSettings();
-    const activeDownloader = externalDownloaderRegistry.getActive(settings.externalDownloaderId);
-    const activePort =
-      activeDownloader.id === 'abdm'
-        ? settings.abdmPort
-        : activeDownloader.id === 'aria2_rpc'
-        ? settings.aria2Port
-        : activeDownloader.defaultPort;
+    const { downloader, port } = externalDownloaderRegistry.getActiveContext(settings);
 
     if (settings.externalDownloaderEnabled !== false) {
-      setIsCheckingAbdm(true);
-      activeDownloader
-        .checkAvailability({ port: activePort, timeoutMs: 1500 })
-        .then((st) => setAbdmStatus(st))
+      setIsCheckingDownloader(true);
+      downloader
+        .checkAvailability({ port, timeoutMs: 1500 })
+        .then((st) => setDownloaderStatus(st))
         .catch(() => {})
-        .finally(() => setIsCheckingAbdm(false));
+        .finally(() => setIsCheckingDownloader(false));
     }
 
     // 展开快捷操作菜单时，若未加载或当前数据与页面 URL 不一致，后台无感预拉取最新视频数据
@@ -894,12 +823,6 @@ export const App: React.FC = () => {
     targetVideo?: VideoStreamItem,
     targetAudio?: AudioStreamItem
   ) => {
-    const settings = getDownloadSettings();
-    const downloader =
-      typeof downloaderOrId === 'string'
-        ? externalDownloaderRegistry.get(downloaderOrId) || externalDownloaderRegistry.getActive(settings.externalDownloaderId)
-        : downloaderOrId || externalDownloaderRegistry.getActive(settings.externalDownloaderId);
-
     let currentMedia = mediaData;
     if (!currentMedia) {
       setIsSwitching(true);
@@ -919,16 +842,17 @@ export const App: React.FC = () => {
       return;
     }
 
-    const port =
-      downloader.id === 'abdm'
-        ? settings.abdmPort
-        : downloader.id === 'aria2_rpc'
-        ? settings.aria2Port
-        : downloader.defaultPort;
+    const settings = getDownloadSettings();
+    const { downloader: activeDownloader } = externalDownloaderRegistry.getActiveContext(settings);
+    const downloader =
+      typeof downloaderOrId === 'string'
+        ? externalDownloaderRegistry.get(downloaderOrId) || activeDownloader
+        : downloaderOrId || activeDownloader;
+    const port = externalDownloaderRegistry.getDownloaderPort(downloader, settings);
 
     // 1. 快速探测客户端运行与端口联通状态
     const status = await downloader.checkAvailability({ port, timeoutMs: 2000 });
-    setAbdmStatus(status);
+    setDownloaderStatus(status);
     if (!status.isAvailable) {
       showToast(
         `未检测到 ${downloader.name} (端口 ${port} 未响应)。请确认客户端已启动且在设置中启用了对应接口。`,
@@ -937,42 +861,11 @@ export const App: React.FC = () => {
       return;
     }
 
-    // 2. 组装媒体流 (默认选择最高画质画面 + 最佳音质音轨)
+    // 2. 组装媒体流并投递 (默认选择最高画质画面 + 最佳音质音轨，遵循配置的 CDN 优先级)
     const video = targetVideo || currentMedia.videos[0];
     const audio = targetAudio !== undefined ? targetAudio : (currentMedia.audios[0] || null);
-
     const cleanTitle = (currentMedia.title || 'bilibili_video').replace(/[\\/:*?"<>|]/g, '_');
-    const sources: ExternalDownloadSource[] = [];
-
-    if (video) {
-      const videoUrls = getPrioritizedCdnUrls(video.baseUrl, video.backupUrl, settings);
-      sources.push({
-        url: videoUrls[0] || video.baseUrl,
-        urls: videoUrls,
-        filename: `${cleanTitle}_${video.qualityName}_${video.codecName}.m4s`,
-        type: 'video',
-        qualityDesc: video.qualityName,
-        headers: {
-          'Referer': 'https://www.bilibili.com/',
-          'User-Agent': navigator.userAgent,
-        },
-      });
-    }
-
-    if (audio) {
-      const audioUrls = getPrioritizedCdnUrls(audio.baseUrl, audio.backupUrl, settings);
-      sources.push({
-        url: audioUrls[0] || audio.baseUrl,
-        urls: audioUrls,
-        filename: `${cleanTitle}_${audio.name}.m4s`,
-        type: 'audio',
-        qualityDesc: audio.qualityDesc,
-        headers: {
-          'Referer': 'https://www.bilibili.com/',
-          'User-Agent': navigator.userAgent,
-        },
-      });
-    }
+    const sources = buildMediaDownloadSources({ video, audio, title: cleanTitle, settings });
 
     showToast(`正在向 ${downloader.name} 投递持久化下载任务...`, 'info');
     const res = await downloader.sendDownload(
@@ -1021,9 +914,8 @@ export const App: React.FC = () => {
   // 抽象与配置右键快捷操作列表 (支持任意未来快捷项灵活追加)
   const hasUgcSeason = Boolean(mediaData?.ugcSeason);
   const seasonEpisodeCount = mediaData?.ugcSeason?.episodes.length || 0;
-  const currentSettings = getDownloadSettings();
   const isExternal = downloadEngine === 'external';
-  const activeExtDownloader = externalDownloaderRegistry.getActive(currentSettings.externalDownloaderId);
+  const { downloader: activeExtDownloader } = externalDownloaderRegistry.getActiveContext();
 
   // 抽象与配置右键快捷操作列表 (根据是否为合集自动呈现最匹配的选项，通过下载引擎开关无缝分流浏览器或外部下载器)
   const quickActions: QuickActionItem[] = hasUgcSeason
@@ -1145,8 +1037,8 @@ export const App: React.FC = () => {
         engine={downloadEngine}
         onToggleEngine={handleToggleEngine}
         activeDownloaderShortName={activeExtDownloader.shortName || activeExtDownloader.name}
-        isExternalAvailable={Boolean(abdmStatus?.isAvailable)}
-        isCheckingExternal={isCheckingAbdm}
+        isExternalAvailable={Boolean(downloaderStatus?.isAvailable)}
+        isCheckingExternal={isCheckingDownloader}
       />
       {isModalOpen && mediaData && (
         <DownloadModal
