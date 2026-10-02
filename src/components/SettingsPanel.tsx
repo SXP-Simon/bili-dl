@@ -1,27 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Folder,
   FolderTree,
   Sliders,
   HardDrive,
-  Check,
   X,
   HelpCircle,
-  FolderCheck,
-  RotateCcw,
   Sparkles,
 } from 'lucide-react';
 import {
   getDownloadSettings,
   saveDownloadSettings,
   resetDownloadSettings,
-  pickLocalDirectory,
-  getCachedDirectoryHandle,
-  getOrRestoreDirectoryHandle,
-  clearCachedDirectoryHandle,
   type DownloadSettings,
 } from '../utils/settings';
-import { getErrorMessage } from '../utils/error';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -30,19 +22,6 @@ interface SettingsPanelProps {
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToast }) => {
   const [settings, setSettings] = useState<DownloadSettings>(() => getDownloadSettings());
-  const [hasDirHandle, setHasDirHandle] = useState<boolean>(
-    () => !!getCachedDirectoryHandle() || (getDownloadSettings().useLocalDirHandle && !!getDownloadSettings().localDirName)
-  );
-
-  useEffect(() => {
-    getOrRestoreDirectoryHandle().then((handle) => {
-      if (handle) {
-        setHasDirHandle(true);
-      } else if (!settings.localDirName) {
-        setHasDirHandle(false);
-      }
-    });
-  }, [settings.localDirName]);
 
   const updateSetting = <K extends keyof DownloadSettings>(key: K, value: DownloadSettings[K]) => {
     const next = { ...settings, [key]: value };
@@ -50,43 +29,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
     saveDownloadSettings(next);
   };
 
-  const handlePickDirectory = async () => {
-    try {
-      const res = await pickLocalDirectory();
-      if (res) {
-        const next = {
-          ...settings,
-          useLocalDirHandle: true,
-          localDirName: res.name,
-        };
-        setSettings(next);
-        saveDownloadSettings(next);
-        setHasDirHandle(true);
-        onShowToast(`已成功授权本地磁盘目录: ${res.name}`, 'success');
-      }
-    } catch (err: unknown) {
-      const msg = getErrorMessage(err);
-      onShowToast(`授权目录失败: ${msg}`, 'error');
-    }
-  };
-
-  const handleClearDirectory = () => {
-    clearCachedDirectoryHandle();
-    const next = {
-      ...settings,
-      useLocalDirHandle: false,
-      localDirName: undefined,
-    };
-    setSettings(next);
-    saveDownloadSettings(next);
-    setHasDirHandle(false);
-    onShowToast('已重置为浏览器默认下载路径', 'info');
-  };
-
   const handleResetAll = () => {
     const defaults = resetDownloadSettings();
     setSettings(defaults);
-    setHasDirHandle(false);
     onShowToast('已恢复全部默认下载设置', 'info');
   };
 
@@ -100,7 +45,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
           </div>
           <div>
             <h3 className="text-xs font-bold tracking-tight text-foreground">下载落盘路径与偏好设置</h3>
-            <p className="text-[10px] text-muted-foreground">自定义文件落盘目录结构与磁盘直连授权</p>
+            <p className="text-[10px] text-muted-foreground">自定义文件落盘目录结构与下载偏好</p>
           </div>
         </div>
 
@@ -198,67 +143,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
               }`}
             />
           </button>
-        </div>
-
-        {/* 4. 本地磁盘文件夹直连 (File System Access API) */}
-        <div className="p-3.5 rounded-2xl bg-muted/30 border border-border/70 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <FolderCheck className="w-4 h-4 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
-              <span className="font-semibold text-foreground">指定本地磁盘任意文件夹 (直连模式)</span>
-            </div>
-            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-secondary/50 text-secondary-foreground border border-secondary/60">
-              Chromium 特性
-            </span>
-          </div>
-
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            直接授权浏览器读写电脑上的指定本地文件夹，下载的文件将直接写入该目录，无需经过浏览器下载弹窗。
-          </p>
-
-          <div className="pt-1">
-            {hasDirHandle && settings.localDirName ? (
-              <div className="p-3 rounded-2xl bg-card border border-emerald-500/40 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5 truncate min-w-0">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
-                    <Check className="w-4 h-4" strokeWidth={2.4} />
-                  </div>
-                  <div className="truncate min-w-0">
-                    <span className="font-mono text-xs font-bold text-foreground truncate block">
-                      已授权磁盘目录: {settings.localDirName}
-                    </span>
-                    <span className="text-[10px] text-emerald-700 dark:text-emerald-400 block truncate">
-                      已持久化保存至 IndexedDB · 刷新/重启自动直连落盘
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    onClick={handlePickDirectory}
-                    className="px-2.5 py-1.5 rounded-xl bg-primary/20 text-emerald-950 dark:text-emerald-100 border border-primary/40 text-xs font-semibold hover:bg-primary/30 transition-colors cursor-pointer shadow-2xs"
-                  >
-                    更换目录
-                  </button>
-                  <button
-                    onClick={handleClearDirectory}
-                    title="重置为浏览器默认下载路径"
-                    className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted border border-border/60 transition-colors cursor-pointer"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={handlePickDirectory}
-                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-primary/20 hover:bg-primary text-emerald-950 dark:text-emerald-100 hover:text-primary-foreground border border-primary/40 hover:border-primary font-semibold text-xs transition-all duration-150 active:scale-[0.99] cursor-pointer shadow-2xs"
-              >
-                <Folder className="w-3.5 h-3.5" strokeWidth={2.2} />
-                <span>选择本地磁盘文件夹授权...</span>
-              </button>
-            )}
-          </div>
         </div>
       </div>
 

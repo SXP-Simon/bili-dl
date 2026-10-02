@@ -5,14 +5,9 @@ import { logger } from '../utils/logger';
 import { getErrorMessage, isAbortError } from '../utils/error';
 import {
   getDownloadSettings,
-  getOrRestoreDirectoryHandle,
   resolveDownloadRelativePath,
 } from '../utils/settings';
 import type { VideoStreamItem, AudioStreamItem, DownloadProgress } from '../types';
-
-interface WritableFileHandle extends FileSystemFileHandle {
-  createWritable(): Promise<FileSystemWritableFileStream>;
-}
 
 function fallbackAnchorDownload(url: string, filename: string): void {
   const a = document.createElement('a');
@@ -25,44 +20,12 @@ function fallbackAnchorDownload(url: string, filename: string): void {
 }
 
 /**
- * 触发本地文件保存 (支持 File System Access API 本地磁盘直连、GM_download 自定义子目录与另存为对话框)
+ * 触发本地文件保存 (支持 GM_download 自定义子目录与另存为对话框)
  */
 export async function saveBlobAsFile(blob: Blob, filename: string, videoTitle?: string): Promise<void> {
   const settings = getDownloadSettings();
-  const dirHandle = await getOrRestoreDirectoryHandle(true);
 
-  // 1. 如果用户启用了 File System Access API 本地磁盘直连，直接写入目标本地目录
-  if (settings.useLocalDirHandle && dirHandle) {
-    try {
-      let targetDir = dirHandle;
-      const sub = settings.subfolder.trim().replace(/^[/\\]+|[/\\]+$/g, '');
-      if (sub) {
-        for (const segment of sub.split(/[/\\]+/)) {
-          if (segment) {
-            targetDir = await targetDir.getDirectoryHandle(segment, { create: true });
-          }
-        }
-      }
-      if (settings.autoTitleFolder && videoTitle) {
-        const cleanTitle = videoTitle.split('_P')[0].replace(/[\\/:*?"<>|]/g, '_').trim();
-        if (cleanTitle) {
-          targetDir = await targetDir.getDirectoryHandle(cleanTitle, { create: true });
-        }
-      }
-
-      const fileHandle = await targetDir.getFileHandle(filename, { create: true });
-      const writable = await (fileHandle as unknown as WritableFileHandle).createWritable();
-      await writable.write(blob);
-      await writable.close();
-      logger.info('Downloader', `文件已直接写入本地磁盘: ${dirHandle.name}/${filename}`);
-      return;
-    } catch (fsErr: unknown) {
-      const msg = getErrorMessage(fsErr);
-      logger.warn('Downloader', '本地目录直接写入失败，降级到下载器保存', { error: msg });
-    }
-  }
-
-  // 2. 使用 GM_download（支持传递子目录路径与 saveAs 另存为对话框）
+  // 使用 GM_download（支持传递子目录路径与 saveAs 另存为对话框）
   // 针对小文本文件（.srt 与 .ass）：若未配置自定义子目录且未启用另存为弹窗，优先走原生 <a> 标签下载，
   // 彻底绕开油猴（Tampermonkey）默认的扩展名白名单拦截（防止被强制篡改或追加为 .txt）
   const ext = filename.split('.').pop()?.toLowerCase();

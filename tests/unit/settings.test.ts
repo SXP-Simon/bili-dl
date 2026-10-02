@@ -17,7 +17,7 @@ describe('Settings & Path Resolution Unit Tests', () => {
     expect(settings).toEqual(DEFAULT_SETTINGS);
     expect(settings.subfolder).toBe('bili-dl');
     expect(settings.autoTitleFolder).toBe(true);
-    expect(settings.useLocalDirHandle).toBe(false);
+    expect(settings.alwaysAskSaveAs).toBe(false);
   });
 
   it('should save and retrieve updated settings', () => {
@@ -25,16 +25,12 @@ describe('Settings & Path Resolution Unit Tests', () => {
       subfolder: 'Custom/Anime',
       autoTitleFolder: false,
       alwaysAskSaveAs: true,
-      useLocalDirHandle: true,
-      localDirName: 'D:/BiliDownloads',
     });
 
     const updated = getDownloadSettings();
     expect(updated.subfolder).toBe('Custom/Anime');
     expect(updated.autoTitleFolder).toBe(false);
     expect(updated.alwaysAskSaveAs).toBe(true);
-    expect(updated.useLocalDirHandle).toBe(true);
-    expect(updated.localDirName).toBe('D:/BiliDownloads');
   });
 
   it('should reset settings back to default', () => {
@@ -42,7 +38,6 @@ describe('Settings & Path Resolution Unit Tests', () => {
       subfolder: 'MyPath',
       autoTitleFolder: false,
       alwaysAskSaveAs: true,
-      useLocalDirHandle: false,
     });
 
     const reset = resetDownloadSettings();
