@@ -3,12 +3,14 @@
  */
 
 import { GM_getValue, GM_setValue } from '$';
+import { DEFAULT_CDN_ORDER } from './cdn';
 
 export interface DownloadSettings {
   subfolder: string; // 下载相对子目录 (默认 'bili-dl')
   autoTitleFolder: boolean; // 是否自动以视频标题建立子目录 (默认 true)
   alwaysAskSaveAs: boolean; // 每次下载是否弹出另存为对话框 (默认 false)
   enableCdnPriority: boolean; // 智能优选国内高速 CDN 节点 (默认 true)
+  cdnPriorityOrder: string[]; // CDN 节点优先级排序列表 (ID 数组，靠前优先)
   cdnAutoFailover: boolean; // 慢速自动切换备选 CDN 节点 (默认 true)
   cdnMinSpeedKB: number; // 慢速换源判定阈值 (KB/s，默认 300)
   cdnFailoverDurationSec: number; // 慢速持续判定时间 (秒，默认 8)
@@ -26,6 +28,7 @@ export const DEFAULT_SETTINGS: DownloadSettings = {
   autoTitleFolder: true,
   alwaysAskSaveAs: false,
   enableCdnPriority: true,
+  cdnPriorityOrder: [...DEFAULT_CDN_ORDER],
   cdnAutoFailover: true,
   cdnMinSpeedKB: 300,
   cdnFailoverDurationSec: 8,

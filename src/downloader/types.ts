@@ -4,6 +4,7 @@
 
 export interface ExternalDownloadSource {
   url: string;
+  urls?: string[]; // 排序后的多镜像备选源列表 (Aria2 等支持多源分流下载)
   filename?: string;
   headers?: Record<string, string>;
   downloadPage?: string;

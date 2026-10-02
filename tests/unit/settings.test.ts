@@ -28,6 +28,8 @@ describe('Settings & Path Resolution Unit Tests', () => {
     expect(settings.externalDownloaderId).toBe('abdm');
     expect(settings.externalDownloaderEnabled).toBe(true);
     expect(settings.aria2Port).toBe(6800);
+    expect(settings.cdnPriorityOrder).toBeDefined();
+    expect(settings.cdnPriorityOrder.length).toBeGreaterThan(0);
   });
 
   it('should save and retrieve updated settings', () => {
@@ -36,6 +38,7 @@ describe('Settings & Path Resolution Unit Tests', () => {
       autoTitleFolder: false,
       alwaysAskSaveAs: true,
       enableCdnPriority: false,
+      cdnPriorityOrder: ['ali', 'cos'],
       cdnAutoFailover: false,
       cdnMinSpeedKB: 500,
       cdnFailoverDurationSec: 10,
@@ -53,6 +56,7 @@ describe('Settings & Path Resolution Unit Tests', () => {
     expect(updated.autoTitleFolder).toBe(false);
     expect(updated.alwaysAskSaveAs).toBe(true);
     expect(updated.enableCdnPriority).toBe(false);
+    expect(updated.cdnPriorityOrder).toEqual(['ali', 'cos']);
     expect(updated.cdnAutoFailover).toBe(false);
     expect(updated.cdnMinSpeedKB).toBe(500);
     expect(updated.cdnFailoverDurationSec).toBe(10);
@@ -71,6 +75,7 @@ describe('Settings & Path Resolution Unit Tests', () => {
       autoTitleFolder: false,
       alwaysAskSaveAs: true,
       enableCdnPriority: false,
+      cdnPriorityOrder: ['ali', 'cos'],
       cdnAutoFailover: false,
       cdnMinSpeedKB: 100,
       cdnFailoverDurationSec: 15,
@@ -95,6 +100,7 @@ describe('Settings & Path Resolution Unit Tests', () => {
     expect(getDownloadSettings().externalDownloaderId).toBe('abdm');
     expect(getDownloadSettings().externalDownloaderEnabled).toBe(true);
     expect(getDownloadSettings().aria2Port).toBe(6800);
+    expect(getDownloadSettings().cdnPriorityOrder).toBeDefined();
   });
 
   describe('resolveDownloadRelativePath', () => {

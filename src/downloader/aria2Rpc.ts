@@ -111,7 +111,7 @@ export class Aria2RpcDownloader implements IExternalDownloader {
         id: `bili_${Date.now()}`,
         method: 'aria2.addUri',
         params: [
-          [src.url],
+          src.urls && src.urls.length > 0 ? src.urls : [src.url],
           {
             header: headerList,
             ...(src.filename ? { out: src.filename } : {}),

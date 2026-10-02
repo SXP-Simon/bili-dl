@@ -6,6 +6,8 @@ import { fetchCurrentMediaData, getVideoTitle } from '../api/bilibili';
 import { downloadAudio, downloadAndMuxMp4 } from './downloader';
 import { logger } from '../utils/logger';
 import { getErrorMessage, isAbortError } from '../utils/error';
+import { getPrioritizedCdnUrls } from '../utils/cdn';
+import { getDownloadSettings } from '../utils/settings';
 import type { VideoPageItem, DownloadTask, SeasonEpisodeItem } from '../types';
 import type { IExternalDownloader, ExternalDownloadSource } from '../downloader';
 
@@ -98,13 +100,16 @@ export async function batchDownloadAllLowestAudios(
           message: `正在推送到 ${ext.name}...`,
         });
 
+        const currentSettings = getDownloadSettings();
+        const audioUrls = getPrioritizedCdnUrls(lowestAudio.baseUrl, lowestAudio.backupUrl, currentSettings);
         const safeTitle = pageTitle.replace(/[\\/:*?"<>|]/g, '_');
         const res = await ext.sendDownload(
           {
             title: pageTitle,
             sources: [
               {
-                url: lowestAudio.baseUrl,
+                url: audioUrls[0] || lowestAudio.baseUrl,
+                urls: audioUrls,
                 filename: `${safeTitle}_${lowestAudio.name}.m4a`,
                 type: 'audio',
                 qualityDesc: lowestAudio.name,
@@ -255,18 +260,23 @@ export async function batchDownloadAllHighestVideos(
           message: `正在推送到 ${ext.name}...`,
         });
 
+        const currentSettings = getDownloadSettings();
         const safeTitle = pageTitle.replace(/[\\/:*?"<>|]/g, '_');
+        const videoUrls = getPrioritizedCdnUrls(highestVideo.baseUrl, highestVideo.backupUrl, currentSettings);
         const sources: ExternalDownloadSource[] = [
           {
-            url: highestVideo.baseUrl,
+            url: videoUrls[0] || highestVideo.baseUrl,
+            urls: videoUrls,
             filename: `${safeTitle}_${highestVideo.qualityName}_${highestVideo.codecName}.m4s`,
             type: 'video',
             qualityDesc: highestVideo.qualityName,
           },
         ];
         if (bestAudio) {
+          const audioUrls = getPrioritizedCdnUrls(bestAudio.baseUrl, bestAudio.backupUrl, currentSettings);
           sources.push({
-            url: bestAudio.baseUrl,
+            url: audioUrls[0] || bestAudio.baseUrl,
+            urls: audioUrls,
             filename: `${safeTitle}_${bestAudio.name}.m4s`,
             type: 'audio',
             qualityDesc: bestAudio.name,
@@ -424,17 +434,22 @@ export async function batchDownloadSeasonHighestVideos(
           message: `正在推送到 ${ext.name}...`,
         });
 
+        const currentSettings = getDownloadSettings();
+        const videoUrls = getPrioritizedCdnUrls(highestVideo.baseUrl, highestVideo.backupUrl, currentSettings);
         const sources: ExternalDownloadSource[] = [
           {
-            url: highestVideo.baseUrl,
+            url: videoUrls[0] || highestVideo.baseUrl,
+            urls: videoUrls,
             filename: `${episodeFileName}_${highestVideo.qualityName}_${highestVideo.codecName}.m4s`,
             type: 'video',
             qualityDesc: highestVideo.qualityName,
           },
         ];
         if (bestAudio) {
+          const audioUrls = getPrioritizedCdnUrls(bestAudio.baseUrl, bestAudio.backupUrl, currentSettings);
           sources.push({
-            url: bestAudio.baseUrl,
+            url: audioUrls[0] || bestAudio.baseUrl,
+            urls: audioUrls,
             filename: `${episodeFileName}_${bestAudio.name}.m4s`,
             type: 'audio',
             qualityDesc: bestAudio.name,
@@ -589,12 +604,15 @@ export async function batchDownloadSeasonLowestAudios(
           message: `正在推送到 ${ext.name}...`,
         });
 
+        const currentSettings = getDownloadSettings();
+        const audioUrls = getPrioritizedCdnUrls(lowestAudio.baseUrl, lowestAudio.backupUrl, currentSettings);
         const res = await ext.sendDownload(
           {
             title: episodeFileName,
             sources: [
               {
-                url: lowestAudio.baseUrl,
+                url: audioUrls[0] || lowestAudio.baseUrl,
+                urls: audioUrls,
                 filename: `${episodeFileName}_${lowestAudio.name}.m4a`,
                 type: 'audio',
                 qualityDesc: lowestAudio.name,

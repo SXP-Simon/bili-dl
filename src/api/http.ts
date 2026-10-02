@@ -84,66 +84,20 @@ export async function requestBuffer(
   });
 }
 
-/**
- * 识别 B 站 CDN 节点提供商与主机名
- */
-export function getCdnNodeLabel(url: string): string {
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    if (host.includes('mirrorcos') || host.includes('upcdnbd')) return `腾讯云 COS (${host})`;
-    if (host.includes('mirrorali')) return `阿里云 OSS (${host})`;
-    if (host.includes('mirrorhw')) return `华为云 OBS (${host})`;
-    if (host.includes('mirrorbos')) return `百度云 BOS (${host})`;
-    if (host.includes('mirror08c') || host.includes('mirror08h')) return `金山云/BGP (${host})`;
-    if (host.includes('upcdnws')) return `网宿 CDN (${host})`;
-    if (host.includes('upcdntx')) return `腾讯直连 (${host})`;
-    if (host.includes('mcdn')) return `PCDN 节点 (${host})`;
-    if (host.includes('akamai') || host.includes('akamaized')) return `Akamai 海外 (${host})`;
-    if (host.includes('fastly')) return `Fastly 海外 (${host})`;
-    return host;
-  } catch {
-    return '未知节点';
-  }
-}
+import {
+  getCdnNodeLabel,
+  getCdnPriorityScore,
+  sortCdnUrls,
+} from '../utils/cdn';
+
+export { getCdnNodeLabel, getCdnPriorityScore };
 
 /**
- * 计算 CDN 节点的网络亲和度与质量评分
- * 优先国内一线头部对象存储与骨干直连，海外慢速节点与边缘 PCDN 节点排在后列
- */
-export function getCdnPriorityScore(url: string): number {
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    // 顶级国内对象存储与直连专线（带宽充足、极速、无丢包）
-    if (host.includes('mirrorcos') || host.includes('upcdnbd')) return 100; // 腾讯云 COS / 腾讯 BGP
-    if (host.includes('mirrorali')) return 95; // 阿里云 OSS
-    if (host.includes('mirrorhw')) return 90; // 华为云 OBS
-    if (host.includes('mirrorbos')) return 88; // 百度云 BOS
-    if (host.includes('upcdntx')) return 85; // 腾讯直连
-
-    // 优质国内主流 CDN 与 BGP
-    if (host.includes('mirror08c') || host.includes('mirror08h')) return 80; // 金山云 / 骨干 BGP
-    if (host.includes('upcdnws')) return 75; // 网宿 CDN
-    if (host.includes('bilivideo.com') || host.includes('bilivideo.cn')) {
-      if (host.includes('mcdn')) return 20; // PCDN 节点稳定性较差，排在靠后
-      return 65; // 标准国内 bilivideo 节点
-    }
-
-    // 海外边缘节点（跨国链路经常被限速、高延迟或丢包）
-    if (host.includes('akamai') || host.includes('akamaized')) return 10;
-    if (host.includes('fastly')) return 10;
-
-    return 50; // 其他未知主机
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * 根据 CDN 节点质量综合评分对候选 URL 进行智能升序排序（最高优先级在最前）
+ * 根据用户配置的 CDN 节点质量综合评分对候选 URL 进行降序排序（最高优先级在最前）
  */
 export function sortCdnUrlsByQuality(urls: string[]): string[] {
-  const uniqueUrls = Array.from(new Set(urls.filter(Boolean)));
-  return uniqueUrls.sort((a, b) => getCdnPriorityScore(b) - getCdnPriorityScore(a));
+  const settings = getDownloadSettings();
+  return sortCdnUrls(urls, settings.cdnPriorityOrder);
 }
 
 /**

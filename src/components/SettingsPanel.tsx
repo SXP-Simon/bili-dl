@@ -14,6 +14,10 @@ import {
   DownloadCloud,
   CheckCircle2,
   XCircle,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw,
+  ListOrdered,
 } from 'lucide-react';
 import {
   getDownloadSettings,
@@ -22,6 +26,7 @@ import {
   type DownloadSettings,
 } from '../utils/settings';
 import { externalDownloaderRegistry } from '../downloader';
+import { CDN_NODE_RULES, DEFAULT_CDN_ORDER, normalizeCdnOrder } from '../utils/cdn';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -46,6 +51,23 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
     setSettings(defaults);
     setTestStatus(null);
     onShowToast('已恢复全部默认下载设置', 'info');
+  };
+
+  const currentCdnOrder = normalizeCdnOrder(settings.cdnPriorityOrder);
+
+  const handleMoveCdn = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= currentCdnOrder.length) return;
+    const nextOrder = [...currentCdnOrder];
+    const [moved] = nextOrder.splice(index, 1);
+    if (!moved) return;
+    nextOrder.splice(targetIndex, 0, moved);
+    updateSetting('cdnPriorityOrder', nextOrder);
+  };
+
+  const handleResetCdnOrder = () => {
+    updateSetting('cdnPriorityOrder', [...DEFAULT_CDN_ORDER]);
+    onShowToast('已恢复 CDN 节点官方默认推荐排序', 'info');
   };
 
   const handleTestConnection = async () => {
@@ -218,6 +240,95 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
               />
             </button>
           </div>
+
+          {/* CDN 优先级顺序配置与展示 */}
+          {settings.enableCdnPriority && (
+            <div className="pt-2 pl-6 space-y-2 border-t border-border/30">
+              <div className="flex items-center justify-between text-[11px]">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <ListOrdered className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
+                  <span className="font-semibold text-foreground">CDN 调度优先级顺序</span>
+                  <span className="text-[10px] text-muted-foreground">(内置下载与外部下载器均优先使用排头节点)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleResetCdnOrder}
+                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer transition-colors px-1.5 py-0.5 rounded hover:bg-muted"
+                  title="恢复官方默认推荐优先级顺序"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>恢复默认</span>
+                </button>
+              </div>
+
+              {/* 排序列表 */}
+              <div className="space-y-1 max-h-[220px] overflow-y-auto pr-1">
+                {currentCdnOrder.map((nodeId, index) => {
+                  const rule = CDN_NODE_RULES.find((r) => r.id === nodeId);
+                  if (!rule) return null;
+                  const isFirst = index === 0;
+                  const isLast = index === currentCdnOrder.length - 1;
+
+                  return (
+                    <div
+                      key={rule.id}
+                      className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-card/70 dark:bg-card/40 border border-border/60 text-xs transition-all hover:border-border"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className={`w-5 h-5 flex items-center justify-center rounded font-mono text-[10px] font-bold shrink-0 ${
+                            index === 0
+                              ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40'
+                              : index < 3
+                              ? 'bg-primary/10 text-primary border border-primary/20'
+                              : 'bg-muted text-muted-foreground border border-border/40'
+                          }`}
+                        >
+                          #{index + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-foreground truncate">{rule.name}</span>
+                            <span className="text-[10px] font-mono text-muted-foreground/80 truncate">
+                              ({rule.patterns[0]})
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground truncate">{rule.desc}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-0.5 shrink-0 ml-2">
+                        <button
+                          type="button"
+                          disabled={isFirst}
+                          onClick={() => handleMoveCdn(index, 'up')}
+                          className={`p-1 rounded hover:bg-muted transition-colors ${
+                            isFirst ? 'opacity-25 cursor-not-allowed' : 'cursor-pointer text-muted-foreground hover:text-foreground active:scale-95'
+                          }`}
+                          title={isFirst ? '已是最高优先级' : '上移优先级'}
+                          aria-label={`将 ${rule.name} 上移`}
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isLast}
+                          onClick={() => handleMoveCdn(index, 'down')}
+                          className={`p-1 rounded hover:bg-muted transition-colors ${
+                            isLast ? 'opacity-25 cursor-not-allowed' : 'cursor-pointer text-muted-foreground hover:text-foreground active:scale-95'
+                          }`}
+                          title={isLast ? '已是最低优先级' : '下移优先级'}
+                          aria-label={`将 ${rule.name} 下移`}
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="h-px bg-border/40 my-1" />
 

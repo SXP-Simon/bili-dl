@@ -12,6 +12,7 @@ import { batchDownloadAllLowestAudios, batchDownloadAllHighestVideos, batchDownl
 import { logger } from './utils/logger';
 import { getErrorMessage, isAbortError } from './utils/error';
 import { getDownloadSettings, saveDownloadSettings } from './utils/settings';
+import { getPrioritizedCdnUrls } from './utils/cdn';
 import {
   externalDownloaderRegistry,
   type IExternalDownloader,
@@ -944,8 +945,10 @@ export const App: React.FC = () => {
     const sources: ExternalDownloadSource[] = [];
 
     if (video) {
+      const videoUrls = getPrioritizedCdnUrls(video.baseUrl, video.backupUrl, settings);
       sources.push({
-        url: video.baseUrl,
+        url: videoUrls[0] || video.baseUrl,
+        urls: videoUrls,
         filename: `${cleanTitle}_${video.qualityName}_${video.codecName}.m4s`,
         type: 'video',
         qualityDesc: video.qualityName,
@@ -957,8 +960,10 @@ export const App: React.FC = () => {
     }
 
     if (audio) {
+      const audioUrls = getPrioritizedCdnUrls(audio.baseUrl, audio.backupUrl, settings);
       sources.push({
-        url: audio.baseUrl,
+        url: audioUrls[0] || audio.baseUrl,
+        urls: audioUrls,
         filename: `${cleanTitle}_${audio.name}.m4s`,
         type: 'audio',
         qualityDesc: audio.qualityDesc,
