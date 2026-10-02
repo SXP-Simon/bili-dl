@@ -23,24 +23,6 @@
   </a>
 </p>
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-dark.png" />
-    <source media="(prefers-color-scheme: light)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-light.png" />
-    <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-light.png" alt="Bili-DL Preview" width="100%" />
-  </picture>
-  <br>
-  <b>极简 · 清爽 · 高性能</b><br>
-  基于 React 19 + TypeScript 7 + Tailwind CSS v4 构建的现代化 B 站全能媒体下载油猴脚本。<br>
-  支持 4K/1080P 前端无损秒级合成 MP4、独立音频提取、弹幕转 ASS、官方字幕转 SRT、多 P/合集批量导出及外部下载器无缝直连。
-</p>
-
-</div>
-
----
-
-## 📸 界面预览 (深浅色模式自适应)
-
 <table align="center" width="100%">
   <thead>
     <tr>
@@ -51,10 +33,18 @@
   <tbody>
     <tr>
       <td align="center" width="50%" valign="top">
-        <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-light.png" alt="主下载面板 - 浅色模式" width="100%">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-dark.png" />
+          <source media="(prefers-color-scheme: light)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-light.png" />
+          <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-light.png" alt="主下载面板 - 浅色模式" width="100%" />
+        </picture>
       </td>
       <td align="center" width="50%" valign="top">
-        <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-dark.png" alt="主下载面板 - 深色模式" width="100%">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-dark.png" />
+          <source media="(prefers-color-scheme: light)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-light.png" />
+          <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-dark.png" alt="主下载面板 - 深色模式" width="100%" />
+        </picture>
       </td>
     </tr>
     <tr>
@@ -67,6 +57,14 @@
     </tr>
   </tbody>
 </table>
+
+<p align="center">
+  <b>极简 · 清爽 · 高性能</b><br>
+  基于 React 19 + TypeScript 7 + Tailwind CSS v4 构建的现代化 B 站全能媒体下载油猴脚本。<br>
+  支持 4K/1080P 前端无损秒级合成 MP4、独立音频提取、弹幕转 ASS、官方字幕转 SRT、多 P/合集批量导出及外部下载器无缝直连。
+</p>
+
+</div>
 
 ---
 
