@@ -23,21 +23,24 @@
   </a>
 </p>
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-dark.png" />
-    <source media="(prefers-color-scheme: light)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-light.png" />
-    <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-light.png" alt="Bili-DL 主面板" width="100%" />
-  </picture>
-</p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/setting-dark.png" />
-    <source media="(prefers-color-scheme: light)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/setting-light.png" />
-    <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/setting-light.png" alt="Bili-DL 偏好设置" width="100%" />
-  </picture>
-</p>
+<table align="center" width="100%">
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-dark.png" />
+        <source media="(prefers-color-scheme: light)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-light.png" />
+        <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/demo-light.png" alt="Bili-DL 主下载面板" width="100%" />
+      </picture>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/setting-dark.png" />
+        <source media="(prefers-color-scheme: light)" srcset="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/setting-light.png" />
+        <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/bili-dl@master/assets/setting-light.png" alt="Bili-DL 偏好与下载器设置" width="100%" />
+      </picture>
+    </td>
+  </tr>
+</table>
 
 <p align="center">
   <b>极简 · 清爽 · 高性能</b><br>
