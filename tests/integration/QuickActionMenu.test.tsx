@@ -113,4 +113,32 @@ describe('QuickActionMenu Integration Tests', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('should render language selector and handle language changes', () => {
+    const onSelectLanguage = vi.fn();
+    const languages = [
+      { code: 'chinese', name: '中文 (Chinese)' },
+      { code: 'english', name: '英语 (English)' },
+      { code: 'japanese', name: '日语 (Japanese)' },
+    ];
+
+    render(
+      <QuickActionMenu
+        isOpen={true}
+        onClose={vi.fn()}
+        actions={mockActions}
+        languages={languages}
+        selectedLanguage="chinese"
+        onSelectLanguage={onSelectLanguage}
+      />
+    );
+
+    expect(screen.getByText('转写语言')).toBeInTheDocument();
+    const select = screen.getByRole('combobox');
+    expect(select).toBeInTheDocument();
+    expect((select as HTMLSelectElement).value).toBe('chinese');
+
+    fireEvent.change(select, { target: { value: 'english' } });
+    expect(onSelectLanguage).toHaveBeenCalledWith('english');
+  });
 });

@@ -37,6 +37,8 @@ function getTaskIcon(type: TaskType) {
       return <FolderArchive className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />;
     case 'cover':
       return <ImageIcon className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />;
+    case 'ai_transcribe':
+      return <Sparkles className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />;
     default:
       return <Sparkles className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />;
   }

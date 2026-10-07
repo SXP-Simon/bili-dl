@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Loader2, Globe, Rocket, AlertCircle } from 'lucide-react';
+import { Loader2, Globe, Rocket, AlertCircle, Languages } from 'lucide-react';
 import type { QuickActionItem, QuickMenuHeaderInfo } from '../types';
 
 interface QuickActionMenuProps {
@@ -17,6 +17,9 @@ interface QuickActionMenuProps {
   activeDownloaderShortName?: string;
   isExternalAvailable?: boolean;
   isCheckingExternal?: boolean;
+  languages?: ReadonlyArray<{ code: string; name: string }>;
+  selectedLanguage?: string;
+  onSelectLanguage?: (lang: string) => void;
 }
 
 /**
@@ -33,6 +36,9 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
   activeDownloaderShortName = '外部',
   isExternalAvailable = false,
   isCheckingExternal = false,
+  languages,
+  selectedLanguage = 'chinese',
+  onSelectLanguage,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -57,9 +63,10 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
   const menuPadding = 8;
   const headerHeight = headerInfo ? 36 : 0;
   const engineSwitcherHeight = onToggleEngine ? 30 : 0;
+  const langSelectorHeight = onSelectLanguage && languages && languages.length > 0 ? 30 : 0;
   const noticeHeight = engine === 'external' ? 24 : 0;
   const menuWidth = 295;
-  const menuHeight = actions.length * itemHeight + menuPadding + headerHeight + engineSwitcherHeight + noticeHeight;
+  const menuHeight = actions.length * itemHeight + menuPadding + headerHeight + engineSwitcherHeight + langSelectorHeight + noticeHeight;
 
   let left = 0;
   let top = 0;
@@ -172,6 +179,27 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({
                 title={isExternalAvailable ? '客户端在线已就绪' : '未检测到客户端运行'}
               />
             </button>
+          </div>
+        )}
+
+        {/* 语言选择栏（用于 AI Whisper 本地转写及字幕语言指定） */}
+        {onSelectLanguage && languages && languages.length > 0 && (
+          <div className="flex items-center justify-between px-2 py-1 mb-1 rounded-lg bg-muted/40 border border-border/40 text-[11px]">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Languages className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>转写语言</span>
+            </div>
+            <select
+              value={selectedLanguage}
+              onChange={(e) => onSelectLanguage(e.target.value)}
+              className="bg-card/90 text-foreground border border-border/60 rounded px-1.5 py-0.5 text-[10.5px] font-medium focus:outline-none focus:ring-1 focus:ring-primary/50 cursor-pointer shadow-2xs"
+            >
+              {languages.map((lang) => (
+                <option key={lang.code} value={lang.code} className="bg-popover text-popover-foreground">
+                  {lang.name}
+                </option>
+              ))}
+            </select>
           </div>
         )}
 

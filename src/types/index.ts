@@ -78,7 +78,7 @@ export interface MediaResourceData {
   ugcSeason?: UgcSeasonData;
 }
 
-export type TaskType = 'video' | 'audio' | 'danmaku' | 'subtitle' | 'cover' | 'batch_subtitle' | 'batch_video' | 'batch_audio';
+export type TaskType = 'video' | 'audio' | 'danmaku' | 'subtitle' | 'cover' | 'batch_subtitle' | 'batch_video' | 'batch_audio' | 'ai_transcribe';
 
 export interface DownloadTask {
   id: string;

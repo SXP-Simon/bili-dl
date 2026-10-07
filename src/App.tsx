@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Video, Music, FolderArchive, Film } from 'lucide-react';
+import { Video, Music, FolderArchive, Film, Bot } from 'lucide-react';
 import { FloatButton } from './components/FloatButton';
 import { DownloadModal } from './components/DownloadModal';
 import { QuickActionMenu } from './components/QuickActionMenu';
@@ -9,6 +9,7 @@ import { downloadAndMuxMp4, downloadAudio, saveBlobAsFile } from './media/downlo
 import { fetchSubtitleSrt } from './media/subtitle';
 import { batchDetectAndDownloadSubtitles, batchDownloadSeasonSubtitlesZip } from './media/batchSubtitle';
 import { batchDownloadAllLowestAudios, batchDownloadAllHighestVideos, batchDownloadSeasonHighestVideos, batchDownloadSeasonLowestAudios } from './media/batchDownloader';
+import { startTranscriptionTask, SUPPORTED_LANGUAGES } from './ai/whisper';
 import { logger } from './utils/logger';
 import { getErrorMessage, isAbortError } from './utils/error';
 import { getDownloadSettings, saveDownloadSettings } from './utils/settings';
@@ -43,6 +44,10 @@ export const App: React.FC = () => {
   const [downloadEngine, setDownloadEngine] = useState<'internal' | 'external'>(() => {
     const s = getDownloadSettings();
     return s.defaultDownloaderEngine || 'internal';
+  });
+  const [quickWhisperLang, setQuickWhisperLang] = useState<string>(() => {
+    const s = getDownloadSettings();
+    return s.whisperLanguage || 'chinese';
   });
   const activeControllers = useRef<Map<string, AbortController>>(new Map());
 
@@ -780,6 +785,97 @@ export const App: React.FC = () => {
     });
   };
 
+  const handleSelectQuickWhisperLang = (lang: string) => {
+    setQuickWhisperLang(lang);
+    const s = getDownloadSettings();
+    s.whisperLanguage = lang;
+    saveDownloadSettings(s);
+    const langObj = SUPPORTED_LANGUAGES.find((l) => l.code === lang);
+    showToast(`默认转写语言已设置为: ${langObj?.name || lang}`, 'info');
+  };
+
+  /**
+   * 快捷操作：当前视频纯前端 WebGPU/Wasm 自动语音转写并自动下载保存为 .txt
+   */
+  const handleQuickWhisperTranscribeAndDownloadTxt = async (customData?: MediaResourceData) => {
+    const data = await getFreshMediaData(customData);
+    if (!data) {
+      showToast('未能解析到视频资源，请确认处于播放页面', 'error');
+      return;
+    }
+
+    const sortedAudios = [...data.audios].sort((a, b) => a.bandwidth - b.bandwidth);
+    const targetAudio = sortedAudios[0] || data.audios[0];
+    if (!targetAudio) {
+      showToast('未能获取到音频流，无法进行本地语音识别', 'error');
+      return;
+    }
+
+    const settings = getDownloadSettings();
+    const model = settings.whisperModel || 'onnx-community/whisper-tiny';
+    const lang = quickWhisperLang || settings.whisperLanguage || 'chinese';
+    const cacheKey = `${data.bvid}_${data.cid}`;
+    const taskId = `whisper_${cacheKey}`;
+    const taskTitle = `[本地AI转写] ${data.title}`;
+    const traceId = `Whisper-Quick-${data.cid}`;
+
+    const controller = new AbortController();
+    activeControllers.current.set(taskId, controller);
+
+    upsertTask({
+      id: taskId,
+      type: 'ai_transcribe',
+      title: taskTitle,
+      status: 'pending',
+      progress: 0,
+      message: '正在准备本地 AI 语音转写...',
+      timestamp: Date.now(),
+    });
+
+    showToast('已启动本地 AI 语音转写，将在转录完成后自动下载为 TXT', 'info');
+
+    try {
+      const res = await startTranscriptionTask(cacheKey, targetAudio, {
+        model,
+        language: lang,
+        returnTimestamps: true,
+        traceId,
+      });
+
+      if (!controller.signal.aborted && res.text) {
+        const cleanTitle = (data.title || 'bilibili_video').replace(/[\\/:*?"<>|]/g, '_');
+        const blob = new Blob([res.text], { type: 'text/plain;charset=utf-8' });
+        await saveBlobAsFile(blob, `${cleanTitle}-本地AI语音转写纯文本.txt`, data.title);
+
+        updateTaskProgress(taskId, {
+          status: 'completed',
+          progress: 100,
+          message: `转录完成: 共 ${res.text.length} 字 (已自动保存 TXT)`,
+        });
+
+        const metricStr = res.metrics ? ` (耗时 ${(res.metrics.totalElapsedMs / 1000).toFixed(1)}s, ${res.metrics.realtimeFactor}x 速)` : '';
+        showToast(`本地 AI 语音转写完成并已保存为 TXT！${metricStr}`, 'success');
+      }
+    } catch (err: unknown) {
+      if (controller.signal.aborted || isAbortError(err)) {
+        updateTaskProgress(taskId, {
+          status: 'cancelled',
+          message: '已手动取消语音转写',
+        });
+        showToast('语音转写任务已取消', 'info');
+      } else {
+        const msg = getErrorMessage(err);
+        updateTaskProgress(taskId, {
+          status: 'error',
+          message: `转录失败: ${msg}`,
+        });
+        showToast(`语音转写失败: ${msg}`, 'error');
+      }
+    } finally {
+      activeControllers.current.delete(taskId);
+    }
+  };
+
   const handleFloatButtonContextMenu = (
     _e: React.MouseEvent,
     pos: {
@@ -899,6 +995,9 @@ export const App: React.FC = () => {
   const isBatchVideosRunning = tasks.some(
     (t) => (t.id.startsWith('batch_videos_') || t.id.startsWith('batch_video_') || t.id.startsWith('season_video_') || t.id.startsWith('season_videos_')) && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled'
   );
+  const isAiTranscribeRunning = tasks.some(
+    (t) => t.id.startsWith('whisper_') && t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled'
+  );
 
   // 计算当前右键菜单的目标上下文头信息
   const currentBvid = getBvidFromUrl();
@@ -920,6 +1019,19 @@ export const App: React.FC = () => {
   const seasonEpisodeCount = mediaData?.ugcSeason?.episodes.length || 0;
   const isExternal = downloadEngine === 'external';
   const { downloader: activeExtDownloader } = externalDownloaderRegistry.getActiveContext();
+
+  const aiTranscribeAction: QuickActionItem = {
+    id: 'quick_ai_whisper_txt',
+    icon: <Bot className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
+    label: '自动转写并下载为 TXT',
+    loading: isAiTranscribeRunning,
+    description: '纯本地 WebGPU 显卡异步转写，自动下载保存纯文本',
+    badge: 'AI·TXT',
+    onClick: async () => {
+      logger.info('QuickAction', '触发快捷操作: 自动转写并下载为 TXT');
+      await handleQuickWhisperTranscribeAndDownloadTxt();
+    },
+  };
 
   // 抽象与配置右键快捷操作列表 (根据是否为合集自动呈现最匹配的选项，通过下载引擎开关无缝分流浏览器或外部下载器)
   const quickActions: QuickActionItem[] = hasUgcSeason
@@ -968,8 +1080,9 @@ export const App: React.FC = () => {
               await handleDownloadSeasonSubtitles();
             },
           },
+          aiTranscribeAction,
         ]
-      : [
+    : [
           {
             id: 'quick_batch_videos_highest',
             icon: <Video className="w-4 h-4 text-emerald-800 dark:text-emerald-300" strokeWidth={2.2} />,
@@ -1020,6 +1133,7 @@ export const App: React.FC = () => {
               await handleDownloadBatchSubtitles();
             },
           },
+          aiTranscribeAction,
         ];
 
   return (
@@ -1043,6 +1157,9 @@ export const App: React.FC = () => {
         activeDownloaderShortName={activeExtDownloader.shortName || activeExtDownloader.name}
         isExternalAvailable={Boolean(downloaderStatus?.isAvailable)}
         isCheckingExternal={isCheckingDownloader}
+        languages={SUPPORTED_LANGUAGES}
+        selectedLanguage={quickWhisperLang}
+        onSelectLanguage={handleSelectQuickWhisperLang}
       />
       {isModalOpen && mediaData && (
         <DownloadModal
