@@ -13,14 +13,17 @@ import {
   ChevronDown,
   ChevronUp,
   Zap,
+  Trash2,
 } from 'lucide-react';
 import {
   transcribeMediaAudio,
   checkWebGpuSupport,
+  clearWhisperPipelineCache,
   SUPPORTED_WHISPER_MODELS,
   SUPPORTED_LANGUAGES,
   type WhisperProgressUpdate,
   type WhisperTranscriptionResult,
+  type WhisperChunk,
 } from '../ai/whisper';
 import { saveBlobAsFile } from '../media/downloader';
 import { getDownloadSettings } from '../utils/settings';
@@ -40,6 +43,7 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
 }) => {
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState<WhisperProgressUpdate | null>(null);
+  const [liveChunks, setLiveChunks] = useState<WhisperChunk[]>([]);
   const [result, setResult] = useState<WhisperTranscriptionResult | null>(null);
   const [copiedText, setCopiedText] = useState(false);
   const [copiedSrt, setCopiedSrt] = useState(false);
@@ -59,6 +63,11 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
 
   useEffect(() => {
     checkWebGpuSupport().then(setWebGpuStatus);
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, []);
 
   const handleStartTranscribe = async () => {
@@ -78,6 +87,7 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
 
     setIsRunning(true);
     setResult(null);
+    setLiveChunks([]);
     setProgress({
       stage: 'downloading_audio',
       progress: 0,
@@ -91,6 +101,9 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
         returnTimestamps: true,
         signal: controller.signal,
         onProgress: (p) => setProgress(p),
+        onChunk: (chunk) => {
+          setLiveChunks((prev) => [...prev, chunk]);
+        },
       });
 
       setResult(res);
@@ -107,6 +120,11 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
       setIsRunning(false);
       abortControllerRef.current = null;
     }
+  };
+
+  const handleClearMemory = async () => {
+    await clearWhisperPipelineCache();
+    onShowToast('已释放 Whisper 显存与内存模型缓存', 'info');
   };
 
   const handleCancel = () => {
@@ -233,6 +251,14 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
 
           <div className="ml-auto flex items-center gap-2">
             <button
+              onClick={handleClearMemory}
+              title="释放模型显存与内存占用"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground text-xs font-medium transition-all active:scale-95 cursor-pointer border border-border/60"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>释放显存</span>
+            </button>
+            <button
               onClick={handleStartTranscribe}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold shadow-2xs active:scale-95 transition-all cursor-pointer"
             >
@@ -243,9 +269,9 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
         </div>
       )}
 
-      {/* 运行中进度与状态展示 */}
+      {/* 运行中进度与实时流式识别展示 */}
       {isRunning && progress && (
-        <div className="p-3 rounded-xl bg-background/80 border border-primary/40 space-y-2">
+        <div className="p-3 rounded-xl bg-background/80 border border-primary/40 space-y-2.5">
           <div className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-2 font-semibold text-foreground">
               <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-700 dark:text-emerald-300" strokeWidth={2.4} />
@@ -271,12 +297,20 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
             />
           </div>
 
+          {/* 实时流式输出预览 */}
+          {liveChunks.length > 0 && (
+            <div className="p-2 rounded-lg bg-muted/40 border border-border/60 text-xs text-foreground max-h-20 overflow-y-auto font-sans leading-relaxed scrollbar-clean">
+              <span className="text-[10px] font-mono text-emerald-700 dark:text-emerald-300 mr-1.5">[实时流]</span>
+              {liveChunks.map((c) => c.text).join('')}
+            </div>
+          )}
+
           <div className="flex items-center justify-between text-[10.5px] text-muted-foreground">
             <span>
               {progress.stage === 'loading_model'
                 ? `首次加载下载 ${currentModelMeta.sizeMB}MB 模型，浏览器永久本地缓存`
                 : progress.stage === 'transcribing'
-                ? 'WebGPU 显卡多线程实时推理中...'
+                ? 'WebGPU 显卡异步调度推理中，界面丝滑无卡顿...'
                 : '处理音频流中...'}
             </span>
             <span>{currentModelMeta.name.split(' ')[0]}</span>

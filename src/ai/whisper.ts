@@ -119,6 +119,35 @@ export const SUPPORTED_LANGUAGES = [
 const pipelineCache = new Map<string, Promise<WhisperPipelineFn>>();
 
 /**
+ * 主动释放并销毁所有缓存的 Whisper 模型与显存/内存实例
+ */
+export async function clearWhisperPipelineCache(): Promise<void> {
+  for (const [key, promise] of pipelineCache.entries()) {
+    try {
+      const p = await promise;
+      if (p && typeof (p as unknown as { dispose?: () => Promise<void> | void }).dispose === 'function') {
+        await (p as unknown as { dispose: () => Promise<void> | void }).dispose();
+      }
+    } catch {}
+    pipelineCache.delete(key);
+  }
+  logger.info('Whisper', '已主动释放所有 Whisper 显存/内存模型缓存');
+}
+
+/**
+ * 微任务让渡事件循环：防止长时间连续计算导致主线程 UI 掉帧卡顿
+ */
+export async function yieldToMainLoop(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => setTimeout(resolve, 0));
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+}
+
+/**
  * 检查当前浏览器和系统硬件是否支持 WebGPU
  */
 export async function checkWebGpuSupport(): Promise<{ supported: boolean; adapterInfo?: string }> {
@@ -355,6 +384,7 @@ export async function transcribeAudioBuffer(
     language?: string;
     returnTimestamps?: boolean;
     onProgress?: (update: WhisperProgressUpdate) => void;
+    onChunk?: (chunk: WhisperChunk) => void;
     signal?: AbortSignal;
     traceId?: string;
   }
@@ -368,7 +398,8 @@ export async function transcribeAudioBuffer(
     throw new DOMException('Transcription aborted by user', 'AbortError');
   }
 
-  // 1. 解码重采样音频为 16kHz mono Float32Array
+  // 1. 解码重采样音频为 16kHz mono Float32Array (微任务让渡防止卡顿)
+  await yieldToMainLoop();
   options?.onProgress?.({
     stage: 'decoding_audio',
     progress: 5,
@@ -382,6 +413,8 @@ export async function transcribeAudioBuffer(
     throw new DOMException('Transcription aborted by user', 'AbortError');
   }
 
+  await yieldToMainLoop();
+
   // 2. 加载或复用 Whisper Pipeline
   const { transcriber, deviceUsed, modelUsed } = await getWhisperPipeline({
     model: options?.model,
@@ -394,11 +427,13 @@ export async function transcribeAudioBuffer(
     throw new DOMException('Transcription aborted by user', 'AbortError');
   }
 
+  await yieldToMainLoop();
+
   // 3. 执行 ASR 语音识别推理
   options?.onProgress?.({
     stage: 'transcribing',
     progress: 30,
-    message: `正在通过 ${deviceUsed === 'webgpu' ? 'WebGPU' : 'Wasm'} 本地推理转录中...`,
+    message: `正在通过 ${deviceUsed === 'webgpu' ? 'WebGPU 显卡' : 'CPU Wasm'} 异步推理转录中...`,
   });
 
   logger.info('Whisper', `开始本地模型推理: ${modelUsed} (${deviceUsed}), 语言: ${language}`, null, traceId);
@@ -408,6 +443,15 @@ export async function transcribeAudioBuffer(
     return_timestamps: returnTimestamps ? true : false,
     chunk_length_s: 30,
     stride_length_s: 5,
+    callback_function: (chunkData: { text?: string; timestamp?: [number, number | null] }) => {
+      if (options?.signal?.aborted) return;
+      if (chunkData && chunkData.text) {
+        options?.onChunk?.({
+          text: chunkData.text,
+          timestamp: chunkData.timestamp || [0, null],
+        });
+      }
+    },
   };
 
   if (language && language !== 'auto') {
@@ -419,6 +463,8 @@ export async function transcribeAudioBuffer(
   if (options?.signal?.aborted) {
     throw new DOMException('Transcription aborted by user', 'AbortError');
   }
+
+  await yieldToMainLoop();
 
   const text = (rawResult?.text || '').trim();
   const rawChunks: Array<{ text: string; timestamp?: [number, number | null] }> = rawResult?.chunks || [];
@@ -464,6 +510,7 @@ export async function transcribeMediaAudio(
     language?: string;
     returnTimestamps?: boolean;
     onProgress?: (update: WhisperProgressUpdate) => void;
+    onChunk?: (chunk: WhisperChunk) => void;
     signal?: AbortSignal;
     traceId?: string;
   }
