@@ -1,3 +1,8 @@
+import {
+  GM_xmlhttpRequest,
+  type GMXMLHttpRequestResponse,
+  type GMXMLHttpRequestError,
+} from '$';
 import { requestChunkedBuffer } from '../api/http';
 import { logger } from '../utils/logger';
 import { getDownloadSettings, DownloadSettings } from '../utils/settings';
@@ -174,7 +179,7 @@ export async function yieldToMainLoop(): Promise<void> {
 }
 
 /**
- * 检查当前浏览器和系统硬件是否支持 WebGPU
+ * 检查当前浏览器和系统硬件是否支持 WebGPU (严格测试 requestDevice 获取硬件实例)
  */
 export async function checkWebGpuSupport(): Promise<{ supported: boolean; adapterInfo?: string }> {
   if (typeof navigator === 'undefined' || !navigator.gpu) {
@@ -185,12 +190,88 @@ export async function checkWebGpuSupport(): Promise<{ supported: boolean; adapte
     if (!adapter) {
       return { supported: false };
     }
+    // 严格检查是否能实际创建 GPU 设备
+    const device = await adapter.requestDevice().catch(() => null);
+    if (!device) {
+      return { supported: false };
+    }
+    // 立即销毁测试 device
+    try {
+      device.destroy();
+    } catch {}
+
     const info = (adapter as unknown as { info?: { description?: string; vendor?: string; architecture?: string } }).info;
-    const desc = info ? [info.vendor, info.architecture, info.description].filter(Boolean).join(' ') : 'WebGPU 硬件加速已就绪';
+    const desc = info ? [info.vendor, info.architecture, info.description].filter(Boolean).join(' ') : 'WebGPU 硬件加速就绪';
     return { supported: true, adapterInfo: desc || 'WebGPU 加速可用' };
   } catch {
     return { supported: false };
   }
+}
+
+/**
+ * 代理原生 fetch：针对 HuggingFace / hf-mirror 模型权重请求使用 GM_xmlhttpRequest 绕过浏览器 CORS 跨域拦截
+ */
+function setupFetchProxy(): void {
+  if (typeof window === 'undefined') return;
+  const originalFetch = window.fetch;
+  const targetHosts = ['hf-mirror.com', 'huggingface.co', 'hf.co', 'jsdelivr.net', 'fastly.jsdelivr.net', 'unpkg.com'];
+
+  window.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const isTarget = targetHosts.some((h) => url.includes(h));
+
+    if (!isTarget) {
+      return originalFetch.apply(window, [input, init]);
+    }
+
+    try {
+      return await new Promise<Response>((resolve, reject) => {
+        const headers: Record<string, string> = {};
+        if (init?.headers) {
+          if (init.headers instanceof Headers) {
+            init.headers.forEach((v: string, k: string) => { headers[k] = v; });
+          } else if (Array.isArray(init.headers)) {
+            init.headers.forEach(([k, v]: [string, string]) => { headers[k] = v; });
+          } else {
+            Object.assign(headers, init.headers);
+          }
+        }
+
+        GM_xmlhttpRequest({
+          method: (init?.method as 'GET' | 'POST' | 'HEAD') || 'GET',
+          url,
+          headers,
+          responseType: 'arraybuffer',
+          onload: (res: GMXMLHttpRequestResponse) => {
+            const respHeaders = new Headers();
+            if (res.responseHeaders) {
+              res.responseHeaders.split('\r\n').forEach((line: string) => {
+                const parts = line.split(': ');
+                if (parts.length >= 2) {
+                  respHeaders.set(parts[0], parts.slice(1).join(': '));
+                }
+              });
+            }
+
+            const responseObj = new Response(res.response as ArrayBuffer, {
+              status: res.status,
+              statusText: res.statusText,
+              headers: respHeaders,
+            });
+
+            // 保持 response.url 属性指向最终地址
+            const finalUrl = (res as unknown as { finalUrl?: string }).finalUrl || url;
+            Object.defineProperty(responseObj, 'url', { value: finalUrl });
+            resolve(responseObj);
+          },
+          onerror: (err: GMXMLHttpRequestError) => reject(new Error(`GM_xmlhttpRequest failed for ${url}: ${err.error || err.statusText}`)),
+          ontimeout: () => reject(new Error(`GM_xmlhttpRequest timeout for ${url}`)),
+        });
+      });
+    } catch {
+      return originalFetch.apply(window, [input, init]);
+    }
+  };
 }
 
 /**
@@ -211,6 +292,7 @@ export function getMirrorBaseUrl(mirror: string, customUrl?: string): string {
  * 配置 Transformers.js 运行环境 (镜像节点、浏览器缓存与本地模型策略)
  */
 export async function configureTransformersEnv(settings?: DownloadSettings): Promise<void> {
+  setupFetchProxy();
   const s = settings || getDownloadSettings();
   const remoteHost = getMirrorBaseUrl(s.whisperMirror || 'hf-mirror', s.whisperCustomMirrorUrl);
   const { env } = await loadTransformers();

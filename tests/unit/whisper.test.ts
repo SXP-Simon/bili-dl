@@ -104,6 +104,7 @@ describe('Whisper Speech-to-Text Unit Tests', () => {
           gpu: {
             requestAdapter: vi.fn().mockResolvedValue({
               info: { vendor: 'NVIDIA', architecture: 'Ampere', description: 'RTX 3080' },
+              requestDevice: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
             }),
           },
         },
