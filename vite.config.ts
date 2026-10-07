@@ -31,9 +31,6 @@ export default defineConfig({
           'GM_setClipboard',
           'GM_cookie'
         ],
-        require: [
-          'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3'
-        ],
         connect: [
           'bilibili.com',
           'bilivideo.com',
@@ -59,9 +56,7 @@ export default defineConfig({
         ]
       },
       build: {
-        externalGlobals: {
-          '@huggingface/transformers': 'transformers'
-        }
+        externalGlobals: {}
       }
     }),
   ],

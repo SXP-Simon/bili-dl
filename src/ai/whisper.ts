@@ -20,19 +20,20 @@ export interface TransformersAPI {
 let transformersPromise: Promise<TransformersAPI> | null = null;
 
 /**
- * 动态加载 Transformers.js (兼容 @require 油猴引入、国内 CDN 动态加载与 npm 打包)
+ * 动态加载 Transformers.js (按需从 CDN 注入脚本并读取全局 transformers 对象)
  */
 export async function loadTransformers(): Promise<TransformersAPI> {
   if (transformersPromise) return transformersPromise;
 
   transformersPromise = (async () => {
-    // 1. 检查油猴通过 @require 注入的 window.transformers 全局对象
-    if (typeof window !== 'undefined' && (window as unknown as { transformers?: TransformersAPI }).transformers?.pipeline) {
-      logger.info('Whisper', '检测到 @require 预加载的 Transformers.js 模块');
-      return (window as unknown as { transformers: TransformersAPI }).transformers;
+    // 1. 检查当前环境或 window 下是否已有 transformers 全局对象
+    const win = typeof window !== 'undefined' ? (window as unknown as { transformers?: TransformersAPI }) : undefined;
+    if (win?.transformers?.pipeline) {
+      logger.info('Whisper', '检测到已就绪的 Transformers.js 模块');
+      return win.transformers;
     }
 
-    // 2. 尝试从高速 CDN 动态按需加载
+    // 2. 通过 DOM Script 标签动态注入 CDN 脚本（兼容 B 站无 CSP eval 限制）
     const cdnList = [
       'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3',
       'https://fastly.jsdelivr.net/npm/@huggingface/transformers@3.3.3',
@@ -41,16 +42,41 @@ export async function loadTransformers(): Promise<TransformersAPI> {
 
     for (const url of cdnList) {
       try {
-        const mod = await import(/* @vite-ignore */ url);
+        await new Promise<void>((resolve, reject) => {
+          if (typeof document === 'undefined') {
+            resolve();
+            return;
+          }
+          const script = document.createElement('script');
+          script.src = url;
+          script.async = true;
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error(`Failed to load ${url}`));
+          (document.head || document.documentElement).appendChild(script);
+        });
+
+        if (win?.transformers?.pipeline) {
+          logger.info('Whisper', `成功从 CDN 动态注入并载入 Transformers.js: ${url}`);
+          return win.transformers;
+        }
+      } catch (e) {
+        logger.warn('Whisper', `尝试从 CDN 注入 Transformers.js 失败: ${url}`, e);
+      }
+    }
+
+    // 3. 如果注入未挂载，尝试通过 Function 动态 import
+    for (const url of cdnList) {
+      try {
+        const dynamicImport = new Function('u', 'return import(u)');
+        const mod = await dynamicImport(url);
         if (mod && (mod.pipeline || mod.default?.pipeline)) {
-          logger.info('Whisper', `成功从 CDN 动态载入 Transformers.js: ${url}`);
+          logger.info('Whisper', `成功动态 import Transformers.js: ${url}`);
           return mod.default?.pipeline ? mod.default : mod;
         }
       } catch {}
     }
 
-    // 3. 本地打包模块降级兜底
-    return await import('@huggingface/transformers');
+    throw new Error('未能加载 Transformers.js 模块，请检查网络或刷新页面重试');
   })();
 
   return transformersPromise;
