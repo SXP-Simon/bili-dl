@@ -142,13 +142,175 @@ export function getTranscriptionResult(cacheKey: string): WhisperTranscriptionRe
 
 export function saveTranscriptionResult(cacheKey: string, result: WhisperTranscriptionResult): void {
   transcriptionCache.set(cacheKey, result);
+  const state = getActiveTranscriptionState(cacheKey);
+  state.result = result;
+  state.liveChunks = result.chunks || [];
+  state.isRunning = false;
+  state.controller = null;
+  notifyTranscriptionState(cacheKey);
 }
 
 export function clearTranscriptionResult(cacheKey?: string): void {
   if (cacheKey) {
     transcriptionCache.delete(cacheKey);
+    activeTranscriptions.delete(cacheKey);
+    notifyTranscriptionState(cacheKey);
   } else {
     transcriptionCache.clear();
+    activeTranscriptions.clear();
+  }
+}
+
+export interface ActiveTranscriptionState {
+  cacheKey: string;
+  isRunning: boolean;
+  progress: WhisperProgressUpdate | null;
+  liveChunks: WhisperChunk[];
+  result: WhisperTranscriptionResult | null;
+  error?: string | null;
+  controller: AbortController | null;
+}
+
+const activeTranscriptions = new Map<string, ActiveTranscriptionState>();
+const transcriptionListeners = new Map<string, Set<(state: ActiveTranscriptionState) => void>>();
+
+export function getActiveTranscriptionState(cacheKey: string): ActiveTranscriptionState {
+  let state = activeTranscriptions.get(cacheKey);
+  if (!state) {
+    const cachedResult = getTranscriptionResult(cacheKey);
+    state = {
+      cacheKey,
+      isRunning: false,
+      progress: null,
+      liveChunks: cachedResult?.chunks || [],
+      result: cachedResult || null,
+      error: null,
+      controller: null,
+    };
+    activeTranscriptions.set(cacheKey, state);
+  }
+  return state;
+}
+
+function notifyTranscriptionState(cacheKey: string): void {
+  const state = activeTranscriptions.get(cacheKey);
+  if (!state) return;
+  const listeners = transcriptionListeners.get(cacheKey);
+  if (listeners) {
+    listeners.forEach((listener) => {
+      try {
+        listener({ ...state });
+      } catch {}
+    });
+  }
+}
+
+export function subscribeTranscriptionState(
+  cacheKey: string,
+  listener: (state: ActiveTranscriptionState) => void
+): () => void {
+  let listeners = transcriptionListeners.get(cacheKey);
+  if (!listeners) {
+    listeners = new Set();
+    transcriptionListeners.set(cacheKey, listeners);
+  }
+  listeners.add(listener);
+  listener(getActiveTranscriptionState(cacheKey));
+
+  return () => {
+    listeners?.delete(listener);
+    if (listeners && listeners.size === 0) {
+      transcriptionListeners.delete(cacheKey);
+    }
+  };
+}
+
+export function abortTranscriptionTask(cacheKey: string): void {
+  const state = activeTranscriptions.get(cacheKey);
+  if (state?.controller) {
+    state.controller.abort();
+    state.isRunning = false;
+    state.controller = null;
+    state.progress = {
+      stage: 'error',
+      progress: 0,
+      message: '语音识别任务已手动取消',
+    };
+    notifyTranscriptionState(cacheKey);
+  }
+}
+
+export async function startTranscriptionTask(
+  cacheKey: string,
+  audio: AudioStreamItem,
+  options: {
+    model: string;
+    language: string;
+    returnTimestamps?: boolean;
+    traceId?: string;
+  }
+): Promise<WhisperTranscriptionResult> {
+  const state = getActiveTranscriptionState(cacheKey);
+  if (state.isRunning) {
+    throw new Error('当前分 P 的语音转写任务正在后台处理中，请勿重复发起');
+  }
+
+  const controller = new AbortController();
+  state.isRunning = true;
+  state.error = null;
+  state.result = null;
+  state.liveChunks = [];
+  state.controller = controller;
+  state.progress = {
+    stage: 'downloading_audio',
+    progress: 0,
+    message: '正在准备极速拉取音频流...',
+  };
+  notifyTranscriptionState(cacheKey);
+
+  try {
+    const res = await transcribeMediaAudio(audio, {
+      model: options.model,
+      language: options.language,
+      returnTimestamps: options.returnTimestamps ?? true,
+      signal: controller.signal,
+      traceId: options.traceId,
+      onProgress: (p) => {
+        state.progress = p;
+        notifyTranscriptionState(cacheKey);
+      },
+      onChunk: (chunk) => {
+        state.liveChunks = [...state.liveChunks, chunk];
+        notifyTranscriptionState(cacheKey);
+      },
+    });
+
+    state.result = res;
+    state.isRunning = false;
+    state.controller = null;
+    saveTranscriptionResult(cacheKey, res);
+    notifyTranscriptionState(cacheKey);
+    return res;
+  } catch (err) {
+    state.isRunning = false;
+    state.controller = null;
+    if (controller.signal.aborted || isAbortError(err)) {
+      state.progress = {
+        stage: 'error',
+        progress: 0,
+        message: '语音识别任务已手动取消',
+      };
+    } else {
+      const msg = getErrorMessage(err);
+      state.error = msg;
+      state.progress = {
+        stage: 'error',
+        progress: 0,
+        message: `转录失败: ${msg}`,
+      };
+    }
+    notifyTranscriptionState(cacheKey);
+    throw err;
   }
 }
 

@@ -7,6 +7,11 @@ import {
   decodeAudioTo16kMono,
   transcribeAudioBuffer,
   transcribeMediaAudio,
+  startTranscriptionTask,
+  subscribeTranscriptionState,
+  abortTranscriptionTask,
+  getTranscriptionResult,
+  clearTranscriptionResult,
   SUPPORTED_WHISPER_MODELS,
   SUPPORTED_LANGUAGES,
 } from '../../src/ai/whisper';
@@ -288,6 +293,49 @@ describe('Whisper Speech-to-Text Unit Tests', () => {
 
       expect(result.text).toBe('测试音频转写文本。');
       expect(httpApi.requestChunkedBuffer).toHaveBeenCalled();
+    });
+
+    it('should manage persistent transcription task state and support subscription and abort', async () => {
+      vi.spyOn(httpApi, 'requestChunkedBuffer').mockResolvedValue(new ArrayBuffer(1024));
+
+      const mockAudioItem = {
+        id: 30280,
+        name: '64Kbps',
+        qualityDesc: '极速',
+        codec: 'mp4a.40.2',
+        bandwidth: 64000,
+        sizeMB: '1.2',
+        baseUrl: 'https://example.com/audio.m4a',
+      };
+
+      const states: boolean[] = [];
+      const unsubscribe = subscribeTranscriptionState('test_task_key', (st) => {
+        states.push(st.isRunning);
+      });
+
+      const promise = startTranscriptionTask('test_task_key', mockAudioItem, {
+        model: 'onnx-community/whisper-tiny',
+        language: 'chinese',
+      });
+
+      // Should reject duplicate task while running
+      await expect(
+        startTranscriptionTask('test_task_key', mockAudioItem, {
+          model: 'onnx-community/whisper-tiny',
+          language: 'chinese',
+        })
+      ).rejects.toThrow(/正在后台处理中/);
+
+      const result = await promise;
+      expect(result.text).toBe('测试音频转写文本。');
+      expect(states).toContain(true);
+      expect(getTranscriptionResult('test_task_key')?.text).toBe('测试音频转写文本。');
+
+      // Test abort
+      abortTranscriptionTask('test_task_key');
+      unsubscribe();
+      clearTranscriptionResult('test_task_key');
+      expect(getTranscriptionResult('test_task_key')).toBeUndefined();
     });
   });
 });

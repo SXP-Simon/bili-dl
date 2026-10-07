@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { WhisperTranscriber } from '../../src/components/WhisperTranscriber';
 import * as whisperModule from '../../src/ai/whisper';
 
@@ -69,7 +69,13 @@ describe('WhisperTranscriber UI Component Integration Tests', () => {
       language: 'chinese',
     };
 
-    const transcribeSpy = vi.spyOn(whisperModule, 'transcribeMediaAudio').mockResolvedValue(mockResult);
+    const taskSpy = vi.spyOn(whisperModule, 'startTranscriptionTask').mockImplementation(async (key) => {
+      whisperModule.saveTranscriptionResult(key, mockResult);
+      const state = whisperModule.getActiveTranscriptionState(key);
+      state.result = mockResult;
+      state.isRunning = false;
+      return mockResult;
+    });
 
     await act(async () => {
       render(
@@ -86,9 +92,14 @@ describe('WhisperTranscriber UI Component Integration Tests', () => {
       fireEvent.click(startBtn);
     });
 
-    expect(transcribeSpy).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(screen.getByText('这是本地转写的识别结果。')).toBeInTheDocument();
+    });
+
+    expect(taskSpy).toHaveBeenCalledTimes(1);
     // Should prioritize lowest bandwidth audio
-    expect(transcribeSpy).toHaveBeenCalledWith(
+    expect(taskSpy).toHaveBeenCalledWith(
+      '测试视频',
       mockAudios[0],
       expect.objectContaining({
         language: 'chinese',
@@ -97,7 +108,6 @@ describe('WhisperTranscriber UI Component Integration Tests', () => {
     );
 
     // Should display the transcribed result
-    expect(screen.getByText('这是本地转写的识别结果。')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /复制纯文本/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /导出 \.srt/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /导出 \.txt/ })).toBeInTheDocument();
@@ -115,7 +125,13 @@ describe('WhisperTranscriber UI Component Integration Tests', () => {
       language: 'chinese',
     };
 
-    vi.spyOn(whisperModule, 'transcribeMediaAudio').mockResolvedValue(mockResult);
+    vi.spyOn(whisperModule, 'startTranscriptionTask').mockImplementation(async (key) => {
+      whisperModule.saveTranscriptionResult(key, mockResult);
+      const state = whisperModule.getActiveTranscriptionState(key);
+      state.result = mockResult;
+      state.isRunning = false;
+      return mockResult;
+    });
 
     // Mock clipboard
     Object.assign(navigator, {
@@ -139,7 +155,7 @@ describe('WhisperTranscriber UI Component Integration Tests', () => {
       fireEvent.click(startBtn);
     });
 
-    const copyBtn = screen.getByRole('button', { name: /复制纯文本/ });
+    const copyBtn = await screen.findByRole('button', { name: /复制纯文本/ });
     await act(async () => {
       fireEvent.click(copyBtn);
     });

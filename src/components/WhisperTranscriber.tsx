@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   Bot,
@@ -16,17 +16,16 @@ import {
   Trash2,
 } from 'lucide-react';
 import {
-  transcribeMediaAudio,
   checkWebGpuSupport,
   clearWhisperPipelineCache,
-  getTranscriptionResult,
-  saveTranscriptionResult,
   clearTranscriptionResult,
+  subscribeTranscriptionState,
+  startTranscriptionTask,
+  abortTranscriptionTask,
+  getActiveTranscriptionState,
   SUPPORTED_WHISPER_MODELS,
   SUPPORTED_LANGUAGES,
-  type WhisperProgressUpdate,
-  type WhisperTranscriptionResult,
-  type WhisperChunk,
+  type ActiveTranscriptionState,
 } from '../ai/whisper';
 import { saveBlobAsFile } from '../media/downloader';
 import { getDownloadSettings } from '../utils/settings';
@@ -47,15 +46,12 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
   onShowToast,
 }) => {
   const effectiveKey = cacheKey || title;
-  const initialCached = getTranscriptionResult(effectiveKey);
+  const initialTaskState = getActiveTranscriptionState(effectiveKey);
 
-  const [isRunning, setIsRunning] = useState(false);
-  const [progress, setProgress] = useState<WhisperProgressUpdate | null>(null);
-  const [liveChunks, setLiveChunks] = useState<WhisperChunk[]>([]);
-  const [result, setResult] = useState<WhisperTranscriptionResult | null>(initialCached || null);
+  const [taskState, setTaskState] = useState<ActiveTranscriptionState>(initialTaskState);
   const [copiedText, setCopiedText] = useState(false);
   const [copiedSrt, setCopiedSrt] = useState(false);
-  const [showFullView, setShowFullView] = useState(!!initialCached);
+  const [showFullView, setShowFullView] = useState(!!initialTaskState.result);
   const [showChunks, setShowChunks] = useState(false);
   const [webGpuStatus, setWebGpuStatus] = useState<{ supported: boolean; adapterInfo?: string } | null>(null);
 
@@ -67,19 +63,22 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
     settings.whisperLanguage || 'chinese'
   );
 
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // 订阅当前分 P 的全局转写任务状态（关闭 Modal 再次打开自动无缝恢复）
+  useEffect(() => {
+    return subscribeTranscriptionState(effectiveKey, (state) => {
+      setTaskState(state);
+      if (state.result) {
+        setShowFullView(true);
+      }
+    });
+  }, [effectiveKey]);
 
   useEffect(() => {
     checkWebGpuSupport().then(setWebGpuStatus);
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
   }, []);
 
   const handleStartTranscribe = async () => {
-    if (isRunning) return;
+    if (taskState.isRunning) return;
 
     // 优先选取码率最低的音频流（体积最小，拉取最快，ASR 识别率与高码率完全一致）
     const sortedAudios = [...audios].sort((a, b) => a.bandwidth - b.bandwidth);
@@ -90,44 +89,20 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
       return;
     }
 
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    setIsRunning(true);
-    setResult(null);
-    setLiveChunks([]);
-    setProgress({
-      stage: 'downloading_audio',
-      progress: 0,
-      message: '正在准备极速拉取音频流...',
-    });
-
     try {
-      const res = await transcribeMediaAudio(targetAudio, {
+      await startTranscriptionTask(effectiveKey, targetAudio, {
         model: selectedModel,
         language: selectedLanguage,
         returnTimestamps: true,
-        signal: controller.signal,
-        onProgress: (p) => setProgress(p),
-        onChunk: (chunk) => {
-          setLiveChunks((prev) => [...prev, chunk]);
-        },
       });
-
-      saveTranscriptionResult(effectiveKey, res);
-      setResult(res);
-      setShowFullView(true);
       onShowToast('本地 AI 语音转文字完成！', 'success');
     } catch (err) {
-      if (controller.signal.aborted || isAbortError(err)) {
+      if (isAbortError(err)) {
         onShowToast('语音转写任务已手动取消', 'info');
       } else {
         const msg = getErrorMessage(err);
         onShowToast(`语音转写失败: ${msg}`, 'error');
       }
-    } finally {
-      setIsRunning(false);
-      abortControllerRef.current = null;
     }
   };
 
@@ -137,9 +112,7 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
   };
 
   const handleCancel = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+    abortTranscriptionTask(effectiveKey);
   };
 
   const handleCopyText = () => {
@@ -171,6 +144,8 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
     saveBlobAsFile(blob, `${title}-本地AI语音转写纯文本.txt`, title);
     onShowToast('纯文本文件已保存', 'success');
   };
+
+  const { isRunning, progress, liveChunks, result } = taskState;
 
   const currentModelMeta =
     SUPPORTED_WHISPER_MODELS.find((m) => m.id === selectedModel) || SUPPORTED_WHISPER_MODELS[0];
@@ -390,9 +365,6 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
               <button
                 onClick={() => {
                   clearTranscriptionResult(effectiveKey);
-                  setResult(null);
-                  setProgress(null);
-                  setLiveChunks([]);
                 }}
                 title="重新转写"
                 className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
