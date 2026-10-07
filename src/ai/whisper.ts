@@ -698,6 +698,58 @@ export async function getWhisperPipeline(options?: {
 }
 
 /**
+ * 全局模型推理排队互斥锁
+ * ONNX Runtime (尤其是 WebGPU session) 不支持在同一实例或同一 WebGPU 管道上并发执行 forward-pass。
+ * 使用队列链串行化每次推理执行，避免 `Session already started` 及 GPU 显存冲突崩溃。
+ */
+let inferenceQueueChain: Promise<unknown> = Promise.resolve();
+
+export async function runExclusiveInference<T>(
+  task: () => Promise<T>,
+  options?: {
+    onWaiting?: () => void;
+    signal?: AbortSignal;
+  }
+): Promise<T> {
+  if (options?.signal?.aborted) {
+    throw new DOMException('Transcription aborted by user', 'AbortError');
+  }
+
+  let releaseMutex!: () => void;
+  const nextLock = new Promise<void>((resolve) => {
+    releaseMutex = resolve;
+  });
+
+  const previousLock = inferenceQueueChain;
+  // 更新队列链
+  inferenceQueueChain = inferenceQueueChain.then(() => nextLock, () => nextLock);
+
+  // 检测是否需要排队等待前序任务
+  let hasAcquired = false;
+  const acquirePromise = previousLock.catch(() => {}).then(() => {
+    hasAcquired = true;
+  });
+
+  // 让渡事件循环检查是否立即获得锁
+  await Promise.race([acquirePromise, new Promise((r) => setTimeout(r, 0))]);
+  if (!hasAcquired) {
+    options?.onWaiting?.();
+    await acquirePromise;
+  }
+
+  if (options?.signal?.aborted) {
+    releaseMutex();
+    throw new DOMException('Transcription aborted by user', 'AbortError');
+  }
+
+  try {
+    return await task();
+  } finally {
+    releaseMutex();
+  }
+}
+
+/**
  * 完整转写指定的音频 ArrayBuffer
  */
 export async function transcribeAudioBuffer(
@@ -756,15 +808,7 @@ export async function transcribeAudioBuffer(
 
     await yieldToMainLoop();
 
-    // 3. 执行 ASR 语音识别推理
-    options?.onProgress?.({
-      stage: 'transcribing',
-      progress: 30,
-      message: `正在通过 ${deviceUsed === 'webgpu' ? 'WebGPU 显卡' : 'CPU Wasm'} 异步推理转录中...`,
-    });
-
-    logger.info('Whisper', `开始本地模型推理: ${modelUsed} (${deviceUsed}), 语言: ${language}`, null, traceId);
-
+    // 3. 执行 ASR 语音识别推理 (排队互斥执行，防止 WebGPU Session already started 崩溃)
     const handleChunkOutput = (chunkData: { text?: string; timestamp?: [number, number | null] }) => {
       if (options?.signal?.aborted) return;
       if (chunkData && chunkData.text) {
@@ -798,9 +842,36 @@ export async function transcribeAudioBuffer(
       pipelineOptions.language = language;
     }
 
-    const inferenceStartTime = performance.now();
-    const rawResult = await transcriber(float32, pipelineOptions);
-    const inferenceElapsedMs = performance.now() - inferenceStartTime;
+    let inferenceStartTime = 0;
+    let inferenceElapsedMs = 0;
+
+    const rawResult = await runExclusiveInference(
+      async () => {
+        options?.onProgress?.({
+          stage: 'transcribing',
+          progress: 30,
+          message: `正在通过 ${deviceUsed === 'webgpu' ? 'WebGPU 显卡' : 'CPU Wasm'} 异步推理转录中...`,
+        });
+
+        logger.info('Whisper', `开始本地模型推理: ${modelUsed} (${deviceUsed}), 语言: ${language}`, null, traceId);
+
+        inferenceStartTime = performance.now();
+        const res = await transcriber(float32, pipelineOptions);
+        inferenceElapsedMs = performance.now() - inferenceStartTime;
+        return res;
+      },
+      {
+        signal: options?.signal,
+        onWaiting: () => {
+          options?.onProgress?.({
+            stage: 'transcribing',
+            progress: 25,
+            message: '排队等待中: 正在等待前序转录任务释放 WebGPU 推理会话...',
+          });
+          logger.info('Whisper', '转录任务排队中: 正在等待前序推理会话完成', null, traceId);
+        },
+      }
+    );
 
     if (options?.signal?.aborted) {
       throw new DOMException('Transcription aborted by user', 'AbortError');

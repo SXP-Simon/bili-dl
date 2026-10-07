@@ -5,6 +5,7 @@ import {
   getMirrorBaseUrl,
   checkWebGpuSupport,
   decodeAudioTo16kMono,
+  runExclusiveInference,
   transcribeAudioBuffer,
   transcribeMediaAudio,
   startTranscriptionTask,
@@ -336,6 +337,41 @@ describe('Whisper Speech-to-Text Unit Tests', () => {
       unsubscribe();
       clearTranscriptionResult('test_task_key');
       expect(getTranscriptionResult('test_task_key')).toBeUndefined();
+    });
+
+    it('should serialize concurrent inference executions through runExclusiveInference without collision', async () => {
+      const executionOrder: string[] = [];
+      let waitingTriggered = false;
+
+      const task1 = () =>
+        runExclusiveInference(async () => {
+          executionOrder.push('task1-start');
+          await new Promise((r) => setTimeout(r, 40));
+          executionOrder.push('task1-end');
+          return 'result1';
+        });
+
+      const task2 = () =>
+        runExclusiveInference(
+          async () => {
+            executionOrder.push('task2-start');
+            await new Promise((r) => setTimeout(r, 10));
+            executionOrder.push('task2-end');
+            return 'result2';
+          },
+          {
+            onWaiting: () => {
+              waitingTriggered = true;
+            },
+          }
+        );
+
+      const [res1, res2] = await Promise.all([task1(), task2()]);
+
+      expect(res1).toBe('result1');
+      expect(res2).toBe('result2');
+      expect(waitingTriggered).toBe(true);
+      expect(executionOrder).toEqual(['task1-start', 'task1-end', 'task2-start', 'task2-end']);
     });
   });
 });
