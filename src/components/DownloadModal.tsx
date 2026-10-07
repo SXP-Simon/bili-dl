@@ -107,7 +107,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
     { key: 'audio' as CategoryType, label: '音频', badge: data.audios.length },
     { key: 'cover' as CategoryType, label: '封面' },
     { key: 'danmaku' as CategoryType, label: '弹幕/字幕', badge: data.subtitles.length + 1 },
-    { key: 'ai' as CategoryType, label: 'AI语音转写', badge: 'WebGPU' },
+    { key: 'ai' as CategoryType, label: 'AI语音转写' },
   ];
 
   const handleCopyAiSummary = () => {
