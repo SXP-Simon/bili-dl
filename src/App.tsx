@@ -9,7 +9,7 @@ import { downloadAndMuxMp4, downloadAudio, saveBlobAsFile } from './media/downlo
 import { fetchSubtitleSrt } from './media/subtitle';
 import { batchDetectAndDownloadSubtitles, batchDownloadSeasonSubtitlesZip } from './media/batchSubtitle';
 import { batchDownloadAllLowestAudios, batchDownloadAllHighestVideos, batchDownloadSeasonHighestVideos, batchDownloadSeasonLowestAudios } from './media/batchDownloader';
-import { startTranscriptionTask, SUPPORTED_LANGUAGES } from './ai/whisper';
+import { startTranscriptionTask, abortTranscriptionTask, SUPPORTED_LANGUAGES } from './ai/whisper';
 import { logger } from './utils/logger';
 import { getErrorMessage, isAbortError } from './utils/error';
 import { getDownloadSettings, saveDownloadSettings } from './utils/settings';
@@ -212,6 +212,11 @@ export const App: React.FC = () => {
   };
 
   const handleRemoveTask = (id: string) => {
+    // 若为本地语音转写任务，先触发 Whisper abort
+    if (id.startsWith('whisper_')) {
+      const cacheKey = id.replace('whisper_', '');
+      abortTranscriptionTask(cacheKey);
+    }
     // 若任务正在执行，先触发 Abort 取消断开底层连接与释放资源
     const controller = activeControllers.current.get(id);
     if (controller) {
@@ -840,6 +845,14 @@ export const App: React.FC = () => {
         language: lang,
         returnTimestamps: true,
         traceId,
+        onProgress: (p) => {
+          const isWaiting = p.message.includes('排队');
+          updateTaskProgress(taskId, {
+            status: isWaiting ? 'pending' : p.stage === 'completed' ? 'completed' : p.stage === 'error' ? 'error' : 'downloading_audio',
+            progress: p.progress,
+            message: p.message,
+          });
+        },
       });
 
       if (!controller.signal.aborted && res.text) {
@@ -1170,6 +1183,8 @@ export const App: React.FC = () => {
           tasks={tasks}
           onRemoveTask={handleRemoveTask}
           onClearCompleted={handleClearCompletedTasks}
+          onRegisterTask={upsertTask}
+          onUpdateTaskProgress={updateTaskProgress}
           onToggleDark={handleToggleDark}
           onClose={() => {
             setIsModalOpen(false);

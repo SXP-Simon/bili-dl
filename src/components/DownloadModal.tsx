@@ -45,6 +45,8 @@ interface DownloadModalProps {
   tasks?: DownloadTask[];
   onRemoveTask?: (id: string) => void;
   onClearCompleted?: () => void;
+  onRegisterTask?: (task: DownloadTask) => void;
+  onUpdateTaskProgress?: (id: string, partial: Partial<DownloadTask>) => void;
   onToggleDark: () => void;
   onClose: () => void;
   onDownloadVideo: (video: VideoStreamItem, audio?: AudioStreamItem) => void;
@@ -68,6 +70,8 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   tasks = [],
   onRemoveTask,
   onClearCompleted,
+  onRegisterTask,
+  onUpdateTaskProgress,
   onToggleDark,
   onClose,
   onDownloadVideo,
@@ -898,6 +902,8 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                       title={data.title}
                       audios={data.audios}
                       onShowToast={onShowToast}
+                      onRegisterTask={onRegisterTask}
+                      onUpdateTaskProgress={onUpdateTaskProgress}
                     />
                   </div>
                 )}

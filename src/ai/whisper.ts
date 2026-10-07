@@ -256,6 +256,7 @@ export async function startTranscriptionTask(
     language: string;
     returnTimestamps?: boolean;
     traceId?: string;
+    onProgress?: (update: WhisperProgressUpdate) => void;
   }
 ): Promise<WhisperTranscriptionResult> {
   const state = getActiveTranscriptionState(cacheKey);
@@ -275,6 +276,7 @@ export async function startTranscriptionTask(
     message: '正在准备极速拉取音频流...',
   };
   notifyTranscriptionState(cacheKey);
+  options.onProgress?.(state.progress);
 
   try {
     const res = await transcribeMediaAudio(audio, {
@@ -286,6 +288,7 @@ export async function startTranscriptionTask(
       onProgress: (p) => {
         state.progress = p;
         notifyTranscriptionState(cacheKey);
+        options.onProgress?.(p);
       },
       onChunk: (chunk) => {
         state.liveChunks = [...state.liveChunks, chunk];

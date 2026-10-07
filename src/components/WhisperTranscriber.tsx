@@ -30,13 +30,15 @@ import {
 import { saveBlobAsFile } from '../media/downloader';
 import { getDownloadSettings } from '../utils/settings';
 import { getErrorMessage, isAbortError } from '../utils/error';
-import type { AudioStreamItem } from '../types';
+import type { AudioStreamItem, DownloadTask } from '../types';
 
 interface WhisperTranscriberProps {
   cacheKey?: string;
   title: string;
   audios: AudioStreamItem[];
   onShowToast: (content: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
+  onRegisterTask?: (task: DownloadTask) => void;
+  onUpdateTaskProgress?: (id: string, partial: Partial<DownloadTask>) => void;
 }
 
 export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
@@ -44,6 +46,8 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
   title,
   audios,
   onShowToast,
+  onRegisterTask,
+  onUpdateTaskProgress,
 }) => {
   const effectiveKey = cacheKey || title;
   const initialTaskState = getActiveTranscriptionState(effectiveKey);
@@ -89,18 +93,53 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
       return;
     }
 
+    const taskId = `whisper_${effectiveKey}`;
+    onRegisterTask?.({
+      id: taskId,
+      type: 'ai_transcribe',
+      title: `[本地AI转写] ${title}`,
+      status: 'downloading_audio',
+      progress: 0,
+      message: '正在准备本地 AI 语音转写...',
+      timestamp: Date.now(),
+    });
+
     try {
-      await startTranscriptionTask(effectiveKey, targetAudio, {
+      const res = await startTranscriptionTask(effectiveKey, targetAudio, {
         model: selectedModel,
         language: selectedLanguage,
         returnTimestamps: true,
+        onProgress: (p) => {
+          const isWaiting = p.message.includes('排队');
+          onUpdateTaskProgress?.(taskId, {
+            status: isWaiting ? 'pending' : p.stage === 'completed' ? 'completed' : p.stage === 'error' ? 'error' : 'downloading_audio',
+            progress: p.progress,
+            message: p.message,
+          });
+        },
       });
-      onShowToast('本地 AI 语音转文字完成！', 'success');
+
+      onUpdateTaskProgress?.(taskId, {
+        status: 'completed',
+        progress: 100,
+        message: `转录完成: 共 ${res.text.length} 字 (${res.chunks.length} 句字幕)`,
+      });
+
+      const metricStr = res.metrics ? ` (耗时 ${(res.metrics.totalElapsedMs / 1000).toFixed(1)}s, ${res.metrics.realtimeFactor}x 速)` : '';
+      onShowToast(`本地 AI 语音转文字完成！${metricStr}`, 'success');
     } catch (err) {
       if (isAbortError(err)) {
+        onUpdateTaskProgress?.(taskId, {
+          status: 'cancelled',
+          message: '已手动取消语音转写',
+        });
         onShowToast('语音转写任务已手动取消', 'info');
       } else {
         const msg = getErrorMessage(err);
+        onUpdateTaskProgress?.(taskId, {
+          status: 'error',
+          message: `转录失败: ${msg}`,
+        });
         onShowToast(`语音转写失败: ${msg}`, 'error');
       }
     }
@@ -113,6 +152,10 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
 
   const handleCancel = () => {
     abortTranscriptionTask(effectiveKey);
+    onUpdateTaskProgress?.(`whisper_${effectiveKey}`, {
+      status: 'cancelled',
+      message: '已手动取消语音转写',
+    });
   };
 
   const handleCopyText = () => {
