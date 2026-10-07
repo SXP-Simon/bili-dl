@@ -84,6 +84,13 @@ export interface WhisperChunk {
   timestamp: [number, number | null];
 }
 
+export interface WhisperTranscriptionMetrics {
+  totalElapsedMs: number;
+  inferenceElapsedMs: number;
+  realtimeFactor: number; // 例如 33.4 (代表 33.4 倍速)
+  throughputCharsPerSec: number; // 字符吞吐量
+}
+
 export interface WhisperTranscriptionResult {
   text: string;
   srt: string;
@@ -92,6 +99,7 @@ export interface WhisperTranscriptionResult {
   model: string;
   device: 'webgpu' | 'wasm';
   language: string;
+  metrics?: WhisperTranscriptionMetrics;
 }
 
 export const SUPPORTED_WHISPER_MODELS = [
@@ -715,6 +723,8 @@ export async function transcribeAudioBuffer(
       throw new DOMException('Transcription aborted by user', 'AbortError');
     }
 
+    const startTime = performance.now();
+
     // 1. 解码重采样音频为 16kHz mono Float32Array (微任务让渡防止卡顿)
     await yieldToMainLoop();
     options?.onProgress?.({
@@ -788,7 +798,9 @@ export async function transcribeAudioBuffer(
       pipelineOptions.language = language;
     }
 
+    const inferenceStartTime = performance.now();
     const rawResult = await transcriber(float32, pipelineOptions);
+    const inferenceElapsedMs = performance.now() - inferenceStartTime;
 
     if (options?.signal?.aborted) {
       throw new DOMException('Transcription aborted by user', 'AbortError');
@@ -805,6 +817,18 @@ export async function transcribeAudioBuffer(
 
     const srt = chunksToSrt(chunks, duration);
 
+    const totalElapsedMs = performance.now() - startTime;
+    const totalSec = totalElapsedMs / 1000;
+    const realtimeFactor = totalSec > 0 && duration > 0 ? Number((duration / totalSec).toFixed(1)) : 0;
+    const throughputCharsPerSec = totalSec > 0 ? Math.round(text.length / totalSec) : 0;
+
+    const metrics: WhisperTranscriptionMetrics = {
+      totalElapsedMs: Math.round(totalElapsedMs),
+      inferenceElapsedMs: Math.round(inferenceElapsedMs),
+      realtimeFactor,
+      throughputCharsPerSec,
+    };
+
     options?.onProgress?.({
       stage: 'completed',
       progress: 100,
@@ -813,8 +837,8 @@ export async function transcribeAudioBuffer(
 
     logger.success(
       'Whisper',
-      `本地 ASR 转录完成: 生成文本 ${text.length} 字符, 字幕 ${chunks.length} 句`,
-      { model: modelUsed, device: deviceUsed, duration: `${duration.toFixed(1)}s` },
+      `本地 ASR 转录完成: 生成文本 ${text.length} 字符, 字幕 ${chunks.length} 句, 耗时 ${(totalElapsedMs / 1000).toFixed(1)}s (${realtimeFactor}x 速, ${throughputCharsPerSec} 字/s)`,
+      { model: modelUsed, device: deviceUsed, duration: `${duration.toFixed(1)}s`, metrics },
       traceId
     );
 
@@ -826,6 +850,7 @@ export async function transcribeAudioBuffer(
       model: modelUsed,
       device: deviceUsed,
       language,
+      metrics,
     };
   } catch (err) {
     if (options?.signal?.aborted || isAbortError(err)) {

@@ -314,6 +314,12 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
               <span className="text-[10px] text-muted-foreground">
                 音频时长: {result.duration.toFixed(1)}s | 识别文本: {result.text.length} 字
               </span>
+              {result.metrics && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                  <Zap className="w-3 h-3 shrink-0" />
+                  耗时 {(result.metrics.totalElapsedMs / 1000).toFixed(1)}s ({result.metrics.realtimeFactor}x 速) · {result.metrics.throughputCharsPerSec} 字/s
+                </span>
+              )}
             </div>
 
             {/* 操作工具栏 */}
