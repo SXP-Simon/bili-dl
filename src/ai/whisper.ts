@@ -574,20 +574,33 @@ export async function transcribeAudioBuffer(
 
     logger.info('Whisper', `开始本地模型推理: ${modelUsed} (${deviceUsed}), 语言: ${language}`, null, traceId);
 
+    const handleChunkOutput = (chunkData: { text?: string; timestamp?: [number, number | null] }) => {
+      if (options?.signal?.aborted) return;
+      if (chunkData && chunkData.text) {
+        options?.onChunk?.({
+          text: chunkData.text,
+          timestamp: chunkData.timestamp || [0, null],
+        });
+
+        if (duration > 0 && chunkData.timestamp && typeof chunkData.timestamp[0] === 'number') {
+          const currentSec = chunkData.timestamp[1] ?? chunkData.timestamp[0];
+          const pct = Math.min(98, Math.max(30, 30 + Math.round((currentSec / duration) * 65)));
+          options?.onProgress?.({
+            stage: 'transcribing',
+            progress: pct,
+            message: `正在通过 ${deviceUsed === 'webgpu' ? 'WebGPU 显卡' : 'CPU Wasm'} 推理转录中 (${Math.round(currentSec)}s / ${Math.round(duration)}s)...`,
+          });
+        }
+      }
+    };
+
     const pipelineOptions: Record<string, unknown> = {
       task: 'transcribe',
       return_timestamps: returnTimestamps ? true : false,
       chunk_length_s: 30,
       stride_length_s: 5,
-      callback_function: (chunkData: { text?: string; timestamp?: [number, number | null] }) => {
-        if (options?.signal?.aborted) return;
-        if (chunkData && chunkData.text) {
-          options?.onChunk?.({
-            text: chunkData.text,
-            timestamp: chunkData.timestamp || [0, null],
-          });
-        }
-      },
+      callback_function: handleChunkOutput,
+      chunk_callback: handleChunkOutput,
     };
 
     if (language && language !== 'auto') {
