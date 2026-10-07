@@ -1,7 +1,7 @@
 {
   "name": "bili-dl",
   "private": true,
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": "SXP-Simon",
   "license": "MIT",
   "type": "module",
