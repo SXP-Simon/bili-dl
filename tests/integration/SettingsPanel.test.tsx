@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { SettingsPanel } from '../../src/components/SettingsPanel';
 
 vi.mock('$', () => ({
@@ -29,11 +29,13 @@ vi.mock('$', () => ({
 }));
 
 describe('SettingsPanel Component & Keyboard Isolation Integration Tests', () => {
-  it('should render subfolder input with ~/Downloads/ prefix and port input with : prefix', () => {
+  it('should render subfolder input with ~/Downloads/ prefix and port input with : prefix', async () => {
     const onShowToast = vi.fn();
     const onClose = vi.fn();
 
-    render(<SettingsPanel onClose={onClose} onShowToast={onShowToast} />);
+    await act(async () => {
+      render(<SettingsPanel onClose={onClose} onShowToast={onShowToast} />);
+    });
 
     // Check subfolder prefix and input
     expect(screen.getByText('~/Downloads/')).toBeInTheDocument();
@@ -48,11 +50,13 @@ describe('SettingsPanel Component & Keyboard Isolation Integration Tests', () =>
     expect(portInput.value).toBe('15151');
   });
 
-  it('should stop keyboard propagation on ArrowLeft, ArrowRight, and Minus keys in inputs', () => {
+  it('should stop keyboard propagation on ArrowLeft, ArrowRight, and Minus keys in inputs', async () => {
     const onShowToast = vi.fn();
     const onClose = vi.fn();
 
-    render(<SettingsPanel onClose={onClose} onShowToast={onShowToast} />);
+    await act(async () => {
+      render(<SettingsPanel onClose={onClose} onShowToast={onShowToast} />);
+    });
 
     const subfolderInput = screen.getByPlaceholderText('点击输入子目录名称 (如 bili-dl)');
 
@@ -75,11 +79,13 @@ describe('SettingsPanel Component & Keyboard Isolation Integration Tests', () =>
     expect(escapeSpy).not.toHaveBeenCalled();
   });
 
-  it('should trigger toast on Enter key press in subfolder and port inputs', () => {
+  it('should trigger toast on Enter key press in subfolder and port inputs', async () => {
     const onShowToast = vi.fn();
     const onClose = vi.fn();
 
-    render(<SettingsPanel onClose={onClose} onShowToast={onShowToast} />);
+    await act(async () => {
+      render(<SettingsPanel onClose={onClose} onShowToast={onShowToast} />);
+    });
 
     const subfolderInput = screen.getByPlaceholderText('点击输入子目录名称 (如 bili-dl)');
     fireEvent.change(subfolderInput, { target: { value: 'my-custom-folder' } });

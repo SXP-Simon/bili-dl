@@ -50,8 +50,10 @@ describe('DownloadModal Integration Tests', () => {
     onShowToast: vi.fn(),
   };
 
-  it('should render both "有声 MP4" and "仅画面" buttons for video items', () => {
-    render(<DownloadModal {...defaultProps} />);
+  it('should render both "有声 MP4" and "仅画面" buttons for video items', async () => {
+    await act(async () => {
+      render(<DownloadModal {...defaultProps} />);
+    });
 
     expect(screen.getByText('1080P 高清')).toBeInTheDocument();
     expect(screen.getByText('AVC')).toBeInTheDocument();
@@ -67,7 +69,9 @@ describe('DownloadModal Integration Tests', () => {
 
   it('should call onDownloadVideo with bestAudio when clicking "有声 MP4"', async () => {
     const onDownloadVideo = vi.fn().mockResolvedValue(undefined);
-    render(<DownloadModal {...defaultProps} onDownloadVideo={onDownloadVideo} />);
+    await act(async () => {
+      render(<DownloadModal {...defaultProps} onDownloadVideo={onDownloadVideo} />);
+    });
 
     const muxBtn = screen.getByRole('button', { name: /有声 MP4/ });
     await act(async () => {
@@ -80,7 +84,9 @@ describe('DownloadModal Integration Tests', () => {
 
   it('should call onDownloadVideo without audio when clicking "仅画面"', async () => {
     const onDownloadVideo = vi.fn().mockResolvedValue(undefined);
-    render(<DownloadModal {...defaultProps} onDownloadVideo={onDownloadVideo} />);
+    await act(async () => {
+      render(<DownloadModal {...defaultProps} onDownloadVideo={onDownloadVideo} />);
+    });
 
     const pureBtn = screen.getByRole('button', { name: /仅画面/ });
     await act(async () => {
@@ -93,12 +99,14 @@ describe('DownloadModal Integration Tests', () => {
 
   it('should render dynamic external downloader button when onDownloadWithExternal is provided', async () => {
     const onDownloadWithExternal = vi.fn().mockResolvedValue(undefined);
-    render(
-      <DownloadModal
-        {...defaultProps}
-        onDownloadWithExternal={onDownloadWithExternal}
-      />
-    );
+    await act(async () => {
+      render(
+        <DownloadModal
+          {...defaultProps}
+          onDownloadWithExternal={onDownloadWithExternal}
+        />
+      );
+    });
 
     // Buttons should be displayed with active downloader badge on video and audio cards
     const extBtns = screen.getAllByRole('button', { name: /ABDM/ });
