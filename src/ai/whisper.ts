@@ -133,6 +133,25 @@ export const SUPPORTED_LANGUAGES = [
 // 缓存已初始化的 pipeline 实例：key 为 `${model}_${device}`
 const pipelineCache = new Map<string, Promise<WhisperPipelineFn>>();
 
+// 内存缓存每个视频/分P的转写结果：key 为 `${bvid}_${cid}` 或 `title`，页面内切换 Tab 不丢失
+const transcriptionCache = new Map<string, WhisperTranscriptionResult>();
+
+export function getTranscriptionResult(cacheKey: string): WhisperTranscriptionResult | undefined {
+  return transcriptionCache.get(cacheKey);
+}
+
+export function saveTranscriptionResult(cacheKey: string, result: WhisperTranscriptionResult): void {
+  transcriptionCache.set(cacheKey, result);
+}
+
+export function clearTranscriptionResult(cacheKey?: string): void {
+  if (cacheKey) {
+    transcriptionCache.delete(cacheKey);
+  } else {
+    transcriptionCache.clear();
+  }
+}
+
 /**
  * 主动释放并销毁所有缓存的 Whisper 模型与显存/内存实例
  */

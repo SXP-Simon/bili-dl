@@ -893,6 +893,8 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                 {(activeTab === 'all' || activeTab === 'danmaku' || activeTab === 'ai') && (
                   <div className="pt-1">
                     <WhisperTranscriber
+                      key={`${data.bvid}_${data.cid}`}
+                      cacheKey={`${data.bvid}_${data.cid}`}
                       title={data.title}
                       audios={data.audios}
                       onShowToast={onShowToast}

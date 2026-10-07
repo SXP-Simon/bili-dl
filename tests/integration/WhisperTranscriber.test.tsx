@@ -26,6 +26,7 @@ describe('WhisperTranscriber UI Component Integration Tests', () => {
   ];
 
   beforeEach(() => {
+    whisperModule.clearTranscriptionResult();
     vi.spyOn(whisperModule, 'checkWebGpuSupport').mockResolvedValue({
       supported: true,
       adapterInfo: 'WebGPU (NVIDIA RTX 4090)',

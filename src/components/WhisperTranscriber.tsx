@@ -19,6 +19,9 @@ import {
   transcribeMediaAudio,
   checkWebGpuSupport,
   clearWhisperPipelineCache,
+  getTranscriptionResult,
+  saveTranscriptionResult,
+  clearTranscriptionResult,
   SUPPORTED_WHISPER_MODELS,
   SUPPORTED_LANGUAGES,
   type WhisperProgressUpdate,
@@ -31,23 +34,28 @@ import { getErrorMessage, isAbortError } from '../utils/error';
 import type { AudioStreamItem } from '../types';
 
 interface WhisperTranscriberProps {
+  cacheKey?: string;
   title: string;
   audios: AudioStreamItem[];
   onShowToast: (content: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
 export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
+  cacheKey,
   title,
   audios,
   onShowToast,
 }) => {
+  const effectiveKey = cacheKey || title;
+  const initialCached = getTranscriptionResult(effectiveKey);
+
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState<WhisperProgressUpdate | null>(null);
   const [liveChunks, setLiveChunks] = useState<WhisperChunk[]>([]);
-  const [result, setResult] = useState<WhisperTranscriptionResult | null>(null);
+  const [result, setResult] = useState<WhisperTranscriptionResult | null>(initialCached || null);
   const [copiedText, setCopiedText] = useState(false);
   const [copiedSrt, setCopiedSrt] = useState(false);
-  const [showFullView, setShowFullView] = useState(false);
+  const [showFullView, setShowFullView] = useState(!!initialCached);
   const [showChunks, setShowChunks] = useState(false);
   const [webGpuStatus, setWebGpuStatus] = useState<{ supported: boolean; adapterInfo?: string } | null>(null);
 
@@ -106,6 +114,7 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
         },
       });
 
+      saveTranscriptionResult(effectiveKey, res);
       setResult(res);
       setShowFullView(true);
       onShowToast('本地 AI 语音转文字完成！', 'success');
@@ -380,8 +389,10 @@ export const WhisperTranscriber: React.FC<WhisperTranscriberProps> = ({
 
               <button
                 onClick={() => {
+                  clearTranscriptionResult(effectiveKey);
                   setResult(null);
                   setProgress(null);
+                  setLiveChunks([]);
                 }}
                 title="重新转写"
                 className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
