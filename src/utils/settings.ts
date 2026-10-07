@@ -22,6 +22,12 @@ export interface DownloadSettings {
   aria2Secret?: string; // Aria2 RPC 访问密钥
   downloadersConfig?: Record<string, { port?: number; secret?: string; [key: string]: unknown }>; // 可扩展下载器配置存储字典
   abdmEnabled?: boolean; // 兼容旧字段
+  whisperModel?: string; // 默认 'onnx-community/whisper-tiny'
+  whisperDevice?: 'auto' | 'webgpu' | 'wasm'; // 默认 'auto'
+  whisperMirror?: 'hf-mirror' | 'huggingface' | 'custom'; // 默认 'hf-mirror'
+  whisperCustomMirrorUrl?: string; // 默认 ''
+  whisperLanguage?: string; // 默认 'chinese'
+  whisperReturnTimestamps?: boolean; // 默认 true
 }
 
 export const DEFAULT_SETTINGS: DownloadSettings = {
@@ -40,6 +46,12 @@ export const DEFAULT_SETTINGS: DownloadSettings = {
   aria2Port: 6800,
   aria2Secret: '',
   abdmEnabled: true,
+  whisperModel: 'onnx-community/whisper-tiny',
+  whisperDevice: 'auto',
+  whisperMirror: 'hf-mirror',
+  whisperCustomMirrorUrl: '',
+  whisperLanguage: 'chinese',
+  whisperReturnTimestamps: true,
 };
 
 const SETTINGS_KEY = 'bili_dl_download_settings';

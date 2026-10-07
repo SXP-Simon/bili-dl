@@ -1,4 +1,4 @@
-export type CategoryType = 'all' | 'video' | 'audio' | 'cover' | 'danmaku' | 'episodes' | 'season';
+export type CategoryType = 'all' | 'video' | 'audio' | 'cover' | 'danmaku' | 'episodes' | 'season' | 'ai';
 
 export interface VideoStreamItem {
   id: number;

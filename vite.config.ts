@@ -31,6 +31,9 @@ export default defineConfig({
           'GM_setClipboard',
           'GM_cookie'
         ],
+        require: [
+          'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3'
+        ],
         connect: [
           'bilibili.com',
           'bilivideo.com',
@@ -41,13 +44,24 @@ export default defineConfig({
           'akamaized.net',
           'xycdn.com',
           'mcdn.bilivideo.cn',
+          'huggingface.co',
+          'hf-mirror.com',
+          'hf.co',
+          'cdn-lfs.huggingface.co',
+          'cdn-lfs-us-1.huggingface.co',
+          'cdn-lfs.hf-mirror.com',
+          'jsdelivr.net',
+          'fastly.jsdelivr.net',
+          'unpkg.com',
           '127.0.0.1',
           'localhost',
           'self'
         ]
       },
       build: {
-        externalGlobals: {}
+        externalGlobals: {
+          '@huggingface/transformers': 'transformers'
+        }
       }
     }),
   ],

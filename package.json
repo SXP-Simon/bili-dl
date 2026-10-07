@@ -21,6 +21,7 @@
     "prepare": "lefthook install"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.1",
     "lucide-react": "^1.16.0",
     "mp4box": "^0.5.3",
     "react": "^19.0.0",
