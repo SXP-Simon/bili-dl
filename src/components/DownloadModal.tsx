@@ -28,6 +28,7 @@ import { getErrorMessage } from '../utils/error';
 import { SeasonPicker } from './SeasonPicker';
 import { LogViewer } from './LogViewer';
 import { SettingsPanel } from './SettingsPanel';
+import { WhisperTranscriber } from './WhisperTranscriber';
 import { exportAria2Command } from '../media/aria2';
 import { fetchDanmakuAss } from '../media/danmaku';
 import { fetchSubtitleSrt } from '../media/subtitle';
@@ -106,6 +107,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
     { key: 'audio' as CategoryType, label: '音频', badge: data.audios.length },
     { key: 'cover' as CategoryType, label: '封面' },
     { key: 'danmaku' as CategoryType, label: '弹幕/字幕', badge: data.subtitles.length + 1 },
+    { key: 'ai' as CategoryType, label: 'AI语音转写', badge: 'WebGPU' },
   ];
 
   const handleCopyAiSummary = () => {
@@ -885,6 +887,17 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                       </SpotlightCard>
                     )}
                   </>
+                )}
+
+                {/* 5. 本地 AI 语音转文字 (Whisper / WebGPU) */}
+                {(activeTab === 'all' || activeTab === 'danmaku' || activeTab === 'ai') && (
+                  <div className="pt-1">
+                    <WhisperTranscriber
+                      title={data.title}
+                      audios={data.audios}
+                      onShowToast={onShowToast}
+                    />
+                  </div>
                 )}
               </div>
             </div>

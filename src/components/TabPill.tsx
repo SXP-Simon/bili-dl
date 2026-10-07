@@ -4,7 +4,7 @@ import type { CategoryType } from '../types';
 interface TabItem {
   key: CategoryType;
   label: string;
-  badge?: number;
+  badge?: number | string;
 }
 
 interface TabPillProps {
@@ -93,7 +93,7 @@ export const TabPill: React.FC<TabPillProps> = ({ tabs, activeTab, onChange }) =
             }`}
           >
             <span className="tracking-tight">{tab.label}</span>
-            {typeof tab.badge === 'number' && (
+            {tab.badge !== undefined && tab.badge !== null && (
               <span
                 className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold transition-all duration-200 ${
                   isActive

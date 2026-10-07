@@ -23,7 +23,14 @@ import {
   AlertCircle,
   FolderPen,
   Plug,
+  Bot,
+  Cpu,
 } from 'lucide-react';
+import {
+  SUPPORTED_WHISPER_MODELS,
+  SUPPORTED_LANGUAGES,
+  checkWebGpuSupport,
+} from '../ai/whisper';
 import {
   getDownloadSettings,
   saveDownloadSettings,
@@ -41,6 +48,11 @@ interface SettingsPanelProps {
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToast }) => {
   const [settings, setSettings] = useState<DownloadSettings>(() => getDownloadSettings());
   const [testStatus, setTestStatus] = useState<{ loading: boolean; message: string; ok?: boolean } | null>(null);
+  const [webGpuStatus, setWebGpuStatus] = useState<{ supported: boolean; adapterInfo?: string } | null>(null);
+
+  React.useEffect(() => {
+    checkWebGpuSupport().then(setWebGpuStatus);
+  }, []);
 
   const registeredDownloaders = externalDownloaderRegistry.getAll();
   const activeDownloader = externalDownloaderRegistry.getActive(settings.externalDownloaderId);
@@ -691,6 +703,171 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose, onShowToa
               </div>
             </div>
           )}
+        </div>
+
+        {/* 7. 本地 AI 语音转文字 (Whisper / WebGPU 硬件加速) */}
+        <div className="p-3.5 rounded-2xl bg-muted/30 border border-border/70 space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <Bot className="w-4 h-4 text-emerald-700 dark:text-emerald-300" strokeWidth={2.2} />
+                <span className="font-semibold text-foreground">本地 AI 语音转文字 (Whisper / WebGPU)</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                基于 Transformers.js + ONNX Runtime 纯前端本地推理，0 服务器成本，保护隐私不上传。
+              </p>
+            </div>
+
+            {webGpuStatus?.supported ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30">
+                <Zap className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                <span>WebGPU 已就绪</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-mono text-muted-foreground bg-muted border border-border/70">
+                <Cpu className="w-3 h-3" />
+                <span>CPU Wasm 兼容</span>
+              </span>
+            )}
+          </div>
+
+          <div className="pt-2 pl-6 space-y-3 border-t border-border/30">
+            {/* 默认 Whisper 模型 */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground font-medium">默认 Whisper 识别模型：</span>
+                <span className="text-[10px] text-muted-foreground font-mono">首次下载后浏览器永久 Cache 缓存</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {SUPPORTED_WHISPER_MODELS.map((model) => {
+                  const isSelected = (settings.whisperModel || 'onnx-community/whisper-tiny') === model.id;
+                  return (
+                    <button
+                      key={model.id}
+                      type="button"
+                      onClick={() => updateSetting('whisperModel', model.id)}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                        isSelected
+                          ? 'bg-primary/15 border-primary text-emerald-950 dark:text-emerald-100 shadow-2xs font-bold'
+                          : 'bg-background hover:bg-muted text-muted-foreground hover:text-foreground border-border/80'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-foreground">{model.name.split(' ')[0]}</span>
+                        <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-muted border border-border/60">
+                          ~{model.sizeMB}MB
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground/80 line-clamp-1">{model.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 推理加速硬件引擎 */}
+            <div className="flex items-center justify-between gap-4 text-[11px] pt-1">
+              <div className="space-y-0.5">
+                <span className="text-muted-foreground font-medium">推理加速硬件设备：</span>
+                <span className="text-[10px] text-muted-foreground block">
+                  {webGpuStatus?.adapterInfo || '显卡 WebGPU 加速速度快 5-10 倍'}
+                </span>
+              </div>
+              <div className="flex items-center bg-background rounded-xl p-1 border border-border/80 shrink-0">
+                {(['auto', 'webgpu', 'wasm'] as const).map((dev) => (
+                  <button
+                    key={dev}
+                    type="button"
+                    onClick={() => updateSetting('whisperDevice', dev)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      (settings.whisperDevice || 'auto') === dev
+                        ? 'bg-primary text-primary-foreground shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {dev === 'auto' ? '自动探测' : dev === 'webgpu' ? 'WebGPU (显卡)' : 'Wasm (CPU)'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 模型下载镜像源 */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground font-medium">模型权重下载镜像源：</span>
+                <span className="text-[10px] text-emerald-800 dark:text-emerald-300 font-medium">国内网络推荐 hf-mirror</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { id: 'hf-mirror', label: 'hf-mirror.com (国内高速镜像 / 推荐)' },
+                  { id: 'huggingface', label: 'Hugging Face 官方 (海外)' },
+                  { id: 'custom', label: '自定义镜像 URL' },
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => updateSetting('whisperMirror', m.id as 'hf-mirror' | 'huggingface' | 'custom')}
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                      (settings.whisperMirror || 'hf-mirror') === m.id
+                        ? 'bg-primary/20 text-emerald-950 dark:text-emerald-100 border-primary/60 shadow-2xs font-bold'
+                        : 'bg-background hover:bg-muted text-muted-foreground hover:text-foreground border-border/80'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+
+              {settings.whisperMirror === 'custom' && (
+                <div className="pt-1">
+                  <input
+                    type="text"
+                    value={settings.whisperCustomMirrorUrl || ''}
+                    onChange={(e) => updateSetting('whisperCustomMirrorUrl', e.target.value)}
+                    placeholder="请输入自定义镜像 Base URL (例如 https://hf-mirror.com/)"
+                    className="w-full px-3 py-1.5 rounded-xl bg-background border border-border/80 text-foreground font-mono text-xs focus:outline-none focus:border-primary shadow-2xs"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* 默认语言与时间戳开关 */}
+            <div className="flex items-center justify-between gap-4 text-[11px] pt-1">
+              <div className="space-y-0.5">
+                <span className="text-muted-foreground font-medium">默认识别语言：</span>
+                <select
+                  value={settings.whisperLanguage || 'chinese'}
+                  onChange={(e) => updateSetting('whisperLanguage', e.target.value)}
+                  className="mt-1 block px-2.5 py-1 rounded-xl bg-background border border-border/80 text-foreground text-xs font-semibold focus:outline-none focus:border-primary shadow-2xs cursor-pointer"
+                >
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <option key={lang.code} value={lang.code}>
+                      {lang.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-0.5 text-right">
+                <span className="text-muted-foreground font-medium block">生成 SRT 时间戳字幕：</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={settings.whisperReturnTimestamps !== false}
+                  onClick={() => updateSetting('whisperReturnTimestamps', !(settings.whisperReturnTimestamps !== false))}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none mt-1 ${
+                    settings.whisperReturnTimestamps !== false ? 'bg-primary' : 'bg-muted-foreground/30'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                      settings.whisperReturnTimestamps !== false ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
