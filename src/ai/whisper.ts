@@ -319,13 +319,16 @@ export async function configureTransformersEnv(settings?: DownloadSettings): Pro
   const transformers = await loadTransformers();
   const env = transformers.env;
 
-  env.remoteHost = remoteHost;
-  env.remotePathTemplate = '{model}/resolve/{revision}/';
-  env.allowLocalModels = false;
-  env.useBrowserCache = true;
-  env.allowRemoteModels = true;
-  env.fetch = window.fetch;
-  (transformers as unknown as { customFetch?: typeof fetch }).customFetch = window.fetch;
+  if (env && typeof env === 'object') {
+    env.remoteHost = remoteHost;
+    env.remotePathTemplate = '{model}/resolve/{revision}/';
+    env.allowLocalModels = false;
+    env.useBrowserCache = true;
+    env.allowRemoteModels = true;
+    try {
+      env.fetch = window.fetch;
+    } catch {}
+  }
 }
 
 /**
@@ -526,109 +529,118 @@ export async function transcribeAudioBuffer(
   const language = options?.language || settings.whisperLanguage || 'chinese';
   const returnTimestamps = options?.returnTimestamps ?? settings.whisperReturnTimestamps ?? true;
 
-  if (options?.signal?.aborted) {
-    throw new DOMException('Transcription aborted by user', 'AbortError');
+  try {
+    if (options?.signal?.aborted) {
+      throw new DOMException('Transcription aborted by user', 'AbortError');
+    }
+
+    // 1. 解码重采样音频为 16kHz mono Float32Array (微任务让渡防止卡顿)
+    await yieldToMainLoop();
+    options?.onProgress?.({
+      stage: 'decoding_audio',
+      progress: 5,
+      message: '正在解码并重采样音频 (16000Hz 单声道)...',
+    });
+
+    const { float32, duration } = await decodeAudioTo16kMono(audioBuffer);
+    logger.info('Whisper', `音频解码重采样完成: 时长 ${duration.toFixed(1)}s, 采样点数 ${float32.length}`, null, traceId);
+
+    if (options?.signal?.aborted) {
+      throw new DOMException('Transcription aborted by user', 'AbortError');
+    }
+
+    await yieldToMainLoop();
+
+    // 2. 加载或复用 Whisper Pipeline
+    const { transcriber, deviceUsed, modelUsed } = await getWhisperPipeline({
+      model: options?.model,
+      device: options?.device,
+      onProgress: options?.onProgress,
+      signal: options?.signal,
+    });
+
+    if (options?.signal?.aborted) {
+      throw new DOMException('Transcription aborted by user', 'AbortError');
+    }
+
+    await yieldToMainLoop();
+
+    // 3. 执行 ASR 语音识别推理
+    options?.onProgress?.({
+      stage: 'transcribing',
+      progress: 30,
+      message: `正在通过 ${deviceUsed === 'webgpu' ? 'WebGPU 显卡' : 'CPU Wasm'} 异步推理转录中...`,
+    });
+
+    logger.info('Whisper', `开始本地模型推理: ${modelUsed} (${deviceUsed}), 语言: ${language}`, null, traceId);
+
+    const pipelineOptions: Record<string, unknown> = {
+      task: 'transcribe',
+      return_timestamps: returnTimestamps ? true : false,
+      chunk_length_s: 30,
+      stride_length_s: 5,
+      callback_function: (chunkData: { text?: string; timestamp?: [number, number | null] }) => {
+        if (options?.signal?.aborted) return;
+        if (chunkData && chunkData.text) {
+          options?.onChunk?.({
+            text: chunkData.text,
+            timestamp: chunkData.timestamp || [0, null],
+          });
+        }
+      },
+    };
+
+    if (language && language !== 'auto') {
+      pipelineOptions.language = language;
+    }
+
+    const rawResult = await transcriber(float32, pipelineOptions);
+
+    if (options?.signal?.aborted) {
+      throw new DOMException('Transcription aborted by user', 'AbortError');
+    }
+
+    await yieldToMainLoop();
+
+    const text = (rawResult?.text || '').trim();
+    const rawChunks: Array<{ text: string; timestamp?: [number, number | null] }> = rawResult?.chunks || [];
+    const chunks: WhisperChunk[] = rawChunks.map((c) => ({
+      text: c.text,
+      timestamp: c.timestamp || [0, null],
+    }));
+
+    const srt = chunksToSrt(chunks, duration);
+
+    options?.onProgress?.({
+      stage: 'completed',
+      progress: 100,
+      message: '语音转文字与字幕生成完成！',
+    });
+
+    logger.success(
+      'Whisper',
+      `本地 ASR 转录完成: 生成文本 ${text.length} 字符, 字幕 ${chunks.length} 句`,
+      { model: modelUsed, device: deviceUsed, duration: `${duration.toFixed(1)}s` },
+      traceId
+    );
+
+    return {
+      text,
+      srt,
+      chunks,
+      duration,
+      model: modelUsed,
+      device: deviceUsed,
+      language,
+    };
+  } catch (err) {
+    if (options?.signal?.aborted || isAbortError(err)) {
+      throw err;
+    }
+    const msg = getErrorMessage(err);
+    logger.error('Whisper', `语音识别转录失败: ${msg}`, err, traceId);
+    throw err;
   }
-
-  // 1. 解码重采样音频为 16kHz mono Float32Array (微任务让渡防止卡顿)
-  await yieldToMainLoop();
-  options?.onProgress?.({
-    stage: 'decoding_audio',
-    progress: 5,
-    message: '正在解码并重采样音频 (16000Hz 单声道)...',
-  });
-
-  const { float32, duration } = await decodeAudioTo16kMono(audioBuffer);
-  logger.info('Whisper', `音频解码重采样完成: 时长 ${duration.toFixed(1)}s, 采样点数 ${float32.length}`, null, traceId);
-
-  if (options?.signal?.aborted) {
-    throw new DOMException('Transcription aborted by user', 'AbortError');
-  }
-
-  await yieldToMainLoop();
-
-  // 2. 加载或复用 Whisper Pipeline
-  const { transcriber, deviceUsed, modelUsed } = await getWhisperPipeline({
-    model: options?.model,
-    device: options?.device,
-    onProgress: options?.onProgress,
-    signal: options?.signal,
-  });
-
-  if (options?.signal?.aborted) {
-    throw new DOMException('Transcription aborted by user', 'AbortError');
-  }
-
-  await yieldToMainLoop();
-
-  // 3. 执行 ASR 语音识别推理
-  options?.onProgress?.({
-    stage: 'transcribing',
-    progress: 30,
-    message: `正在通过 ${deviceUsed === 'webgpu' ? 'WebGPU 显卡' : 'CPU Wasm'} 异步推理转录中...`,
-  });
-
-  logger.info('Whisper', `开始本地模型推理: ${modelUsed} (${deviceUsed}), 语言: ${language}`, null, traceId);
-
-  const pipelineOptions: Record<string, unknown> = {
-    task: 'transcribe',
-    return_timestamps: returnTimestamps ? true : false,
-    chunk_length_s: 30,
-    stride_length_s: 5,
-    callback_function: (chunkData: { text?: string; timestamp?: [number, number | null] }) => {
-      if (options?.signal?.aborted) return;
-      if (chunkData && chunkData.text) {
-        options?.onChunk?.({
-          text: chunkData.text,
-          timestamp: chunkData.timestamp || [0, null],
-        });
-      }
-    },
-  };
-
-  if (language && language !== 'auto') {
-    pipelineOptions.language = language;
-  }
-
-  const rawResult = await transcriber(float32, pipelineOptions);
-
-  if (options?.signal?.aborted) {
-    throw new DOMException('Transcription aborted by user', 'AbortError');
-  }
-
-  await yieldToMainLoop();
-
-  const text = (rawResult?.text || '').trim();
-  const rawChunks: Array<{ text: string; timestamp?: [number, number | null] }> = rawResult?.chunks || [];
-  const chunks: WhisperChunk[] = rawChunks.map((c) => ({
-    text: c.text,
-    timestamp: c.timestamp || [0, null],
-  }));
-
-  const srt = chunksToSrt(chunks, duration);
-
-  options?.onProgress?.({
-    stage: 'completed',
-    progress: 100,
-    message: '语音转文字与字幕生成完成！',
-  });
-
-  logger.success(
-    'Whisper',
-    `本地 ASR 转录完成: 生成文本 ${text.length} 字符, 字幕 ${chunks.length} 句`,
-    { model: modelUsed, device: deviceUsed, duration: `${duration.toFixed(1)}s` },
-    traceId
-  );
-
-  return {
-    text,
-    srt,
-    chunks,
-    duration,
-    model: modelUsed,
-    device: deviceUsed,
-    language,
-  };
 }
 
 /**
@@ -693,6 +705,7 @@ export async function transcribeMediaAudio(
       progress: 0,
       message: `转录失败: ${msg}`,
     });
+    logger.error('Whisper', `转录流程异常: ${msg}`, err, traceId);
     throw err;
   }
 }
