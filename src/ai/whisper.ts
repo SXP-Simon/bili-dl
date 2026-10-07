@@ -25,7 +25,7 @@ export interface TransformersAPI {
 let transformersPromise: Promise<TransformersAPI> | null = null;
 
 /**
- * 动态加载 Transformers.js (按需从 CDN 注入脚本并读取全局 transformers 对象)
+ * 动态加载 Transformers.js (使用原生动态 ESM 导入)
  */
 export async function loadTransformers(): Promise<TransformersAPI> {
   if (transformersPromise) return transformersPromise;
@@ -38,47 +38,31 @@ export async function loadTransformers(): Promise<TransformersAPI> {
       return win.transformers;
     }
 
-    // 2. 通过 DOM Script 标签动态注入 CDN 脚本（兼容 B 站无 CSP eval 限制）
     const cdnList = [
       'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3',
       'https://fastly.jsdelivr.net/npm/@huggingface/transformers@3.3.3',
       'https://unpkg.com/@huggingface/transformers@3.3.3',
     ];
 
+    // 2. 通过动态 import 加载 ESM 模块（避免普通 script 标签触发 Cannot use 'import.meta' 语法错误）
     for (const url of cdnList) {
       try {
-        await new Promise<void>((resolve, reject) => {
-          if (typeof document === 'undefined') {
-            resolve();
-            return;
-          }
-          const script = document.createElement('script');
-          script.src = url;
-          script.async = true;
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error(`Failed to load ${url}`));
-          (document.head || document.documentElement).appendChild(script);
-        });
+        let mod: { pipeline?: (task: string, model: string, options?: Record<string, unknown>) => Promise<WhisperPipelineFn>; env?: Record<string, unknown>; default?: { pipeline?: (task: string, model: string, options?: Record<string, unknown>) => Promise<WhisperPipelineFn>; env?: Record<string, unknown> } } | undefined;
+        try {
+          mod = (await import(/* @vite-ignore */ url)) as typeof mod;
+        } catch {
+          const dynamicImport = new Function('u', 'return import(u)');
+          mod = (await dynamicImport(url)) as typeof mod;
+        }
 
-        if (win?.transformers?.pipeline) {
-          logger.info('Whisper', `成功从 CDN 动态注入并载入 Transformers.js: ${url}`);
-          return win.transformers;
+        if (mod && (mod.pipeline || mod.default?.pipeline)) {
+          const api: TransformersAPI = (mod.default?.pipeline ? mod.default : mod) as TransformersAPI;
+          logger.info('Whisper', `成功动态载入 Transformers.js 模块: ${url}`);
+          return api;
         }
       } catch (e) {
-        logger.warn('Whisper', `尝试从 CDN 注入 Transformers.js 失败: ${url}`, e);
+        logger.warn('Whisper', `尝试从 CDN 动态导入 Transformers.js 失败: ${url}`, e);
       }
-    }
-
-    // 3. 如果注入未挂载，尝试通过 Function 动态 import
-    for (const url of cdnList) {
-      try {
-        const dynamicImport = new Function('u', 'return import(u)');
-        const mod = await dynamicImport(url);
-        if (mod && (mod.pipeline || mod.default?.pipeline)) {
-          logger.info('Whisper', `成功动态 import Transformers.js: ${url}`);
-          return mod.default?.pipeline ? mod.default : mod;
-        }
-      } catch {}
     }
 
     throw new Error('未能加载 Transformers.js 模块，请检查网络或刷新页面重试');
@@ -209,14 +193,78 @@ export async function checkWebGpuSupport(): Promise<{ supported: boolean; adapte
 }
 
 /**
+ * 使用 GM_xmlhttpRequest 执行跨域模型与权重下载，包装为标准 Fetch Response
+ */
+export async function gmFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+
+  return new Promise<Response>((resolve, reject) => {
+    const headers: Record<string, string> = {};
+    if (init?.headers) {
+      if (init.headers instanceof Headers) {
+        init.headers.forEach((v: string, k: string) => { headers[k] = v; });
+      } else if (Array.isArray(init.headers)) {
+        init.headers.forEach(([k, v]: [string, string]) => { headers[k] = v; });
+      } else {
+        Object.assign(headers, init.headers);
+      }
+    }
+
+    GM_xmlhttpRequest({
+      method: (init?.method as 'GET' | 'POST' | 'HEAD') || 'GET',
+      url,
+      headers,
+      responseType: 'arraybuffer',
+      onload: (res: GMXMLHttpRequestResponse) => {
+        const respHeaders = new Headers();
+        if (res.responseHeaders) {
+          res.responseHeaders.split('\r\n').forEach((line: string) => {
+            const parts = line.split(': ');
+            if (parts.length >= 2) {
+              respHeaders.set(parts[0], parts.slice(1).join(': '));
+            }
+          });
+        }
+
+        const responseObj = new Response(res.response as ArrayBuffer, {
+          status: res.status,
+          statusText: res.statusText,
+          headers: respHeaders,
+        });
+
+        const finalUrl = (res as unknown as { finalUrl?: string }).finalUrl || url;
+        Object.defineProperty(responseObj, 'url', { value: finalUrl });
+        resolve(responseObj);
+      },
+      onerror: (err: GMXMLHttpRequestError) => reject(new Error(`GM_xmlhttpRequest failed for ${url}: ${err.error || err.statusText}`)),
+      ontimeout: () => reject(new Error(`GM_xmlhttpRequest timeout for ${url}`)),
+    });
+  });
+}
+
+let fetchProxyInstalled = false;
+
+/**
  * 代理原生 fetch：针对 HuggingFace / hf-mirror 模型权重请求使用 GM_xmlhttpRequest 绕过浏览器 CORS 跨域拦截
  */
-function setupFetchProxy(): void {
-  if (typeof window === 'undefined') return;
-  const originalFetch = window.fetch;
-  const targetHosts = ['hf-mirror.com', 'huggingface.co', 'hf.co', 'jsdelivr.net', 'fastly.jsdelivr.net', 'unpkg.com'];
+export function setupFetchProxy(): void {
+  if (fetchProxyInstalled || typeof window === 'undefined') return;
+  fetchProxyInstalled = true;
 
-  window.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const originalFetch = window.fetch;
+  const targetHosts = [
+    'hf-mirror.com',
+    'huggingface.co',
+    'hf.co',
+    'cdn-lfs.huggingface.co',
+    'cdn-lfs-us-1.huggingface.co',
+    'cdn-lfs.hf-mirror.com',
+    'jsdelivr.net',
+    'fastly.jsdelivr.net',
+    'unpkg.com',
+  ];
+
+  const proxiedFetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     const isTarget = targetHosts.some((h) => url.includes(h));
 
@@ -225,53 +273,26 @@ function setupFetchProxy(): void {
     }
 
     try {
-      return await new Promise<Response>((resolve, reject) => {
-        const headers: Record<string, string> = {};
-        if (init?.headers) {
-          if (init.headers instanceof Headers) {
-            init.headers.forEach((v: string, k: string) => { headers[k] = v; });
-          } else if (Array.isArray(init.headers)) {
-            init.headers.forEach(([k, v]: [string, string]) => { headers[k] = v; });
-          } else {
-            Object.assign(headers, init.headers);
-          }
-        }
-
-        GM_xmlhttpRequest({
-          method: (init?.method as 'GET' | 'POST' | 'HEAD') || 'GET',
-          url,
-          headers,
-          responseType: 'arraybuffer',
-          onload: (res: GMXMLHttpRequestResponse) => {
-            const respHeaders = new Headers();
-            if (res.responseHeaders) {
-              res.responseHeaders.split('\r\n').forEach((line: string) => {
-                const parts = line.split(': ');
-                if (parts.length >= 2) {
-                  respHeaders.set(parts[0], parts.slice(1).join(': '));
-                }
-              });
-            }
-
-            const responseObj = new Response(res.response as ArrayBuffer, {
-              status: res.status,
-              statusText: res.statusText,
-              headers: respHeaders,
-            });
-
-            // 保持 response.url 属性指向最终地址
-            const finalUrl = (res as unknown as { finalUrl?: string }).finalUrl || url;
-            Object.defineProperty(responseObj, 'url', { value: finalUrl });
-            resolve(responseObj);
-          },
-          onerror: (err: GMXMLHttpRequestError) => reject(new Error(`GM_xmlhttpRequest failed for ${url}: ${err.error || err.statusText}`)),
-          ontimeout: () => reject(new Error(`GM_xmlhttpRequest timeout for ${url}`)),
-        });
-      });
+      return await gmFetch(input, init);
     } catch {
       return originalFetch.apply(window, [input, init]);
     }
   };
+
+  window.fetch = proxiedFetch as unknown as typeof fetch;
+
+  try {
+    if (typeof globalThis !== 'undefined') {
+      globalThis.fetch = proxiedFetch as unknown as typeof fetch;
+    }
+  } catch {}
+
+  try {
+    const winWithUnsafe = window as unknown as { unsafeWindow?: { fetch?: typeof fetch } };
+    if (winWithUnsafe.unsafeWindow) {
+      winWithUnsafe.unsafeWindow.fetch = proxiedFetch as unknown as typeof fetch;
+    }
+  } catch {}
 }
 
 /**
@@ -295,13 +316,16 @@ export async function configureTransformersEnv(settings?: DownloadSettings): Pro
   setupFetchProxy();
   const s = settings || getDownloadSettings();
   const remoteHost = getMirrorBaseUrl(s.whisperMirror || 'hf-mirror', s.whisperCustomMirrorUrl);
-  const { env } = await loadTransformers();
+  const transformers = await loadTransformers();
+  const env = transformers.env;
 
   env.remoteHost = remoteHost;
   env.remotePathTemplate = '{model}/resolve/{revision}/';
   env.allowLocalModels = false;
   env.useBrowserCache = true;
   env.allowRemoteModels = true;
+  env.fetch = window.fetch;
+  (transformers as unknown as { customFetch?: typeof fetch }).customFetch = window.fetch;
 }
 
 /**
