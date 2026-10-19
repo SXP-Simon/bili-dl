@@ -40,6 +40,7 @@ export default defineConfig({
           'szbdyd.com',
           'akamaized.net',
           'xycdn.com',
+          'edge.mountaintoys.cn',
           'mcdn.bilivideo.cn',
           'huggingface.co',
           'hf-mirror.com',
