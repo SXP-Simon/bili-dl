@@ -137,6 +137,27 @@ describe('Bilibili API integration tests', () => {
     expect(media?.audios[0]?.name).toBe('320K 极高音质');
   });
 
+  it.each(['hvc1.1.6.L120.90', 'hev1.1.6.L120.90'])(
+    'keeps HEVC (%s), AV1 and AVC as separate downloads at the same quality', async (hevc) => {
+      setMockRequestHandler((options) => {
+        if (options.url?.includes('x/player/playurl')) {
+          options.onload?.({ status: 200, statusText: 'OK', responseHeaders: '', response: {
+            code: 0, data: { dash: { duration: 60, audio: [], video:
+              ['avc1.640032', hevc, 'av01.0.08M.08'].map((codecs, index) => ({
+                id: 80, codecs, bandwidth: 1200000,
+                baseUrl: `https://example.com/${index}.m4s`, width: 1920, height: 1080,
+              })),
+            } },
+          } });
+        } else options.onerror?.({ error: 'Not mocked' });
+      });
+      const media = await fetchCurrentMediaData(8888, 'BV1xx411c7mD');
+      expect(media?.videos.map((track) => track.codecName)).toEqual(['AVC', 'HEVC', 'AV1']);
+      expect(media?.videos.find((track) => track.codecName === 'HEVC')?.codec).toBe(hevc);
+      expect(media?.videos.find((track) => track.codecName === 'AV1')?.baseUrl).toBe('https://example.com/2.m4s');
+    }
+  );
+
   it('fetchCurrentMediaData should handle realistic Bilibili DASH response containing null dolby, flac, and backup_urls', async () => {
     setMockRequestHandler((options) => {
       if (options.url?.includes('x/player/pagelist')) {

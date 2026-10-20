@@ -381,7 +381,7 @@ export async function fetchMediaPlayStreams(
   for (const v of rawVideos) {
     if (!v) continue;
     const codec = (v.codecs || '').toLowerCase();
-    const codecName: 'AVC' | 'HEVC' | 'AV1' = codec.includes('avc') ? 'AVC' : codec.includes('hev') ? 'HEVC' : 'AV1';
+    const codecName: 'AVC' | 'HEVC' | 'AV1' = codec.includes('avc') ? 'AVC' : (codec.startsWith('hev1') || codec.startsWith('hvc1')) ? 'HEVC' : 'AV1';
     const numId = Number(v.id);
     const key = `${numId}_${codecName}`;
     if (seenVideoIds.has(key)) continue;
