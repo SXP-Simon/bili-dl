@@ -48,6 +48,7 @@ export default defineConfig({
           'cdn-lfs.huggingface.co',
           'cdn-lfs-us-1.huggingface.co',
           'cdn-lfs.hf-mirror.com',
+          'xethub.hf.co',
           'jsdelivr.net',
           'fastly.jsdelivr.net',
           'unpkg.com',

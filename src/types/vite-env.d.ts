@@ -19,6 +19,7 @@ declare module '$' {
     responseHeaders: string;
     response: unknown;
     responseText?: string;
+    finalUrl?: string;
   }
 
   export interface GMXMLHttpRequestError {
@@ -38,6 +39,7 @@ declare module '$' {
     onload?: (response: GMXMLHttpRequestResponse) => void;
     onerror?: (error: GMXMLHttpRequestError) => void;
     ontimeout?: () => void;
+    onabort?: () => void;
   }
 
   export interface GMDownloadOptions {

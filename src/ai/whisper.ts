@@ -1,8 +1,5 @@
-import {
-  GM_xmlhttpRequest,
-  type GMXMLHttpRequestResponse,
-  type GMXMLHttpRequestError,
-} from '$';
+import { fetchModelResource } from './whisperFetch';
+export { gmFetch } from './whisperFetch';
 import { requestChunkedBuffer } from '../api/http';
 import { logger } from '../utils/logger';
 import { getDownloadSettings, DownloadSettings } from '../utils/settings';
@@ -68,7 +65,12 @@ export async function loadTransformers(): Promise<TransformersAPI> {
     throw new Error('未能加载 Transformers.js 模块，请检查网络或刷新页面重试');
   })();
 
-  return transformersPromise;
+  const pending = transformersPromise;
+  try { return await pending; }
+  catch (error) {
+    if (transformersPromise === pending) transformersPromise = null;
+    throw error;
+  }
 }
 
 export interface WhisperProgressUpdate {
@@ -384,56 +386,6 @@ export async function checkWebGpuSupport(): Promise<{ supported: boolean; adapte
   }
 }
 
-/**
- * 使用 GM_xmlhttpRequest 执行跨域模型与权重下载，包装为标准 Fetch Response
- */
-export async function gmFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-
-  return new Promise<Response>((resolve, reject) => {
-    const headers: Record<string, string> = {};
-    if (init?.headers) {
-      if (init.headers instanceof Headers) {
-        init.headers.forEach((v: string, k: string) => { headers[k] = v; });
-      } else if (Array.isArray(init.headers)) {
-        init.headers.forEach(([k, v]: [string, string]) => { headers[k] = v; });
-      } else {
-        Object.assign(headers, init.headers);
-      }
-    }
-
-    GM_xmlhttpRequest({
-      method: (init?.method as 'GET' | 'POST' | 'HEAD') || 'GET',
-      url,
-      headers,
-      responseType: 'arraybuffer',
-      onload: (res: GMXMLHttpRequestResponse) => {
-        const respHeaders = new Headers();
-        if (res.responseHeaders) {
-          res.responseHeaders.split('\r\n').forEach((line: string) => {
-            const parts = line.split(': ');
-            if (parts.length >= 2) {
-              respHeaders.set(parts[0], parts.slice(1).join(': '));
-            }
-          });
-        }
-
-        const responseObj = new Response(res.response as ArrayBuffer, {
-          status: res.status,
-          statusText: res.statusText,
-          headers: respHeaders,
-        });
-
-        const finalUrl = (res as unknown as { finalUrl?: string }).finalUrl || url;
-        Object.defineProperty(responseObj, 'url', { value: finalUrl });
-        resolve(responseObj);
-      },
-      onerror: (err: GMXMLHttpRequestError) => reject(new Error(`GM_xmlhttpRequest failed for ${url}: ${err.error || err.statusText}`)),
-      ontimeout: () => reject(new Error(`GM_xmlhttpRequest timeout for ${url}`)),
-    });
-  });
-}
-
 let fetchProxyInstalled = false;
 
 /**
@@ -458,17 +410,19 @@ export function setupFetchProxy(): void {
 
   const proxiedFetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    const isTarget = targetHosts.some((h) => url.includes(h));
+    const hostname = new URL(url, location.href).hostname;
+    const customMirror = getDownloadSettings().whisperCustomMirrorUrl;
+    let customHost = '';
+    try { customHost = customMirror ? new URL(customMirror).hostname : ''; } catch {}
+    const isTarget = targetHosts.some((host) => hostname === host || hostname.endsWith(`.${host}`)) ||
+      (customHost !== '' && hostname === customHost);
 
-    if (!isTarget) {
+    const method = init?.method || (typeof Request !== 'undefined' && input instanceof Request ? input.method : 'GET');
+    if (!isTarget || !['GET', 'HEAD'].includes(method.toUpperCase())) {
       return originalFetch.apply(window, [input, init]);
     }
 
-    try {
-      return await gmFetch(input, init);
-    } catch {
-      return originalFetch.apply(window, [input, init]);
-    }
+    return fetchModelResource(input, init, originalFetch.bind(window));
   };
 
   window.fetch = proxiedFetch as unknown as typeof fetch;
@@ -633,15 +587,6 @@ export async function getWhisperPipeline(options?: {
     selectedDevice = gpuCheck.supported ? 'webgpu' : 'wasm';
   }
 
-  const cacheKey = `${model}_${selectedDevice}`;
-  if (pipelineCache.has(cacheKey)) {
-    return {
-      transcriber: await pipelineCache.get(cacheKey)!,
-      deviceUsed: selectedDevice,
-      modelUsed: model,
-    };
-  }
-
   options?.onProgress?.({
     stage: 'loading_model',
     progress: 0,
@@ -670,33 +615,32 @@ export async function getWhisperPipeline(options?: {
     }
   };
 
-  try {
-    const p = pipeline('automatic-speech-recognition', model, {
-      device: selectedDevice,
-      progress_callback: progressCallback,
+  const loadPipeline = (device: 'webgpu' | 'wasm') => {
+    const key = `${model}_${device}`;
+    const cached = pipelineCache.get(key);
+    if (cached) return cached;
+    const pending = pipeline('automatic-speech-recognition', model, {
+      device, progress_callback: progressCallback,
+    }).catch((error: unknown) => {
+      if (pipelineCache.get(key) === pending) pipelineCache.delete(key);
+      throw error;
     });
-    pipelineCache.set(cacheKey, p);
-    const transcriber = await p;
-
+    pipelineCache.set(key, pending);
+    return pending;
+  };
+  try {
+    const transcriber = await loadPipeline(selectedDevice);
     return { transcriber, deviceUsed: selectedDevice, modelUsed: model };
-  } catch (err) {
-    if (selectedDevice === 'webgpu' && targetDevice === 'auto') {
-      logger.warn('Whisper', 'WebGPU 初始化异常，自动降级至 CPU Wasm 模式', err);
-      options?.onProgress?.({
-        stage: 'loading_model',
-        progress: 10,
-        message: 'WebGPU 加速不可用，已自动降级为 CPU Wasm 模式加载...',
-      });
-      const wasmCacheKey = `${model}_wasm`;
-      const p = pipeline('automatic-speech-recognition', model, {
-        device: 'wasm',
-        progress_callback: progressCallback,
-      });
-      pipelineCache.set(wasmCacheKey, p);
-      const transcriber = await p;
-      return { transcriber, deviceUsed: 'wasm', modelUsed: model };
-    }
-    throw err;
+  } catch (error) {
+    if (isAbortError(error) || options?.signal?.aborted) throw error;
+    if (selectedDevice !== 'webgpu' || targetDevice !== 'auto') throw error;
+    logger.warn('Whisper', 'WebGPU 初始化异常，自动降级至 CPU Wasm 模式', error);
+    options?.onProgress?.({
+      stage: 'loading_model', progress: 10,
+      message: 'WebGPU 加速不可用，已自动降级为 CPU Wasm 模式加载...',
+    });
+    const transcriber = await loadPipeline('wasm');
+    return { transcriber, deviceUsed: 'wasm', modelUsed: model };
   }
 }
 
