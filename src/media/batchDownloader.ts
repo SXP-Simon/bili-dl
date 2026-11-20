@@ -14,6 +14,7 @@ import {
 import type { VideoPageItem, DownloadTask, SeasonEpisodeItem } from '../types';
 
 export interface BatchDownloadOptions {
+  title?: string;
   externalDownloader?: IExternalDownloader;
   externalPort?: number;
 }
@@ -30,7 +31,7 @@ export async function batchDownloadAllLowestAudios(
   signal?: AbortSignal,
   options?: BatchDownloadOptions
 ): Promise<void> {
-  const mainTitle = getVideoTitle();
+  const mainTitle = options?.title || getVideoTitle();
   const total = pages.length;
   logger.info('BatchDownload', `开始批量下载全集最低质量音频: 共 ${total} 集`, { bvid }, traceId);
 
@@ -165,7 +166,7 @@ export async function batchDownloadAllHighestVideos(
   signal?: AbortSignal,
   options?: BatchDownloadOptions
 ): Promise<void> {
-  const mainTitle = getVideoTitle();
+  const mainTitle = options?.title || getVideoTitle();
   const total = pages.length;
   logger.info('BatchDownload', `开始批量下载全集最高质量视频 (含音频封装): 共 ${total} 集`, { bvid }, traceId);
 

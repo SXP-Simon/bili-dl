@@ -48,6 +48,8 @@ interface WindowWithBiliGlobals extends Window {
     videoData?: {
       bvid?: string;
       pic?: string;
+      title?: string;
+      cid?: number;
       owner?: { mid?: number | string };
       ugc_season?: InitialStateUgcSeason;
     };
@@ -458,15 +460,34 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
   const bvid = customBvid || getBvidFromUrl();
   if (!bvid) return null;
 
+  const isCurrentVideo = bvid === getBvidFromUrl();
   const pages = await fetchVideoPages(bvid);
-  const currentP = new URLSearchParams(location.search).get('p');
-  const pageIndex = currentP ? parseInt(currentP, 10) - 1 : 0;
+  const currentP = isCurrentVideo ? new URLSearchParams(location.search).get('p') : null;
+  const pageIndex = Math.max(0, Number(currentP || 1) - 1);
   const cid = targetCid || pages[pageIndex]?.cid || pages[0]?.cid;
+  if (!cid || (targetCid && pages.length > 0 && !pages.some((page) => page.cid === targetCid))) return null;
 
-  if (!cid) return null;
-
-  const baseTitle = getVideoTitle();
-  const cover = getVideoCover();
+  // The picker changes the selected resource without navigating the webpage.
+  // Resolve metadata by that resource's BVID, never the original page's DOM.
+  const initial = getBiliWindow().__INITIAL_STATE__?.videoData;
+  const seasonEpisode = initial?.ugc_season?.sections?.flatMap((section) => section.episodes || [])
+    .find((episode) => episode.bvid === bvid);
+  let baseTitle = (initial?.bvid === bvid && initial.title) || seasonEpisode?.title ||
+    (isCurrentVideo ? getVideoTitle() : bvid);
+  let cover = (initial?.bvid === bvid && initial.pic) || seasonEpisode?.arc?.pic ||
+    (isCurrentVideo ? getVideoCover() : '');
+  try {
+    const response = await requestJson<{ code: number; data?: { bvid?: string; title?: string; pic?: string } }>(
+      `https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`
+    );
+    if (response.code === 0 && response.data?.bvid === bvid) {
+      if (typeof response.data.title === 'string' && response.data.title.trim()) baseTitle = response.data.title.trim();
+      if (typeof response.data.pic === 'string') cover = response.data.pic;
+    }
+  } catch (error) {
+    logger.warn('API', `[${bvid}] 获取视频标题失败，使用匹配该视频的备用标题`, getErrorMessage(error));
+  }
+  baseTitle = baseTitle.replace(/[\\/:*?"<>|]/g, '_');
 
   // 若存在多分 P 剧集，精准拼接分 P 标题与序号，防止多 P 下载时文件名相同产生冲突
   let title = baseTitle;
@@ -555,6 +576,7 @@ export async function fetchCurrentMediaData(targetCid?: number, customBvid?: str
     bvid,
     cid,
     title,
+    baseTitle,
     cover,
     duration,
     videos,

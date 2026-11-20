@@ -231,6 +231,7 @@ export const App: React.FC = () => {
   };
 
   const handleOpenModal = async (targetCid?: number, targetBvid?: string) => {
+    const epoch = ++navEpochRef.current;
     setLoading(true);
     if (targetCid) {
       setLoadingCid(targetCid);
@@ -240,6 +241,7 @@ export const App: React.FC = () => {
     }
     try {
       const data = await fetchCurrentMediaData(targetCid, targetBvid);
+      if (epoch !== navEpochRef.current) return;
       if (data) {
         setMediaData(data);
         setIsModalOpen(true);
@@ -247,13 +249,16 @@ export const App: React.FC = () => {
         showToast('未能解析到当前视频资源，请确认处于播放页面', 'error');
       }
     } catch (err: unknown) {
+      if (epoch !== navEpochRef.current) return;
       const msg = getErrorMessage(err);
       showToast(`解析失败: ${msg}`, 'error');
     } finally {
-      setLoading(false);
-      setLoadingCid(null);
-      setLoadingBvid(null);
-      setIsSwitching(false);
+      if (epoch === navEpochRef.current) {
+        setLoading(false);
+        setLoadingCid(null);
+        setLoadingBvid(null);
+        setIsSwitching(false);
+      }
     }
   };
   useEffect(() => {
@@ -403,10 +408,9 @@ export const App: React.FC = () => {
     const currentP = new URLSearchParams(location.search).get('p');
     const targetPageIndex = currentP ? parseInt(currentP, 10) - 1 : 0;
 
-    // 校验已有数据是否与当前页面 URL 强一致（BVID 相同且分 P 吻合）
-    if (customData && customData.bvid === currentBvid) {
-      return customData;
-    }
+    // Explicit picker selections are independent of the underlying page URL.
+    if (customData) return customData;
+    if (isModalOpen && mediaData) return mediaData;
     if (mediaData && mediaData.bvid === currentBvid) {
       if (mediaData.pages.length > 1 && currentP) {
         const expectedCid = mediaData.pages[targetPageIndex]?.cid;
@@ -452,7 +456,7 @@ export const App: React.FC = () => {
     }
 
     const taskId = `batch_subtitles_${data.bvid}`;
-    const mainTitle = getVideoTitle();
+    const mainTitle = data.baseTitle || data.title;
     const taskTitle = `全集字幕打包 (${data.pages.length}P)`;
     const traceId = `全集字幕-${data.bvid}`;
 
@@ -735,7 +739,7 @@ export const App: React.FC = () => {
           updateTaskProgress,
           `全集音频-${data.bvid}`,
           signal,
-          isExternal ? { externalDownloader: downloader, externalPort: port } : undefined
+          { title: data.baseTitle || data.title, ...(isExternal ? { externalDownloader: downloader, externalPort: port } : {}) }
         ),
     });
   };
@@ -785,7 +789,7 @@ export const App: React.FC = () => {
           updateTaskProgress,
           `全集视频-${data.bvid}`,
           signal,
-          isExternal ? { externalDownloader: downloader, externalPort: port } : undefined
+          { title: data.baseTitle || data.title, ...(isExternal ? { externalDownloader: downloader, externalPort: port } : {}) }
         ),
     });
   };

@@ -68,6 +68,7 @@ export interface MediaResourceData {
   bvid: string;
   cid: number;
   title: string;
+  baseTitle?: string;
   cover: string;
   duration: number;
   videos: VideoStreamItem[];

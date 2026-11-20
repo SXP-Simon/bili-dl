@@ -227,4 +227,16 @@ describe('Batch Downloader Unit Tests', () => {
       expect(updatedTasks['season_video_BV1season001']?.status).toBe('completed');
     });
   });
+  it.each(['video', 'audio'] as const)('uses selected video metadata for batch %s filenames', async (kind) => {
+    vi.mocked(fetchMediaPlayStreams).mockResolvedValue({
+      videos: [{ id: 80, qualityName: '1080P', codecName: 'AVC', codec: 'avc1', baseUrl: 'https://example.com/v', bandwidth: 100, width: 1920, height: 1080, frameRate: '30', sizeMB: '1' }],
+      audios: [{ id: 30216, name: '64K', codec: 'mp4a.40.2', baseUrl: 'https://example.com/a', bandwidth: 64000, qualityDesc: '64K', sizeMB: '1' }],
+      duration: 1,
+    });
+    const download = kind === 'video' ? batchDownloadAllHighestVideos : batchDownloadAllLowestAudios;
+    await download('BVselected', mockPages, vi.fn(), vi.fn(), 'selected', undefined, { title: '选中的课程' });
+    const calls = kind === 'video' ? vi.mocked(downloadAndMuxMp4).mock.calls : vi.mocked(downloadAudio).mock.calls;
+    expect(calls.map((call) => call[0])).toEqual(['选中的课程_P1_第一讲', '选中的课程_P2_第二讲']);
+  });
+
 });

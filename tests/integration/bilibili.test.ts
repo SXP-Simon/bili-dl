@@ -296,5 +296,43 @@ describe('Bilibili API integration tests', () => {
     expect(season?.episodes[0]?.bvid).toBe('BV1ts001');
     expect(season?.episodes[1]?.title).toBe('第2章 泛型深度剖析');
   });
+  it('names another collection video using its own BVID rather than the open page', async () => {
+    const previousUrl = location.href;
+    history.replaceState(null, '', '/video/BVoriginal?p=2');
+    document.title = '原来打开的视频_哔哩哔哩_bilibili';
+    setMockRequestHandler((options) => {
+      let data: unknown;
+      if (options.url?.includes('/view?')) data = { bvid: 'BVselected', title: '选中的另一个视频', pic: 'https://example.com/selected.jpg' };
+      else if (options.url?.includes('/pagelist?')) data = [
+        { cid: 101, page: 1, part: '第一讲', duration: 1 },
+        { cid: 102, page: 2, part: '第二讲', duration: 1 },
+      ];
+      else if (options.url?.includes('/playurl?')) data = { dash: { duration: 1, video: [], audio: [] } };
+      else { options.onerror?.({ error: 'Not mocked' }); return; }
+      options.onload?.({ status: 200, statusText: 'OK', responseHeaders: '', response: { code: 0, data } });
+    });
+    try {
+      const media = await fetchCurrentMediaData(undefined, 'BVselected');
+      expect(media?.cid).toBe(101); // Ignore the original video's ?p=2.
+      expect(media?.title).toBe('选中的另一个视频_P1_第一讲');
+      expect(media?.cover).toBe('https://example.com/selected.jpg');
+      const part2 = await fetchCurrentMediaData(102, 'BVselected');
+      expect(part2?.title).toBe('选中的另一个视频_P2_第二讲');
+    } finally { history.replaceState(null, '', previousUrl); }
+  });
+
+  it('does not reuse another video title when its metadata request fails', async () => {
+    document.title = '旧视频名称_哔哩哔哩_bilibili';
+    setMockRequestHandler((options) => {
+      if (options.url?.includes('/pagelist?')) options.onload?.({ status: 200, statusText: 'OK', responseHeaders: '', response: {
+        code: 0, data: [{ cid: 201, page: 1, part: '独立视频', duration: 1 }],
+      } });
+      else options.onerror?.({ error: 'unavailable' });
+    });
+    const media = await fetchCurrentMediaData(201, 'BVunrelated');
+    expect(media?.title).toBe('BVunrelated');
+    expect(media?.title).not.toContain('旧视频');
+  });
+
 });
 
